@@ -1,0 +1,48 @@
+<section class="panel">
+  <h2>{{ i18n.text('Users', 'المستخدمون') }}</h2>
+
+  <form class="form-grid" [formGroup]="form" (ngSubmit)="create()">
+    <label>{{ i18n.text('First Name', 'الاسم الأول') }}<input formControlName="firstName" /></label>
+    <label>{{ i18n.text('Last Name', 'اسم العائلة') }}<input formControlName="lastName" /></label>
+    <label>{{ i18n.text('Email', 'البريد الإلكتروني') }}<input type="email" formControlName="email" /></label>
+    <label>{{ i18n.text('Password', 'كلمة المرور') }}<input type="password" formControlName="password" /></label>
+    <label>
+      {{ i18n.text('Role', 'الدور') }}
+      <select formControlName="role">
+        @for (role of roles; track role) {
+          <option [value]="role">{{ role }}</option>
+        }
+      </select>
+    </label>
+    <div class="actions">
+      <button type="submit" [disabled]="saving()">
+        {{ saving() ? i18n.text('Creating...', 'جاري الإنشاء...') : i18n.text('Create User', 'إنشاء مستخدم') }}
+      </button>
+    </div>
+  </form>
+
+  @if (message()) { <p class="ok">{{ message() }}</p> }
+  @if (error()) { <p class="error">{{ error() }}</p> }
+
+  <h3>{{ i18n.text('Existing Users', 'المستخدمون الحاليون') }}</h3>
+  @if (loading()) {
+    <p>{{ i18n.text('Loading...', 'جاري التحميل...') }}</p>
+  } @else {
+    <table class="responsive-table">
+      <thead>
+        <tr>
+          <th>{{ i18n.text('Name', 'الاسم') }}</th>
+          <th>{{ i18n.text('Email', 'البريد الإلكتروني') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (user of users(); track user.id) {
+          <tr>
+            <td [attr.data-label]="i18n.text('Name', 'الاسم')">{{ user.firstName }} {{ user.lastName }}</td>
+            <td [attr.data-label]="i18n.text('Email', 'البريد الإلكتروني')">{{ user.email }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+</section>

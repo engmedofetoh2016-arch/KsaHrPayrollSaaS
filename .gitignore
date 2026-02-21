@@ -1,0 +1,27 @@
+﻿# OS / IDE
+.vs/
+.vscode/
+.idea/
+.DS_Store
+
+# Logs / temp
+*.log
+.tmp/
+
+# Dotnet
+**/bin/
+**/obj/
+
+# Node / Angular
+src/web/node_modules/
+src/web/dist/
+src/web/.angular/
+
+# Local env files (keep examples)
+.env
+.env.*
+!.env.example
+!*coolify.example
+
+# Docker local leftovers
+**/.dockerignore.local

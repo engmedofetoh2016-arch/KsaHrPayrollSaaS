@@ -1,0 +1,85 @@
+<section class="panel">
+  <h2>{{ i18n.text('My Leave', 'إجازاتي') }}</h2>
+  @if (!isEmployee()) {
+    <p class="hint">{{ i18n.text('You can still submit leave requests if your account email matches an employee profile.', 'يمكنك إرسال طلبات الإجازة إذا كان بريد حسابك مطابقاً لملف موظف.') }}</p>
+  }
+
+  <div class="grid">
+    <form class="card" [formGroup]="requestForm" (ngSubmit)="submitRequest()">
+      <h3>{{ i18n.text('Request Leave', 'طلب إجازة') }}</h3>
+      <label>
+        {{ i18n.text('Leave Type', 'نوع الإجازة') }}
+        <select formControlName="leaveType">
+          <option [value]="1">{{ i18n.text('Annual', 'سنوية') }}</option>
+          <option [value]="2">{{ i18n.text('Sick', 'مرضية') }}</option>
+          <option [value]="3">{{ i18n.text('Unpaid', 'غير مدفوعة') }}</option>
+        </select>
+      </label>
+      <label>{{ i18n.text('Start Date', 'تاريخ البداية') }} <input type="date" formControlName="startDate" /></label>
+      <label>{{ i18n.text('End Date', 'تاريخ النهاية') }} <input type="date" formControlName="endDate" /></label>
+      <label>
+        {{ i18n.text('Reason', 'السبب') }}
+        <textarea rows="3" formControlName="reason"></textarea>
+      </label>
+      <button type="submit" [disabled]="busy()">{{ i18n.text('Submit', 'إرسال') }}</button>
+    </form>
+
+    <div class="card">
+      <h3>{{ i18n.text('Leave Balance', 'رصيد الإجازات') }} ({{ currentYear() }})</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>{{ i18n.text('Type', 'النوع') }}</th>
+            <th>{{ i18n.text('Allocated', 'المخصص') }}</th>
+            <th>{{ i18n.text('Used', 'المستخدم') }}</th>
+            <th>{{ i18n.text('Remaining', 'المتبقي') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (balance of balances(); track balance.id) {
+            <tr>
+              <td>{{ leaveTypeLabel(balance.leaveType) }}</td>
+              <td>{{ balance.allocatedDays | number: '1.0-2' }}</td>
+              <td>{{ balance.usedDays | number: '1.0-2' }}</td>
+              <td>{{ balance.remainingDays | number: '1.0-2' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  @if (message()) { <p class="ok">{{ message() }}</p> }
+  @if (error()) { <p class="error">{{ error() }}</p> }
+
+  <h3>{{ i18n.text('Request History', 'سجل الطلبات') }}</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>{{ i18n.text('Type', 'النوع') }}</th>
+        <th>{{ i18n.text('Start', 'البداية') }}</th>
+        <th>{{ i18n.text('End', 'النهاية') }}</th>
+        <th>{{ i18n.text('Days', 'الأيام') }}</th>
+        <th>{{ i18n.text('Status', 'الحالة') }}</th>
+        <th>{{ i18n.text('Reason', 'السبب') }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (request of requests(); track request.id) {
+        <tr>
+          <td>{{ leaveTypeLabel(request.leaveType) }}</td>
+          <td>{{ request.startDate }}</td>
+          <td>{{ request.endDate }}</td>
+          <td>{{ request.totalDays | number: '1.0-2' }}</td>
+          <td>{{ statusLabel(request.status) }}</td>
+          <td>
+            {{ request.reason }}
+            @if (request.status === 3 && request.rejectionReason) {
+              <div class="reject">{{ i18n.text('Rejected:', 'مرفوض:') }} {{ request.rejectionReason }}</div>
+            }
+          </td>
+        </tr>
+      }
+    </tbody>
+  </table>
+</section>

@@ -1,0 +1,204 @@
+<section class="dashboard">
+  <div class="hero">
+    <div>
+      <p class="eyebrow">{{ i18n.text('HR + Payroll Control Center', 'مركز التحكم للموارد البشرية والرواتب') }}</p>
+      <h1>{{ i18n.text('Welcome back,', 'مرحبا بعودتك،') }} {{ session()?.firstName }}</h1>
+      <p class="sub">
+        {{
+          i18n.text(
+            'Run payroll faster with one workspace for employees, attendance, and monthly payroll execution.',
+            'شغل الرواتب أسرع عبر مساحة واحدة للموظفين والحضور وتنفيذ رواتب الشهر.'
+          )
+        }}
+      </p>
+    </div>
+    <div class="hero-chip">
+      <span class="dot"></span>
+      <span>{{ i18n.text('Live tenant session', 'جلسة شركة نشطة') }}</span>
+    </div>
+  </div>
+
+  <div class="kpis">
+    <article class="kpi">
+      <p class="label">{{ i18n.text('Employees', 'الموظفون') }}</p>
+      <p class="value">{{ stats().employees }}</p>
+      <p class="meta">{{ i18n.text('Active in this tenant', 'النشطون في هذه الشركة') }}</p>
+    </article>
+
+    <article class="kpi">
+      <p class="label">{{ i18n.text('Attendance (This Month)', 'الحضور (هذا الشهر)') }}</p>
+      <p class="value">{{ stats().attendanceRowsThisMonth }}</p>
+      <p class="meta">{{ i18n.text('Rows captured', 'مدخلات مسجلة') }}</p>
+    </article>
+
+    <article class="kpi">
+      <p class="label">{{ i18n.text('Payroll Periods', 'فترات الرواتب') }}</p>
+      <p class="value">{{ stats().payrollPeriods }}</p>
+      <p class="meta">{{ i18n.text('Created so far', 'تم إنشاؤها حتى الآن') }}</p>
+    </article>
+
+    @if (canSeeUsers()) {
+      <article class="kpi">
+        <p class="label">{{ i18n.text('Users', 'المستخدمون') }}</p>
+        <p class="value">{{ stats().users }}</p>
+        <p class="meta">{{ i18n.text('Owner/Admin/HR/Manager', 'مالك/مدير/موارد بشرية/مشرف') }}</p>
+      </article>
+    }
+
+    <article class="kpi">
+      <p class="label">{{ i18n.text('Saudization', 'السعودة') }}</p>
+      <p class="value">{{ saudization().percent }}%</p>
+      <p class="meta">{{ saudization().saudi }} / {{ saudization().total }} {{ i18n.text('Saudi employees', 'موظف سعودي') }}</p>
+    </article>
+
+    <article class="kpi">
+      <p class="label">{{ i18n.text('Expiring Docs (60d)', 'مستندات تنتهي خلال 60 يوم') }}</p>
+      <p class="value">{{ stats().expiringDocuments }}</p>
+      <p class="meta">
+        {{ i18n.text('Iqama', 'الإقامة') }}: {{ stats().expiringIqama }} |
+        {{ i18n.text('Work Permit', 'رخصة العمل') }}: {{ stats().expiringWorkPermit }}
+      </p>
+    </article>
+  </div>
+
+  <div class="grid">
+    <article class="panel">
+      <h3>{{ i18n.text('Quick Actions', 'إجراءات سريعة') }}</h3>
+      <div class="actions">
+        <a routerLink="/employees">{{ i18n.text('Add Employee', 'إضافة موظف') }}</a>
+        <a routerLink="/attendance">{{ i18n.text('Capture Attendance', 'تسجيل الحضور') }}</a>
+        <a routerLink="/payroll">{{ i18n.text('Run Payroll', 'تشغيل الرواتب') }}</a>
+        <a routerLink="/final-settlement">{{ i18n.text('Final Settlement', 'التسوية النهائية') }}</a>
+        <a routerLink="/company">{{ i18n.text('Update Company Settings', 'تحديث إعدادات الشركة') }}</a>
+      </div>
+    </article>
+
+    <article class="panel wps">
+      <h3>{{ i18n.text('WPS Readiness', 'جاهزية حماية الأجور') }}</h3>
+      @if (wpsReadiness().ready) {
+        <p class="ok">{{ i18n.text('Ready for WPS export.', 'جاهز لتصدير ملف حماية الأجور.') }}</p>
+      } @else {
+        <p class="warn">{{ i18n.text('Configuration is incomplete.', 'الإعدادات غير مكتملة.') }}</p>
+      }
+      <ul>
+        <li>
+          {{ i18n.text('Company bank profile', 'ملف البنك للشركة') }}:
+          {{ wpsReadiness().companyReady ? i18n.text('Complete', 'مكتمل') : i18n.text('Missing data', 'بيانات ناقصة') }}
+        </li>
+        <li>
+          {{ i18n.text('Employees missing payment profile', 'موظفون ينقصهم ملف دفع') }}:
+          {{ wpsReadiness().employeesMissingPayment }} / {{ wpsReadiness().totalEmployees }}
+        </li>
+      </ul>
+      <div class="actions">
+        <a routerLink="/company">{{ i18n.text('Fix Company WPS Settings', 'إكمال إعدادات WPS للشركة') }}</a>
+        <a routerLink="/employees">{{ i18n.text('Complete Employee Bank Data', 'إكمال بيانات بنك الموظفين') }}</a>
+      </div>
+    </article>
+
+    <article
+      class="panel saudization"
+      [class.risk-low]="saudization().risk === 'low'"
+      [class.risk-medium]="saudization().risk === 'medium'"
+      [class.risk-high]="saudization().risk === 'high'">
+      <h3>{{ i18n.text('Saudization Risk', 'مخاطر التوطين') }}</h3>
+      <p class="risk-label">
+        @if (saudization().risk === 'low') {
+          {{ i18n.text('Low Risk', 'مخاطر منخفضة') }}
+        } @else if (saudization().risk === 'medium') {
+          {{ i18n.text('Medium Risk', 'مخاطر متوسطة') }}
+        } @else {
+          {{ i18n.text('High Risk', 'مخاطر عالية') }}
+        }
+      </p>
+      <p class="meta">{{ i18n.text('Current Saudization', 'نسبة التوطين الحالية') }}: {{ saudization().percent }}%</p>
+      <p class="meta">{{ i18n.text('Target reference', 'الهدف المرجعي') }}: 30%</p>
+      <div class="actions">
+        <a routerLink="/employees">{{ i18n.text('Review Employee Nationality', 'مراجعة جنسيات الموظفين') }}</a>
+      </div>
+    </article>
+
+    <article class="panel docs" [class.risk-high]="stats().expiringDocuments > 5" [class.risk-medium]="stats().expiringDocuments > 0 && stats().expiringDocuments <= 5">
+      <h3>{{ i18n.text('Expiry Alerts', 'تنبيهات انتهاء المستندات') }}</h3>
+      <p class="risk-label">
+        @if (stats().expiringDocuments === 0) {
+          {{ i18n.text('No urgent expiries', 'لا توجد تواريخ انتهاء عاجلة') }}
+        } @else {
+          {{ i18n.text('Action required', 'يلزم اتخاذ إجراء') }}
+        }
+      </p>
+      <p class="meta">{{ i18n.text('Iqama expiring in 60 days', 'إقامات تنتهي خلال 60 يوم') }}: {{ stats().expiringIqama }}</p>
+      <p class="meta">{{ i18n.text('Work permits expiring in 60 days', 'رخص عمل تنتهي خلال 60 يوم') }}: {{ stats().expiringWorkPermit }}</p>
+      <div class="actions">
+        <a routerLink="/employees">{{ i18n.text('Review Employee Documents', 'مراجعة مستندات الموظفين') }}</a>
+      </div>
+      @if (complianceAlerts().items.length > 0) {
+        <table class="mini-table">
+          <thead>
+            <tr>
+              <th>{{ i18n.text('Employee', 'الموظف') }}</th>
+              <th>{{ i18n.text('Document', 'المستند') }}</th>
+              <th>{{ i18n.text('Severity', 'الأولوية') }}</th>
+              <th>{{ i18n.text('Days Left', 'الأيام المتبقية') }}</th>
+              <th>{{ i18n.text('Action', 'إجراء') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (alert of complianceAlerts().items; track alert.id + alert.documentType + alert.expiryDate) {
+              <tr>
+                <td>{{ alert.employeeName }}</td>
+                <td>{{ alert.documentType === 'Iqama' ? i18n.text('Iqama', 'الإقامة') : i18n.text('Work Permit', 'رخصة العمل') }}</td>
+                <td>{{ alert.severity ?? '-' }}</td>
+                <td>{{ alert.daysLeft }}</td>
+                <td>
+                  <button type="button" (click)="resolveAlert(alert.id)" [disabled]="resolvingAlertIds().includes(alert.id)">
+                    {{ i18n.text('Resolve', 'إغلاق') }}
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+    </article>
+
+    <article class="panel ai">
+      <h3>{{ i18n.text('Smart Compliance Engine', 'محرك الامتثال الذكي') }}</h3>
+      <p class="meta">
+        {{ i18n.text('Compliance Score', 'درجة الامتثال') }}:
+        <strong>{{ complianceScore().score }}/100 ({{ complianceScore().grade }})</strong>
+      </p>
+      <p class="meta">
+        {{ i18n.text('Open risks', 'المخاطر المفتوحة') }}:
+        {{ complianceScore().criticalAlerts }} {{ i18n.text('critical', 'حرج') }},
+        {{ complianceScore().warningAlerts }} {{ i18n.text('warning', 'متوسط') }},
+        {{ complianceScore().noticeAlerts }} {{ i18n.text('notice', 'تنبيه') }}
+      </p>
+      <p class="meta">{{ i18n.text('AI Brief', 'الملخص الذكي') }} ({{ complianceBrief().provider }})</p>
+      <pre class="brief">{{ complianceBrief().brief }}</pre>
+      @if (complianceScore().recommendations.length > 0) {
+        <ul>
+          @for (item of complianceScore().recommendations; track item) {
+            <li>{{ item }}</li>
+          }
+        </ul>
+      }
+    </article>
+
+    <article class="panel status">
+      <h3>{{ i18n.text('System Status', 'حالة النظام') }}</h3>
+      @if (loading()) {
+        <p>{{ i18n.text('Refreshing metrics...', 'جاري تحديث المؤشرات...') }}</p>
+      } @else {
+        <ul>
+          <li>{{ i18n.text('API connectivity: OK', 'اتصال API: جيد') }}</li>
+          <li>{{ i18n.text('Tenant context: Active', 'سياق الشركة: نشط') }}</li>
+          <li>{{ i18n.text('Role profile:', 'الأدوار:') }} {{ session()?.roles?.join(', ') }}</li>
+        </ul>
+      }
+      @if (error()) {
+        <p class="error">{{ error() }}</p>
+      }
+    </article>
+  </div>
+</section>

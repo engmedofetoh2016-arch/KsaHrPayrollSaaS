@@ -1,0 +1,202 @@
+<section class="panel">
+  <h2>{{ i18n.text('Payroll Engine', 'محرك الرواتب') }}</h2>
+
+  <div class="grid">
+    <form class="card" [formGroup]="periodForm" (ngSubmit)="createPeriod()">
+      <h3>{{ i18n.text('Create Period', 'إنشاء فترة') }}</h3>
+      <label>{{ i18n.text('Year', 'السنة') }} <input type="number" formControlName="year" min="2000" max="2100" /></label>
+      <label>{{ i18n.text('Month', 'الشهر') }} <input type="number" formControlName="month" min="1" max="12" /></label>
+      <label>{{ i18n.text('Start Date', 'تاريخ البداية') }} <input type="date" formControlName="periodStartDate" /></label>
+      <label>{{ i18n.text('End Date', 'تاريخ النهاية') }} <input type="date" formControlName="periodEndDate" /></label>
+      <button type="submit" [disabled]="busy()">{{ i18n.text('Create', 'إنشاء') }}</button>
+    </form>
+
+    <form class="card" [formGroup]="adjustmentForm" (ngSubmit)="createAdjustment()">
+      <h3>{{ i18n.text('Adjustment', 'تعديل') }}</h3>
+      <label>
+        {{ i18n.text('Employee', 'الموظف') }}
+        <select formControlName="employeeId">
+          <option value="">{{ i18n.text('Select employee', 'اختر موظفاً') }}</option>
+          @for (employee of employees(); track employee.id) {
+            <option [value]="employee.id">{{ employee.firstName }} {{ employee.lastName }}</option>
+          }
+        </select>
+      </label>
+      <label>{{ i18n.text('Year', 'السنة') }} <input type="number" formControlName="year" min="2000" max="2100" /></label>
+      <label>{{ i18n.text('Month', 'الشهر') }} <input type="number" formControlName="month" min="1" max="12" /></label>
+      <label>
+        {{ i18n.text('Type', 'النوع') }}
+        <select formControlName="type">
+          <option [value]="1">{{ i18n.text('Allowance', 'بدل') }}</option>
+          <option [value]="2">{{ i18n.text('Deduction', 'خصم') }}</option>
+        </select>
+      </label>
+      <label>{{ i18n.text('Amount', 'المبلغ') }} <input type="number" formControlName="amount" min="0.01" step="0.01" /></label>
+      <label>{{ i18n.text('Notes', 'ملاحظات') }} <input formControlName="notes" /></label>
+      <div class="row-actions">
+        <button type="submit" [disabled]="busy()">{{ i18n.text('Save Adjustment', 'حفظ التعديل') }}</button>
+        <button type="button" (click)="loadAdjustments()">{{ i18n.text('Load Adjustments', 'تحميل التعديلات') }}</button>
+      </div>
+    </form>
+
+    <form class="card" [formGroup]="runForm" (ngSubmit)="calculateRun()">
+      <h3>{{ i18n.text('Run Payroll', 'تشغيل الرواتب') }}</h3>
+      <label>
+        {{ i18n.text('Payroll Period', 'فترة الرواتب') }}
+        <select formControlName="payrollPeriodId">
+          <option value="">{{ i18n.text('Select period', 'اختر الفترة') }}</option>
+          @for (period of periods(); track period.id) {
+            <option [value]="period.id">{{ period.year }}-{{ period.month }} (status {{ period.status }})</option>
+          }
+        </select>
+      </label>
+      <button type="submit" [disabled]="busy()">{{ i18n.text('Calculate', 'احتساب') }}</button>
+      <div class="row-actions">
+        <button type="button" (click)="approveRun()" [disabled]="busy() || !activeRunId()">{{ i18n.text('Approve', 'اعتماد') }}</button>
+        <button type="button" (click)="lockRun()" [disabled]="busy() || !activeRunId()">{{ i18n.text('Lock', 'إقفال') }}</button>
+      </div>
+    </form>
+  </div>
+
+  @if (message()) { <p class="ok">{{ message() }}</p> }
+  @if (error()) { <p class="error">{{ error() }}</p> }
+
+  <h3>{{ i18n.text('Run Details', 'تفاصيل التشغيل') }}</h3>
+  @if (run()) {
+    <p>Status: {{ run()?.status }} | Total Net: {{ totalNet() | number: '1.2-2' }}</p>
+    <button type="button" (click)="downloadRegisterCsv()" [disabled]="busy() || exportBusy() || !activeRunId()">
+      {{ i18n.text('Export Register CSV', 'تصدير سجل الرواتب CSV') }}
+    </button>
+    <button type="button" (click)="downloadGosiCsv()" [disabled]="busy() || exportBusy() || !activeRunId()">
+      {{ i18n.text('Export GOSI CSV', 'تصدير ملف التأمينات CSV') }}
+    </button>
+    <button type="button" (click)="downloadWpsCsv()" [disabled]="busy() || exportBusy() || !activeRunId()">
+      {{ i18n.text('Export WPS CSV', 'تصدير ملف WPS CSV') }}
+    </button>
+    <table>
+      <thead>
+        <tr>
+          <th>Employee</th>
+          <th>Base</th>
+          <th>Allowances</th>
+          <th>Manual Ded.</th>
+          <th>Unpaid Days</th>
+          <th>Unpaid Ded.</th>
+          <th>GOSI Base</th>
+          <th>GOSI Emp.</th>
+          <th>GOSI Empr.</th>
+          <th>Deductions</th>
+          <th>OT Hours</th>
+          <th>OT Amount</th>
+          <th>Net</th>
+          <th>Formula</th>
+          <th>Payslip</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (line of run()?.lines ?? []; track line.id) {
+          <tr>
+            <td>{{ line.employeeName }}</td>
+            <td>{{ line.baseSalary | number: '1.2-2' }}</td>
+            <td>{{ line.allowances | number: '1.2-2' }}</td>
+            <td>{{ line.manualDeductions | number: '1.2-2' }}</td>
+            <td>{{ line.unpaidLeaveDays | number: '1.2-2' }}</td>
+            <td>{{ line.unpaidLeaveDeduction | number: '1.2-2' }}</td>
+            <td>{{ line.gosiWageBase | number: '1.2-2' }}</td>
+            <td>{{ line.gosiEmployeeContribution | number: '1.2-2' }}</td>
+            <td>{{ line.gosiEmployerContribution | number: '1.2-2' }}</td>
+            <td>{{ line.deductions | number: '1.2-2' }}</td>
+            <td>{{ line.overtimeHours | number: '1.2-2' }}</td>
+            <td>{{ line.overtimeAmount | number: '1.2-2' }}</td>
+            <td>{{ line.netAmount | number: '1.2-2' }}</td>
+            <td class="formula-cell">
+              <div class="formula-item" [title]="formatUnpaidLeaveFormula(line)">
+                Unpaid: {{ formatUnpaidLeaveFormula(line) }}
+              </div>
+              <div class="formula-item" [title]="formatTotalDeductionsFormula(line)">
+                Deductions: {{ formatTotalDeductionsFormula(line) }}
+              </div>
+              <div class="formula-item" [title]="formatGosiFormula(line)">
+                GOSI: {{ formatGosiFormula(line) }}
+              </div>
+              <div class="formula-item" [title]="formatNetFormula(line)">
+                Net: {{ formatNetFormula(line) }}
+              </div>
+            </td>
+            <td>
+              <button
+                type="button"
+                (click)="downloadPayslipPdf(line.employeeId, line.employeeName)"
+                [disabled]="busy() || exportBusy()">
+                {{ i18n.text('PDF', 'PDF') }}
+              </button>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  } @else {
+    <p>{{ i18n.text('No run loaded yet.', 'لم يتم تحميل تشغيل بعد.') }}</p>
+  }
+
+  <h3>{{ i18n.text('Export History', 'سجل التصدير') }}</h3>
+  <p class="muted">{{ exportLastUpdatedLabel() }}</p>
+  @if (pollingExports()) {
+    <p>{{ i18n.text('Auto-refreshing export status...', 'يتم تحديث حالة التصدير تلقائياً...') }}</p>
+  }
+  @if (!activeRunId()) {
+    <p>{{ i18n.text('Select and load a run first.', 'اختر تشغيلًا ثم قم بتحميله أولاً.') }}</p>
+  } @else {
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>File</th>
+          <th>Status</th>
+          <th>Created</th>
+          <th>Completed</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (exportJob of exports(); track exportJob.id) {
+          <tr>
+            <td>{{ exportJob.artifactType }}</td>
+            <td>{{ exportJob.fileName }}</td>
+            <td><span [class]="exportStatusClass(exportJob.status)">{{ exportStatusLabel(exportJob.status) }}</span></td>
+            <td>{{ exportJob.createdAtUtc | date: 'short' }}</td>
+            <td>{{ exportJob.completedAtUtc ? (exportJob.completedAtUtc | date: 'short') : '-' }}</td>
+            <td>
+              <button
+                type="button"
+                [disabled]="exportBusy() || exportJob.status !== 3"
+                (click)="downloadCompletedExport(exportJob.id, exportJob.fileName)">
+                {{ i18n.text('Download', 'تنزيل') }}
+              </button>
+            </td>
+          </tr>
+          @if (exportJob.status === 4 && exportJob.errorMessage) {
+            <tr>
+              <td colspan="6">{{ i18n.text('Error:', 'خطأ:') }} {{ exportJob.errorMessage }}</td>
+            </tr>
+          }
+        }
+      </tbody>
+    </table>
+  }
+
+  <h3>{{ i18n.text('Adjustments (selected month/year)', 'التعديلات (الشهر/السنة المحددين)') }}</h3>
+  <table>
+    <thead><tr><th>Employee</th><th>Type</th><th>Amount</th><th>Notes</th></tr></thead>
+    <tbody>
+      @for (adj of adjustments(); track adj.id) {
+        <tr>
+          <td>{{ adj.employeeName }}</td>
+          <td>{{ adj.type === 1 ? 'Allowance' : 'Deduction' }}</td>
+          <td>{{ adj.amount | number: '1.2-2' }}</td>
+          <td>{{ adj.notes }}</td>
+        </tr>
+      }
+    </tbody>
+  </table>
+</section>

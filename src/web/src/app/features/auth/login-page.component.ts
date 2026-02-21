@@ -1,0 +1,129 @@
+import { CommonModule } from '@angular/common';
+import { Component, inject, signal } from '@angular/core';
+import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { ActivatedRoute, Router } from '@angular/router';
+import { SignUpRequest } from '../../core/models/auth.models';
+import { AuthService } from '../../core/services/auth.service';
+import { I18nService } from '../../core/services/i18n.service';
+import { getApiErrorMessage } from '../../core/utils/api-error.util';
+
+@Component({
+  selector: 'app-login-page',
+  standalone: true,
+  imports: [CommonModule, ReactiveFormsModule],
+  templateUrl: './login-page.component.html',
+  styleUrl: './login-page.component.scss'
+})
+export class LoginPageComponent {
+  private readonly fb = inject(FormBuilder);
+  private readonly authService = inject(AuthService);
+  private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
+  readonly i18n = inject(I18nService);
+
+  readonly loading = signal(false);
+  readonly signupLoading = signal(false);
+  readonly error = signal('');
+  readonly signupError = signal('');
+  readonly signupMessage = signal('');
+  readonly showSignUp = signal(false);
+
+  readonly form = this.fb.group({
+    tenantSlug: ['', Validators.required],
+    email: ['', [Validators.required, Validators.email]],
+    password: ['', [Validators.required, Validators.minLength(8)]]
+  });
+
+  readonly signupForm = this.fb.group({
+    tenantName: ['', [Validators.required, Validators.maxLength(120)]],
+    slug: ['', [Validators.required, Validators.maxLength(120), Validators.pattern('^[a-zA-Z0-9-]+$')]],
+    companyLegalName: ['', [Validators.required, Validators.maxLength(200)]],
+    currencyCode: ['SAR', [Validators.required, Validators.minLength(3), Validators.maxLength(3)]],
+    defaultPayDay: [25, [Validators.required, Validators.min(1), Validators.max(31)]],
+    ownerFirstName: ['', [Validators.required, Validators.maxLength(80)]],
+    ownerLastName: ['', [Validators.required, Validators.maxLength(80)]],
+    ownerEmail: ['', [Validators.required, Validators.email]],
+    ownerPassword: ['', [Validators.required, Validators.minLength(8)]]
+  });
+
+  constructor() {
+    const reason = this.route.snapshot.queryParamMap.get('reason');
+    if (reason === 'expired') {
+      this.error.set('Session expired. Please login again.');
+    }
+  }
+
+  onSubmit() {
+    if (this.form.invalid || this.loading()) {
+      this.form.markAllAsTouched();
+      if (this.form.invalid) {
+        this.error.set('Please enter tenant slug, valid email, and password (min 8 chars).');
+      }
+      return;
+    }
+
+    this.loading.set(true);
+    this.error.set('');
+
+    this.authService.login(this.form.getRawValue() as { tenantSlug: string; email: string; password: string }).subscribe({
+      next: () => {
+        this.loading.set(false);
+        this.router.navigateByUrl('/dashboard');
+      },
+      error: (err) => {
+        this.loading.set(false);
+        this.error.set(getApiErrorMessage(err, 'Login failed. Check tenant slug, email, and password.'));
+      }
+    });
+  }
+
+  toggleSignUp() {
+    this.showSignUp.set(!this.showSignUp());
+    this.signupError.set('');
+    this.signupMessage.set('');
+  }
+
+  onSignUpSubmit() {
+    if (this.signupForm.invalid || this.signupLoading()) {
+      this.signupForm.markAllAsTouched();
+      if (this.signupForm.invalid) {
+        this.signupError.set('Please complete all required sign-up fields correctly.');
+      }
+      return;
+    }
+
+    this.signupLoading.set(true);
+    this.signupError.set('');
+    this.signupMessage.set('');
+
+    const raw = this.signupForm.getRawValue();
+    const payload: SignUpRequest = {
+      tenantName: String(raw.tenantName ?? '').trim(),
+      slug: String(raw.slug ?? '').trim().toLowerCase(),
+      companyLegalName: String(raw.companyLegalName ?? '').trim(),
+      currencyCode: String(raw.currencyCode ?? '').trim().toUpperCase(),
+      defaultPayDay: Number(raw.defaultPayDay),
+      ownerFirstName: String(raw.ownerFirstName ?? '').trim(),
+      ownerLastName: String(raw.ownerLastName ?? '').trim(),
+      ownerEmail: String(raw.ownerEmail ?? '').trim(),
+      ownerPassword: String(raw.ownerPassword ?? '')
+    };
+
+    this.authService.signUp(payload).subscribe({
+      next: () => {
+        this.signupLoading.set(false);
+        this.signupMessage.set('Sign up successful. You can login now.');
+        this.form.patchValue({
+          tenantSlug: String(payload.slug),
+          email: String(payload.ownerEmail),
+          password: String(payload.ownerPassword)
+        });
+        this.showSignUp.set(false);
+      },
+      error: (err) => {
+        this.signupLoading.set(false);
+        this.signupError.set(getApiErrorMessage(err, 'Sign up failed. Please review your details.'));
+      }
+    });
+  }
+}

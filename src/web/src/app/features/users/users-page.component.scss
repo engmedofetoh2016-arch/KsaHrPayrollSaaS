@@ -1,0 +1,51 @@
+.panel { background: #fff; border: 1px solid #d9e3ef; border-radius: 12px; padding: 16px; overflow-x: auto; }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 12px; }
+label { display: grid; gap: 6px; font-size: 0.9rem; min-width: 0; }
+input, select { border: 1px solid #c9d6e2; border-radius: 8px; padding: 9px 10px; width: 100%; min-width: 0; }
+.actions { grid-column: 1 / -1; }
+button { border: 0; background: #0a4ea1; color: #fff; border-radius: 8px; padding: 10px 14px; cursor: pointer; }
+table { width: 100%; border-collapse: collapse; }
+th, td { border-bottom: 1px solid #e2eaf3; text-align: left; padding: 8px; }
+.ok { color: #166a2d; }
+.error { color: #a32020; }
+
+@media (max-width: 640px) {
+  .panel {
+    padding: 12px;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  button {
+    width: 100%;
+  }
+
+  .responsive-table thead {
+    display: none;
+  }
+
+  .responsive-table tr {
+    display: grid;
+    gap: 8px;
+    border: 1px solid #e2eaf3;
+    border-radius: 10px;
+    padding: 10px;
+    margin-bottom: 10px;
+  }
+
+  .responsive-table td {
+    display: grid;
+    grid-template-columns: 40% 1fr;
+    border-bottom: 0;
+    padding: 0;
+    gap: 8px;
+  }
+
+  .responsive-table td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: #334155;
+  }
+}

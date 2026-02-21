@@ -1,0 +1,90 @@
+<section class="panel">
+  <h2>{{ i18n.text('Company Profile', 'ملف الشركة') }}</h2>
+
+  @if (loading()) {
+    <p>{{ i18n.text('Loading...', 'جاري التحميل...') }}</p>
+  } @else {
+    <form [formGroup]="form" (ngSubmit)="save()" class="form-grid">
+      <label>
+        {{ i18n.text('Legal Name', 'الاسم القانوني') }}
+        <input formControlName="legalName" />
+      </label>
+
+      <label>
+        {{ i18n.text('Currency', 'العملة') }}
+        <input formControlName="currencyCode" maxlength="3" />
+      </label>
+
+      <label>
+        {{ i18n.text('Default Payday', 'يوم صرف الرواتب') }}
+        <input type="number" formControlName="defaultPayDay" min="1" max="31" />
+      </label>
+
+      <label>
+        {{ i18n.text('EOS Factor (First 5 Years)', 'معامل مكافأة نهاية الخدمة (أول 5 سنوات)') }}
+        <input type="number" formControlName="eosFirstFiveYearsMonthFactor" min="0" max="2" step="0.01" />
+      </label>
+
+      <label>
+        {{ i18n.text('EOS Factor (After 5 Years)', 'معامل مكافأة نهاية الخدمة (بعد 5 سنوات)') }}
+        <input type="number" formControlName="eosAfterFiveYearsMonthFactor" min="0" max="2" step="0.01" />
+      </label>
+
+      <label>
+        {{ i18n.text('WPS Company Bank Name', 'اسم بنك الشركة (WPS)') }}
+        <input formControlName="wpsCompanyBankName" />
+      </label>
+
+      <label>
+        {{ i18n.text('WPS Company Bank Code', 'رمز بنك الشركة (WPS)') }}
+        <input formControlName="wpsCompanyBankCode" />
+      </label>
+
+      <label>
+        {{ i18n.text('WPS Company IBAN', 'آيبان الشركة (WPS)') }}
+        <input formControlName="wpsCompanyIban" />
+      </label>
+
+      <label class="full">
+        <span>{{ i18n.text('Compliance Digest Enabled', 'تفعيل ملخص الامتثال') }}</span>
+        <input type="checkbox" formControlName="complianceDigestEnabled" />
+      </label>
+
+      <label>
+        {{ i18n.text('Compliance Digest Email', 'بريد ملخص الامتثال') }}
+        <input formControlName="complianceDigestEmail" type="email" />
+      </label>
+
+      <label>
+        {{ i18n.text('Digest Frequency', 'تكرار الملخص') }}
+        <select formControlName="complianceDigestFrequency">
+          <option value="Daily">{{ i18n.text('Daily', 'يومي') }}</option>
+          <option value="Weekly">{{ i18n.text('Weekly', 'أسبوعي') }}</option>
+        </select>
+      </label>
+
+      <label>
+        {{ i18n.text('Digest Hour (UTC)', 'ساعة الإرسال (UTC)') }}
+        <input type="number" formControlName="complianceDigestHourUtc" min="0" max="23" />
+      </label>
+
+      <div class="actions">
+        <button type="submit" [disabled]="saving() || !canEdit()">
+          {{ saving() ? i18n.text('Saving...', 'جاري الحفظ...') : i18n.text('Save', 'حفظ') }}
+        </button>
+      </div>
+    </form>
+  }
+
+  @if (!canEdit()) {
+    <p class="warn">{{ i18n.text('View-only: only Owner/Admin can update company profile.', 'عرض فقط: المالك/المدير فقط يمكنه تحديث ملف الشركة.') }}</p>
+  }
+
+  @if (message()) {
+    <p class="ok">{{ message() }}</p>
+  }
+
+  @if (error()) {
+    <p class="error">{{ error() }}</p>
+  }
+</section>

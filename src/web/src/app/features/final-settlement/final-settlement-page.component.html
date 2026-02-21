@@ -1,0 +1,141 @@
+<section class="panel">
+  <h2>{{ i18n.text('Final Settlement', 'التسوية النهائية') }}</h2>
+  <p class="hint">
+    {{
+      i18n.text(
+        'Calculate EOS, apply deductions, and export final settlement documents.',
+        'احسب مكافأة نهاية الخدمة وطبق الاستقطاعات وصدّر مستندات التسوية النهائية.'
+      )
+    }}
+  </p>
+
+  <form class="form-grid" [formGroup]="form" (ngSubmit)="calculate()">
+    <label>
+      {{ i18n.text('Employee', 'الموظف') }}
+      <select formControlName="employeeId" (change)="refreshExports()">
+        <option value="" disabled>{{ i18n.text('Select employee', 'اختر موظفاً') }}</option>
+        @for (employee of employees(); track employee.id) {
+          <option [value]="employee.id">{{ employee.firstName }} {{ employee.lastName }}</option>
+        }
+      </select>
+    </label>
+    <label>{{ i18n.text('Termination Date', 'تاريخ نهاية الخدمة') }}<input type="date" formControlName="terminationDate" /></label>
+    <label>{{ i18n.text('Payroll Year', 'سنة الرواتب') }}<input type="number" formControlName="year" min="2000" max="2100" /></label>
+    <label>{{ i18n.text('Payroll Month', 'شهر الرواتب') }}<input type="number" formControlName="month" min="1" max="12" /></label>
+    <label>
+      {{ i18n.text('Additional Manual Deduction', 'استقطاع يدوي إضافي') }}
+      <input type="number" formControlName="additionalManualDeduction" min="0" step="0.01" />
+    </label>
+    <label>{{ i18n.text('Notes', 'ملاحظات') }}<input type="text" formControlName="notes" /></label>
+    <div class="actions">
+      <button type="submit" [disabled]="processing()">
+        {{ processing() ? i18n.text('Calculating...', 'جاري الحساب...') : i18n.text('Calculate', 'احسب') }}
+      </button>
+      <button type="button" [disabled]="exportingCsv()" (click)="exportCsv()">
+        {{ exportingCsv() ? i18n.text('Exporting...', 'جاري التصدير...') : i18n.text('Export CSV', 'تصدير CSV') }}
+      </button>
+      <button type="button" [disabled]="exportingPdf()" (click)="exportPdf()">
+        {{ exportingPdf() ? i18n.text('Exporting...', 'جاري التصدير...') : i18n.text('Export PDF', 'تصدير PDF') }}
+      </button>
+      <button type="button" [disabled]="queueing()" (click)="queuePdf()">
+        {{ queueing() ? i18n.text('Queueing...', 'جاري الجدولة...') : i18n.text('Queue Async PDF', 'جدولة PDF غير متزامن') }}
+      </button>
+      <button type="button" [disabled]="bulkQueueing() || employees().length === 0" (click)="queuePdfForAllEmployees()">
+        {{
+          bulkQueueing()
+            ? i18n.text('Queueing for all...', 'جاري الجدولة للجميع...')
+            : i18n.text('Queue For All Employees', 'جدولة لكل الموظفين')
+        }}
+      </button>
+    </div>
+  </form>
+
+  @if (message()) { <p class="ok">{{ message() }}</p> }
+  @if (bulkQueueSummary()) { <p class="ok">{{ bulkQueueSummary() }}</p> }
+  @if (error()) { <p class="error">{{ error() }}</p> }
+
+  @if (result(); as settlement) {
+    <div class="summary">
+      <p>{{ i18n.text('Employee', 'الموظف') }}: {{ settlement.employeeName }}</p>
+      <p>{{ i18n.text('Service Years', 'سنوات الخدمة') }}: {{ settlement.serviceYears | number: '1.2-2' }}</p>
+      <p>{{ i18n.text('EOS Amount', 'مبلغ مكافأة نهاية الخدمة') }}: {{ settlement.eosAmount | number: '1.2-2' }} {{ settlement.currencyCode }}</p>
+      <p>{{ i18n.text('Total Deductions', 'إجمالي الاستقطاعات') }}: {{ settlement.totalDeductions | number: '1.2-2' }}</p>
+      <p>{{ i18n.text('Net Final Settlement', 'صافي التسوية النهائية') }}: {{ settlement.netSettlement | number: '1.2-2' }} {{ settlement.currencyCode }}</p>
+    </div>
+  }
+
+  <h3>{{ i18n.text('Export History', 'سجل التصدير') }}</h3>
+  <div class="export-head">
+    <div class="scope">
+      <button type="button" [class.active]="exportsScope() === 'employee'" (click)="setExportScope('employee')">
+        {{ i18n.text('Current Employee', 'الموظف الحالي') }}
+      </button>
+      <button type="button" [class.active]="exportsScope() === 'all'" (click)="setExportScope('all')">
+        {{ i18n.text('All Employees', 'كل الموظفين') }}
+      </button>
+    </div>
+    <label>
+      {{ i18n.text('Status Filter', 'تصفية الحالة') }}
+      <select [value]="statusFilter()" (change)="setStatusFilter(($any($event.target)).value)">
+        <option value="-1">{{ i18n.text('All', 'الكل') }}</option>
+        <option value="1">{{ i18n.text('Pending', 'قيد الانتظار') }}</option>
+        <option value="2">{{ i18n.text('Processing', 'قيد المعالجة') }}</option>
+        <option value="3">{{ i18n.text('Completed', 'مكتمل') }}</option>
+        <option value="4">{{ i18n.text('Failed', 'فشل') }}</option>
+      </select>
+    </label>
+    <button type="button" (click)="refreshExports()">
+      {{ loadingExports() ? i18n.text('Refreshing...', 'جاري التحديث...') : i18n.text('Refresh', 'تحديث') }}
+    </button>
+    <button type="button" [disabled]="downloadingZip()" (click)="downloadCompletedZip()">
+      {{ downloadingZip() ? i18n.text('Preparing ZIP...', 'جاري تجهيز الملف...') : i18n.text('Download Completed ZIP', 'تحميل ZIP المكتمل') }}
+    </button>
+    <button type="button" [disabled]="retryingAllFailed()" (click)="retryAllFailed()">
+      {{
+        retryingAllFailed()
+          ? i18n.text('Retrying failed...', 'جاري إعادة المحاولة...')
+          : i18n.text('Retry Failed Jobs', 'إعادة محاولة المهام الفاشلة')
+      }}
+    </button>
+  </div>
+
+  @if (loadingExports() || loading()) {
+    <p>{{ i18n.text('Loading...', 'جاري التحميل...') }}</p>
+  } @else {
+    <table class="responsive-table">
+      <thead>
+        <tr>
+          @if (exportsScope() === 'all') {
+            <th>{{ i18n.text('Employee', 'الموظف') }}</th>
+          }
+          <th>{{ i18n.text('File', 'الملف') }}</th>
+          <th>{{ i18n.text('Status', 'الحالة') }}</th>
+          <th>{{ i18n.text('Created', 'تاريخ الإنشاء') }}</th>
+          <th>{{ i18n.text('Action', 'إجراء') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (job of filteredExports(); track job.id) {
+          <tr>
+            @if (exportsScope() === 'all') {
+              <td [attr.data-label]="i18n.text('Employee', 'الموظف')">{{ job.employeeName || '-' }}</td>
+            }
+            <td [attr.data-label]="i18n.text('File', 'الملف')">{{ job.fileName }}</td>
+            <td [attr.data-label]="i18n.text('Status', 'الحالة')">
+              <span [class]="statusClass(job.status)">{{ statusLabel(job.status) }}</span>
+            </td>
+            <td [attr.data-label]="i18n.text('Created', 'تاريخ الإنشاء')">{{ job.createdAtUtc }}</td>
+            <td [attr.data-label]="i18n.text('Action', 'إجراء')">
+              <button type="button" [disabled]="job.status !== 3" (click)="downloadExport(job.id)">
+                {{ i18n.text('Download', 'تحميل') }}
+              </button>
+              <button type="button" [disabled]="job.status !== 4 || retrying()" (click)="retryExport(job.id)">
+                {{ i18n.text('Retry', 'إعادة محاولة') }}
+              </button>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+</section>

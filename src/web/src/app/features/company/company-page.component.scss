@@ -1,0 +1,25 @@
+.panel { background: #fff; border: 1px solid #d9e3ef; border-radius: 12px; padding: 16px; }
+.form-grid { display: grid; gap: 12px; max-width: 560px; }
+label { display: grid; gap: 6px; font-size: 0.9rem; min-width: 0; }
+input { border: 1px solid #c9d6e2; border-radius: 8px; padding: 9px 10px; width: 100%; min-width: 0; }
+select { border: 1px solid #c9d6e2; border-radius: 8px; padding: 9px 10px; width: 100%; min-width: 0; background: #fff; }
+.full { grid-column: 1 / -1; }
+.actions { margin-top: 6px; }
+button { border: 0; background: #0a4ea1; color: #fff; border-radius: 8px; padding: 10px 14px; }
+.ok { color: #166a2d; }
+.warn { color: #8a5a00; }
+.error { color: #a32020; }
+
+@media (max-width: 640px) {
+  .panel {
+    padding: 12px;
+  }
+
+  .form-grid {
+    max-width: none;
+  }
+
+  button {
+    width: 100%;
+  }
+}

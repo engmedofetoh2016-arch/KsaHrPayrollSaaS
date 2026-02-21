@@ -1,0 +1,26 @@
+.panel { background: #fff; border: 1px solid #d9e3ef; border-radius: 12px; padding: 16px; overflow-x: auto; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+button { border: 0; background: #0a4ea1; color: #fff; border-radius: 8px; padding: 9px 12px; cursor: pointer; }
+button.active { background: #083a77; }
+table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+th, td { border-bottom: 1px solid #e2eaf3; text-align: left; padding: 8px; vertical-align: top; }
+.row-actions { display: flex; gap: 6px; }
+.ok { color: #166a2d; }
+.error { color: #a32020; }
+.reject { color: #8f2b2b; font-size: 0.85rem; margin-top: 4px; }
+
+@media (max-width: 640px) {
+  .panel {
+    padding: 12px;
+  }
+
+  .actions,
+  .row-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  button {
+    width: 100%;
+  }
+}

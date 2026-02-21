@@ -1,0 +1,146 @@
+.shell {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  min-height: 100vh;
+  position: relative;
+}
+
+aside {
+  background: #0e223f;
+  color: #d8e6ff;
+  padding: 16px;
+  z-index: 30;
+}
+
+.brand {
+  font-weight: 700;
+  margin-bottom: 20px;
+}
+
+nav {
+  display: grid;
+  gap: 6px;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+
+a.active,
+a:hover {
+  background: #1e3a66;
+}
+
+main {
+  background: #f5f8fc;
+}
+
+header {
+  min-height: 64px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #d9e3ef;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: #fff;
+}
+
+header span {
+  display: block;
+  font-size: 0.8rem;
+  color: #51657d;
+}
+
+button {
+  border: 1px solid #c8d6e4;
+  border-radius: 8px;
+  background: #fff;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.lang {
+  min-width: 60px;
+}
+
+.content {
+  padding: 16px;
+}
+
+.menu-toggle {
+  display: none;
+}
+
+.overlay {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .shell {
+    grid-template-columns: 1fr;
+  }
+
+  aside {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: min(80vw, 280px);
+    transform: translateX(-100%);
+    transition: transform 0.2s ease-out;
+    box-shadow: 0 16px 40px rgba(3, 14, 33, 0.35);
+    overflow-y: auto;
+  }
+
+  aside.open {
+    transform: translateX(0);
+  }
+
+  .overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    border: 0;
+    z-index: 20;
+  }
+
+  .menu-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 72px;
+  }
+
+  .header-actions {
+    margin-inline-start: auto;
+  }
+
+  .content {
+    padding: 12px;
+  }
+}
+
+@media (max-width: 640px) {
+  header {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .header-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .lang {
+    min-width: 56px;
+  }
+}

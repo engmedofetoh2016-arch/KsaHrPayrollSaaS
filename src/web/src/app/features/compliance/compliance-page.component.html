@@ -1,0 +1,239 @@
+﻿<section class="compliance-page">
+  <div class="top">
+    <div>
+      <h2>{{ i18n.text('Compliance Center', 'مركز الامتثال') }}</h2>
+      <p>
+        {{
+          i18n.text(
+            'Track Saudi payroll and HR compliance risk in one place.',
+            'متابعة مخاطر الامتثال للرواتب والموارد البشرية السعودية في مكان واحد.'
+          )
+        }}
+      </p>
+    </div>
+    <div class="top-actions">
+      <button type="button" (click)="sendDigestNow()" [disabled]="sendingDigest()">
+        {{ sendingDigest() ? i18n.text('Sending...', 'جاري الإرسال...') : i18n.text('Send Digest Now', 'إرسال الملخص الآن') }}
+      </button>
+      <button type="button" (click)="exportCsv()">{{ i18n.text('Export CSV', 'تصدير CSV') }}</button>
+      <button type="button" (click)="exportPdf()">{{ i18n.text('Print / PDF', 'طباعة / PDF') }}</button>
+      <button type="button" (click)="load()" [disabled]="loading()">
+        {{ loading() ? i18n.text('Refreshing...', 'جاري التحديث...') : i18n.text('Refresh', 'تحديث') }}
+      </button>
+    </div>
+  </div>
+
+  <div class="kpis">
+    <article class="kpi score">
+      <p class="label">{{ i18n.text('Compliance Score', 'درجة الامتثال') }}</p>
+      <p class="value">{{ score().score }}/100</p>
+      <p class="meta">{{ i18n.text('Grade', 'التقييم') }}: {{ score().grade }}</p>
+    </article>
+    <article class="kpi">
+      <p class="label">{{ i18n.text('Saudization', 'السعودة') }}</p>
+      <p class="value">{{ score().saudizationPercent }}%</p>
+      <p class="meta">{{ i18n.text('Target: 30%+', 'الهدف: 30%+') }}</p>
+    </article>
+    <article class="kpi">
+      <p class="label">{{ i18n.text('WPS Company Profile', 'ملف WPS للشركة') }}</p>
+      <p class="value">{{ score().wpsCompanyReady ? i18n.text('Ready', 'جاهز') : i18n.text('Missing', 'ناقص') }}</p>
+      <p class="meta">
+        {{ i18n.text('Employees missing payment data', 'موظفون تنقصهم بيانات الدفع') }}: {{ score().employeesMissingPaymentData }}
+      </p>
+    </article>
+    <article class="kpi">
+      <p class="label">{{ i18n.text('Open Alerts', 'التنبيهات المفتوحة') }}</p>
+      <p class="value">{{ score().criticalAlerts + score().warningAlerts + score().noticeAlerts }}</p>
+      <p class="meta">
+        {{ i18n.text('Critical', 'حرج') }}: {{ score().criticalAlerts }},
+        {{ i18n.text('Warning', 'متوسط') }}: {{ score().warningAlerts }},
+        {{ i18n.text('Notice', 'تنبيه') }}: {{ score().noticeAlerts }}
+      </p>
+    </article>
+  </div>
+
+  <div class="grid">
+    <article class="panel">
+      <h3>{{ i18n.text('AI Compliance Brief', 'ملخص الامتثال الذكي') }}</h3>
+      <p class="meta">
+        {{ i18n.text('Provider', 'المزوّد') }}: {{ aiBrief().provider }}
+        @if (aiBrief().usedFallback) {
+          ({{ i18n.text('fallback mode', 'وضع بديل') }})
+        }
+      </p>
+      <pre class="brief">{{ aiBrief().brief }}</pre>
+    </article>
+
+    <article class="panel">
+      <h3>{{ i18n.text('Score Trend (60 Days)', 'اتجاه الدرجة (60 يوم)') }}</h3>
+      @if (scoreHistory().length === 0) {
+        <p class="meta">{{ i18n.text('Trend data will appear after worker snapshots run.', 'سيظهر اتجاه الدرجات بعد تشغيل لقطات العامل.') }}</p>
+      } @else {
+        <div class="trend">
+          @for (point of scoreHistory(); track point.snapshotDate) {
+            <div class="bar" [style.height]="historyPointHeight(point.score)" [title]="point.snapshotDate + ' - ' + point.score">
+              <span>{{ point.score }}</span>
+            </div>
+          }
+        </div>
+      }
+    </article>
+
+    <article class="panel">
+      <h3>{{ i18n.text('Recommended Actions', 'إجراءات مقترحة') }}</h3>
+      @if (score().recommendations.length === 0) {
+        <p class="meta">{{ i18n.text('No actions right now.', 'لا توجد إجراءات حالياً.') }}</p>
+      } @else {
+        <ul>
+          @for (item of score().recommendations; track item) {
+            <li>{{ item }}</li>
+          }
+        </ul>
+      }
+    </article>
+  </div>
+
+  <article class="panel">
+    <h3>{{ i18n.text('Compliance Alerts', 'تنبيهات الامتثال') }}</h3>
+    <div class="bulk-actions">
+      <label>
+        <input
+          type="checkbox"
+          [checked]="alerts().length > 0 && selectedAlertIds().length === alerts().length"
+          (change)="toggleSelectAll($any($event.target).checked)" />
+        {{ i18n.text('Select all', 'تحديد الكل') }}
+      </label>
+      <button type="button" (click)="resolveSelected()" [disabled]="loading() || selectedAlertIds().length === 0">
+        {{ i18n.text('Resolve Selected', 'إغلاق المحدد') }} ({{ selectedAlertIds().length }})
+      </button>
+    </div>
+    @if (alerts().length === 0) {
+      <p class="meta">{{ i18n.text('No open alerts.', 'لا توجد تنبيهات مفتوحة.') }}</p>
+    } @else {
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>{{ i18n.text('Select', 'تحديد') }}</th>
+              <th>{{ i18n.text('Employee', 'الموظف') }}</th>
+              <th>{{ i18n.text('Document', 'المستند') }}</th>
+              <th>{{ i18n.text('Expiry', 'الانتهاء') }}</th>
+              <th>{{ i18n.text('Days Left', 'الأيام المتبقية') }}</th>
+              <th>{{ i18n.text('Severity', 'الأولوية') }}</th>
+              <th>{{ i18n.text('Action', 'إجراء') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (alert of alerts(); track alert.id) {
+              <tr>
+                <td>
+                  <input type="checkbox" [checked]="isSelected(alert.id)" (change)="toggleSelection(alert.id, $any($event.target).checked)" />
+                </td>
+                <td>{{ alert.employeeName }}</td>
+                <td>{{ alert.documentType === 'Iqama' ? i18n.text('Iqama', 'الإقامة') : i18n.text('Work Permit', 'رخصة العمل') }}</td>
+                <td>{{ alert.expiryDate }}</td>
+                <td>{{ alert.daysLeft }}</td>
+                <td><span class="badge" [class]="severityClass(alert.severity)">{{ alert.severity }}</span></td>
+                <td>
+                  <button type="button" (click)="resolveAlert(alert.id)" [disabled]="resolvingIds().includes(alert.id)">
+                    {{ i18n.text('Resolve', 'إغلاق') }}
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </article>
+
+  <article class="panel">
+    <h3>{{ i18n.text('Digest Delivery Log', 'سجل إرسال الملخص') }}</h3>
+    <div class="bulk-actions">
+      <label>
+        {{ i18n.text('Status', 'الحالة') }}
+        <select [value]="digestStatusFilter()" (change)="setDigestStatusFilter($any($event.target).value)">
+          <option value="All">{{ i18n.text('All', 'الكل') }}</option>
+          <option value="Sent">{{ i18n.text('Sent', 'مرسل') }}</option>
+          <option value="Simulated">{{ i18n.text('Simulated', 'محاكاة') }}</option>
+          <option value="Failed">{{ i18n.text('Failed', 'فشل') }}</option>
+        </select>
+      </label>
+
+      <label>
+        {{ i18n.text('Trigger', 'النوع') }}
+        <select [value]="digestTriggerFilter()" (change)="setDigestTriggerFilter($any($event.target).value)">
+          <option value="All">{{ i18n.text('All', 'الكل') }}</option>
+          <option value="Manual">{{ i18n.text('Manual', 'يدوي') }}</option>
+          <option value="Scheduled">{{ i18n.text('Scheduled', 'مجدول') }}</option>
+          <option value="Retry">{{ i18n.text('Retry', 'إعادة') }}</option>
+        </select>
+      </label>
+
+      <label>
+        {{ i18n.text('Search', 'بحث') }}
+        <input
+          type="text"
+          [value]="digestSearch()"
+          (input)="setDigestSearch($any($event.target).value)"
+          [placeholder]="i18n.text('email/status/error', 'بريد/حالة/خطأ')" />
+      </label>
+
+      <button type="button" (click)="exportDigestLogsCsv()">{{ i18n.text('Export Logs CSV', 'تصدير السجلات CSV') }}</button>
+    </div>
+    @if (visibleDigestLogs().length === 0) {
+      <p class="meta">{{ i18n.text('No digest log entries yet.', 'لا توجد سجلات إرسال حتى الآن.') }}</p>
+    } @else {
+      <p class="meta">
+        {{ i18n.text('Showing', 'عرض') }} {{ visibleDigestLogs().length }}
+        {{ i18n.text('of', 'من') }} {{ digestTotal() }}
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>{{ i18n.text('When', 'الوقت') }}</th>
+              <th>{{ i18n.text('Recipient', 'المستلم') }}</th>
+              <th>{{ i18n.text('Trigger', 'النوع') }}</th>
+              <th>{{ i18n.text('Status', 'الحالة') }}</th>
+              <th>{{ i18n.text('Error', 'الخطأ') }}</th>
+              <th>{{ i18n.text('Action', 'إجراء') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (log of visibleDigestLogs(); track log.id) {
+              <tr>
+                <td>{{ log.createdAtUtc }}</td>
+                <td>{{ log.recipientEmail }}</td>
+                <td>{{ log.triggerType }} @if (log.frequency) { ({{ log.frequency }}) }</td>
+                <td>{{ log.status }} @if (log.simulated) { (simulated) }</td>
+                <td>{{ log.errorMessage || '-' }}</td>
+                <td>
+                  <button
+                    type="button"
+                    (click)="retryDigest(log.id)"
+                    [disabled]="!canRetryDigest(log.status) || retryingDigestId() === log.id">
+                    {{ retryingDigestId() === log.id ? i18n.text('Retrying...', 'جاري الإعادة...') : i18n.text('Retry', 'إعادة') }}
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      @if (digestHasMore()) {
+        <button type="button" (click)="loadMoreDigestLogs()" [disabled]="loadingDigestLogs()">
+          {{ loadingDigestLogs() ? i18n.text('Loading...', 'جاري التحميل...') : i18n.text('Load More', 'تحميل المزيد') }}
+        </button>
+      }
+    }
+  </article>
+
+  @if (error()) {
+    <p class="error">{{ error() }}</p>
+  }
+
+  @if (message()) {
+    <p class="ok">{{ message() }}</p>
+  }
+</section>

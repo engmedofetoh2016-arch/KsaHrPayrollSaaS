@@ -1,0 +1,196 @@
+<section class="panel">
+  <h2>{{ i18n.text('Employees', 'الموظفون') }}</h2>
+
+  <form class="form-grid" [formGroup]="form" (ngSubmit)="create()">
+    <label>{{ i18n.text('Start Date', 'تاريخ المباشرة') }}<input type="date" formControlName="startDate" /></label>
+    <label>{{ i18n.text('First Name', 'الاسم الأول') }}<input formControlName="firstName" /></label>
+    <label>{{ i18n.text('Last Name', 'اسم العائلة') }}<input formControlName="lastName" /></label>
+    <label>{{ i18n.text('Email', 'البريد الإلكتروني') }}<input type="email" formControlName="email" /></label>
+    <label>{{ i18n.text('Job Title', 'المسمى الوظيفي') }}<input formControlName="jobTitle" /></label>
+    <label>{{ i18n.text('Base Salary', 'الراتب الأساسي') }}<input type="number" formControlName="baseSalary" min="1" /></label>
+    <label>{{ i18n.text('Saudi National', 'سعودي') }}<input type="checkbox" formControlName="isSaudiNational" /></label>
+    <label>{{ i18n.text('GOSI Eligible', 'مشمول في التأمينات') }}<input type="checkbox" formControlName="isGosiEligible" /></label>
+    <label>{{ i18n.text('GOSI Basic Wage', 'الأجر الأساسي للتأمينات') }}<input type="number" formControlName="gosiBasicWage" min="0" /></label>
+    <label>{{ i18n.text('GOSI Housing', 'بدل السكن للتأمينات') }}<input type="number" formControlName="gosiHousingAllowance" min="0" /></label>
+    <label>{{ i18n.text('Employee Number', 'الرقم الوظيفي') }}<input formControlName="employeeNumber" /></label>
+    <label>{{ i18n.text('Bank Name', 'اسم البنك') }}<input formControlName="bankName" /></label>
+    <label>{{ i18n.text('Bank IBAN', 'الآيبان') }}<input formControlName="bankIban" /></label>
+    <label>{{ i18n.text('Iqama Number', '??? ???????') }}<input formControlName="iqamaNumber" /></label>
+    <label>{{ i18n.text('Iqama Expiry Date', '????? ?????? ???????') }}<input type="date" formControlName="iqamaExpiryDate" /></label>
+    <label>{{ i18n.text('Work Permit Expiry', '????? ?????? ???? ?????') }}<input type="date" formControlName="workPermitExpiryDate" /></label>
+    <div class="actions">
+      <button type="submit" [disabled]="saving()">
+        {{ saving() ? i18n.text('Creating...', 'جاري الإنشاء...') : i18n.text('Create Employee', 'إنشاء موظف') }}
+      </button>
+    </div>
+  </form>
+
+  @if (message()) { <p class="ok">{{ message() }}</p> }
+  @if (error()) { <p class="error">{{ error() }}</p> }
+
+  <h3>{{ i18n.text('Employee List', 'قائمة الموظفين') }}</h3>
+  @if (loading()) {
+    <p>{{ i18n.text('Loading...', 'جاري التحميل...') }}</p>
+  } @else {
+    <table>
+      <thead>
+        <tr>
+          <th>{{ i18n.text('Name', 'الاسم') }}</th>
+          <th>{{ i18n.text('Start Date', 'تاريخ المباشرة') }}</th>
+          <th>{{ i18n.text('Email', 'البريد الإلكتروني') }}</th>
+          <th>{{ i18n.text('Job Title', 'المسمى الوظيفي') }}</th>
+          <th>{{ i18n.text('Base Salary', 'الراتب الأساسي') }}</th>
+          <th>{{ i18n.text('Employee #', 'الرقم الوظيفي') }}</th>
+          <th>{{ i18n.text('IBAN', 'الآيبان') }}</th>
+          <th>{{ i18n.text('Iqama #', '??? ???????') }}</th>
+          <th>{{ i18n.text('Iqama Expiry', '?????? ???????') }}</th>
+          <th>{{ i18n.text('Work Permit Expiry', '?????? ???? ?????') }}</th>
+          <th>{{ i18n.text('Saudi', 'سعودي') }}</th>
+          <th>{{ i18n.text('GOSI', 'التأمينات') }}</th>
+          <th>{{ i18n.text('GOSI Wage Base', 'وعاء التأمينات') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (employee of employees(); track employee.id) {
+          <tr>
+            <td>{{ employee.firstName }} {{ employee.lastName }}</td>
+            <td>{{ employee.startDate }}</td>
+            <td>{{ employee.email }}</td>
+            <td>{{ employee.jobTitle }}</td>
+            <td>{{ employee.baseSalary | number: '1.2-2' }}</td>
+            <td>{{ employee.employeeNumber }}</td>
+            <td>{{ employee.bankIban }}</td>
+            <td>{{ employee.iqamaNumber }}</td>
+            <td>{{ employee.iqamaExpiryDate || '-' }}</td>
+            <td>{{ employee.workPermitExpiryDate || '-' }}</td>
+            <td>{{ employee.isSaudiNational ? i18n.text('Yes', 'نعم') : i18n.text('No', 'لا') }}</td>
+            <td>{{ employee.isGosiEligible ? i18n.text('Yes', 'نعم') : i18n.text('No', 'لا') }}</td>
+            <td>{{ (employee.gosiBasicWage + employee.gosiHousingAllowance) | number: '1.2-2' }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+
+  <h3>{{ i18n.text('End of Service Estimate', 'تقدير مكافأة نهاية الخدمة') }}</h3>
+  <form class="form-grid" [formGroup]="eosForm" (ngSubmit)="estimateEos()">
+    <label>
+      {{ i18n.text('Employee', 'الموظف') }}
+      <select formControlName="employeeId" (change)="refreshFinalSettlementExports()">
+        <option value="" disabled>{{ i18n.text('Select employee', 'اختر موظف') }}</option>
+        @for (employee of employees(); track employee.id) {
+          <option [value]="employee.id">{{ employee.firstName }} {{ employee.lastName }}</option>
+        }
+      </select>
+    </label>
+    <label>
+      {{ i18n.text('Termination Date', 'تاريخ نهاية الخدمة') }}
+      <input type="date" formControlName="terminationDate" />
+    </label>
+    <div class="actions">
+      <button type="submit" [disabled]="estimatingEos()">
+        {{ estimatingEos() ? i18n.text('Estimating...', 'جاري الحساب...') : i18n.text('Estimate EOS', 'احسب مكافأة نهاية الخدمة') }}
+      </button>
+    </div>
+  </form>
+
+  @if (eosResult(); as eos) {
+    <div class="ok">
+      <p>{{ i18n.text('Service Years', 'سنوات الخدمة') }}: {{ eos.serviceYears | number: '1.2-2' }}</p>
+      <p>{{ i18n.text('EOS Months', 'أشهر المكافأة') }}: {{ eos.eosMonths | number: '1.2-2' }}</p>
+      <p>{{ i18n.text('Estimated Amount', 'المبلغ التقديري') }}: {{ eos.eosAmount | number: '1.2-2' }} {{ eos.currencyCode }}</p>
+    </div>
+  }
+
+  <h3>{{ i18n.text('Final Settlement (v1)', 'التسوية النهائية (الإصدار الأول)') }}</h3>
+  <form class="form-grid" [formGroup]="finalSettlementForm" (ngSubmit)="estimateFinalSettlement()">
+    <label>
+      {{ i18n.text('Employee', 'الموظف') }}
+      <select formControlName="employeeId">
+        <option value="" disabled>{{ i18n.text('Select employee', 'اختر موظف') }}</option>
+        @for (employee of employees(); track employee.id) {
+          <option [value]="employee.id">{{ employee.firstName }} {{ employee.lastName }}</option>
+        }
+      </select>
+    </label>
+    <label>
+      {{ i18n.text('Termination Date', 'تاريخ نهاية الخدمة') }}
+      <input type="date" formControlName="terminationDate" />
+    </label>
+    <label>
+      {{ i18n.text('Payroll Year', 'سنة الرواتب') }}
+      <input type="number" formControlName="year" min="2000" max="2100" />
+    </label>
+    <label>
+      {{ i18n.text('Payroll Month', 'شهر الرواتب') }}
+      <input type="number" formControlName="month" min="1" max="12" />
+    </label>
+    <label>
+      {{ i18n.text('Additional Manual Deduction', 'استقطاع يدوي إضافي') }}
+      <input type="number" formControlName="additionalManualDeduction" min="0" step="0.01" />
+    </label>
+    <label>
+      {{ i18n.text('Notes', 'ملاحظات') }}
+      <input type="text" formControlName="notes" />
+    </label>
+    <div class="actions">
+      <button type="submit" [disabled]="estimatingFinalSettlement()">
+        {{ estimatingFinalSettlement() ? i18n.text('Calculating...', 'جاري الحساب...') : i18n.text('Calculate Final Settlement', 'احسب التسوية النهائية') }}
+      </button>
+      <button type="button" [disabled]="exportingFinalSettlement()" (click)="exportFinalSettlementCsv()">
+        {{ exportingFinalSettlement() ? i18n.text('Exporting...', 'جاري التصدير...') : i18n.text('Export CSV', 'تصدير CSV') }}
+      </button>
+      <button type="button" [disabled]="exportingFinalSettlementPdf()" (click)="exportFinalSettlementPdf()">
+        {{ exportingFinalSettlementPdf() ? i18n.text('Exporting...', 'جاري التصدير...') : i18n.text('Export PDF', 'تصدير PDF') }}
+      </button>
+      <button type="button" [disabled]="queueingFinalSettlementPdf()" (click)="queueFinalSettlementPdfExport()">
+        {{ queueingFinalSettlementPdf() ? i18n.text('Queueing...', 'جاري الجدولة...') : i18n.text('Queue Async PDF', 'جدولة PDF غير متزامن') }}
+      </button>
+      <button type="button" [disabled]="loadingFinalSettlementExports()" (click)="refreshFinalSettlementExports()">
+        {{ loadingFinalSettlementExports() ? i18n.text('Refreshing...', 'جاري التحديث...') : i18n.text('Refresh Exports', 'تحديث الصادرات') }}
+      </button>
+    </div>
+  </form>
+
+  @if (finalSettlementResult(); as settlement) {
+    <div class="ok">
+      <p>{{ i18n.text('EOS Amount', 'مبلغ مكافأة نهاية الخدمة') }}: {{ settlement.eosAmount | number: '1.2-2' }} {{ settlement.currencyCode }}</p>
+      <p>{{ i18n.text('Unpaid Leave Deduction', 'استقطاع الإجازة غير المدفوعة') }}: {{ settlement.unpaidLeaveDeduction | number: '1.2-2' }}</p>
+      <p>{{ i18n.text('Payroll Manual Deductions', 'الاستقطاعات اليدوية من الرواتب') }}: {{ settlement.manualDeductionsFromPayroll | number: '1.2-2' }}</p>
+      <p>{{ i18n.text('Total Deductions', 'إجمالي الاستقطاعات') }}: {{ settlement.totalDeductions | number: '1.2-2' }}</p>
+      <p>{{ i18n.text('Net Final Settlement', 'صافي التسوية النهائية') }}: {{ settlement.netSettlement | number: '1.2-2' }} {{ settlement.currencyCode }}</p>
+    </div>
+  }
+
+  <h4>{{ i18n.text('Final Settlement Exports', 'صادرات التسوية النهائية') }}</h4>
+  @if (loadingFinalSettlementExports()) {
+    <p>{{ i18n.text('Loading exports...', 'جاري تحميل الصادرات...') }}</p>
+  } @else {
+    <table>
+      <thead>
+        <tr>
+          <th>{{ i18n.text('File', 'الملف') }}</th>
+          <th>{{ i18n.text('Status', 'الحالة') }}</th>
+          <th>{{ i18n.text('Created', 'تاريخ الإنشاء') }}</th>
+          <th>{{ i18n.text('Action', 'إجراء') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (job of finalSettlementExports(); track job.id) {
+          <tr>
+            <td>{{ job.fileName }}</td>
+            <td><span [class]="exportStatusClass(job.status)">{{ exportStatusLabel(job.status) }}</span></td>
+            <td>{{ job.createdAtUtc }}</td>
+            <td>
+              <button type="button" [disabled]="job.status !== 3" (click)="downloadQueuedFinalSettlementExport(job.id)">
+                {{ i18n.text('Download', 'تحميل') }}
+              </button>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+</section>
+
+

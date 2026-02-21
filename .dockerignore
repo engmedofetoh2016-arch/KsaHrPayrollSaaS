@@ -1,0 +1,17 @@
+﻿**/bin
+**/obj
+**/.vs
+**/.vscode
+**/.idea
+**/.DS_Store
+
+src/web/node_modules
+src/web/dist
+src/web/.angular
+
+.git
+.gitignore
+README.md
+api_async.log
+api_async.err.log
+.tmp

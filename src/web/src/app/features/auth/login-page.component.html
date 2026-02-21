@@ -1,0 +1,66 @@
+<section class="login-wrap">
+  <button type="button" class="lang-switch" (click)="i18n.toggleLanguage()">
+    {{ i18n.isArabic() ? 'EN' : 'عربي' }}
+  </button>
+
+  <form class="card" [formGroup]="form" (ngSubmit)="onSubmit()">
+    <h1>{{ i18n.text('HR Payroll Login', 'تسجيل الدخول لنظام الموارد البشرية والرواتب') }}</h1>
+
+    <label>
+      {{ i18n.text('Tenant Slug', 'رمز الشركة') }}
+      <input formControlName="tenantSlug" [placeholder]="i18n.text('e.g. acme-ksa', 'مثال: acme-ksa')" />
+    </label>
+
+    <label>
+      {{ i18n.text('Email', 'البريد الإلكتروني') }}
+      <input type="email" formControlName="email" [placeholder]="i18n.text('owner@company.com', 'owner@company.com')" />
+    </label>
+
+    <label>
+      {{ i18n.text('Password', 'كلمة المرور') }}
+      <input type="password" formControlName="password" [placeholder]="i18n.text('********', '********')" />
+    </label>
+
+    @if (error()) {
+      <p class="error">{{ error() }}</p>
+    }
+
+    <button type="submit" [disabled]="loading()">
+      {{ loading() ? i18n.text('Signing in...', 'جاري تسجيل الدخول...') : i18n.text('Sign in', 'تسجيل الدخول') }}
+    </button>
+
+    <button type="button" class="secondary" (click)="toggleSignUp()">
+      {{ showSignUp()
+          ? i18n.text('Hide Sign Up', 'إخفاء التسجيل')
+          : i18n.text('Create New Company Account', 'إنشاء حساب شركة جديد') }}
+    </button>
+
+    @if (signupMessage()) {
+      <p class="ok">{{ signupMessage() }}</p>
+    }
+  </form>
+
+  @if (showSignUp()) {
+    <form class="card signup-card" [formGroup]="signupForm" (ngSubmit)="onSignUpSubmit()">
+      <h2>{{ i18n.text('Sign Up', 'تسجيل شركة جديدة') }}</h2>
+
+      <label>{{ i18n.text('Tenant Name', 'اسم الشركة') }} <input formControlName="tenantName" [placeholder]="i18n.text('Acme HR', 'شركة أكمي')" /></label>
+      <label>{{ i18n.text('Tenant Slug', 'رمز الشركة') }} <input formControlName="slug" [placeholder]="i18n.text('acme-ksa', 'acme-ksa')" /></label>
+      <label>{{ i18n.text('Company Legal Name', 'الاسم القانوني للشركة') }} <input formControlName="companyLegalName" [placeholder]="i18n.text('Acme LLC', 'شركة أكمي المحدودة')" /></label>
+      <label>{{ i18n.text('Currency', 'العملة') }} <input formControlName="currencyCode" [placeholder]="i18n.text('SAR', 'SAR')" /></label>
+      <label>{{ i18n.text('Default Pay Day', 'يوم صرف الرواتب') }} <input type="number" formControlName="defaultPayDay" min="1" max="31" /></label>
+      <label>{{ i18n.text('Owner First Name', 'الاسم الأول للمالك') }} <input formControlName="ownerFirstName" /></label>
+      <label>{{ i18n.text('Owner Last Name', 'اسم العائلة للمالك') }} <input formControlName="ownerLastName" /></label>
+      <label>{{ i18n.text('Owner Email', 'بريد المالك') }} <input type="email" formControlName="ownerEmail" [placeholder]="i18n.text('owner@company.com', 'owner@company.com')" /></label>
+      <label>{{ i18n.text('Owner Password', 'كلمة مرور المالك') }} <input type="password" formControlName="ownerPassword" [placeholder]="i18n.text('********', '********')" /></label>
+
+      @if (signupError()) {
+        <p class="error">{{ signupError() }}</p>
+      }
+
+      <button type="submit" [disabled]="signupLoading()">
+        {{ signupLoading() ? i18n.text('Creating account...', 'جاري إنشاء الحساب...') : i18n.text('Sign Up', 'تسجيل') }}
+      </button>
+    </form>
+  }
+</section>
