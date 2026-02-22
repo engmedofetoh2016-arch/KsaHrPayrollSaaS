@@ -13,7 +13,8 @@ RUN dotnet restore src/backend/HrPayroll.Worker/HrPayroll.Worker.csproj
 COPY src/backend/ src/backend/
 RUN dotnet publish src/backend/HrPayroll.Worker/HrPayroll.Worker.csproj -c Release -o /app/publish /p:UseAppHost=false
 
-FROM mcr.microsoft.com/dotnet/runtime:8.0 AS final
+# ✅ IMPORTANT: aspnet (includes Microsoft.AspNetCore.App)
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
 WORKDIR /app
 
 ENV DOTNET_ENVIRONMENT=Production
