@@ -1,5 +1,5 @@
-param(
-    [string]$ApiBaseUrl = "http://localhost:5202",
+﻿param(
+    [string]$ApiBaseUrl = "",
     [string]$OwnerPassword = "Owner1234",
     [int]$Year = (Get-Date).Year,
     [int]$Month = (Get-Date).Month,
@@ -9,6 +9,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+$apiBase = if (-not [string]::IsNullOrWhiteSpace($ApiBaseUrl)) { $ApiBaseUrl } elseif (-not [string]::IsNullOrWhiteSpace($env:HRPAYROLL_API_URL)) { $env:HRPAYROLL_API_URL } else { "http://localhost:5202" }
+$ApiBaseUrl = $apiBase.TrimEnd("/")
+Write-Host "Using API base URL: $ApiBaseUrl"
 function Invoke-Api {
     param(
         [string]$Method,
@@ -398,3 +401,4 @@ if ($QueueExports.IsPresent) {
     Write-Host "GosiExportId: $gosiExportId"
     Write-Host "PayslipExportId: $payslipExportId"
 }
+
