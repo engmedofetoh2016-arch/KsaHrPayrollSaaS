@@ -30,15 +30,25 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddCors(options =>
 {
+    var configuredOrigins = builder.Configuration["Cors:AllowedOrigins"];
+    var productionOrigins = (configuredOrigins ?? string.Empty)
+        .Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    var defaultOrigins = new[]
+    {
+        "http://localhost:4200",
+        "http://127.0.0.1:4200",
+        "http://localhost:4201",
+        "http://127.0.0.1:4201",
+        "http://localhost:4202",
+        "http://127.0.0.1:4202"
+    };
+
+    var allowedOrigins = productionOrigins.Length > 0 ? productionOrigins : defaultOrigins;
+
     options.AddPolicy("WebDev", policy =>
     {
-        policy.WithOrigins(
-                "http://localhost:4200",
-                "http://127.0.0.1:4200",
-                "http://localhost:4201",
-                "http://127.0.0.1:4201",
-                "http://localhost:4202",
-                "http://127.0.0.1:4202")
+        policy.WithOrigins(allowedOrigins)
             .AllowAnyHeader()
             .AllowAnyMethod();
     });
