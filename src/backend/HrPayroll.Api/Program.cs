@@ -44,11 +44,25 @@ builder.Services.AddCors(options =>
         "http://127.0.0.1:4202"
     };
 
-    var allowedOrigins = productionOrigins.Length > 0 ? productionOrigins : defaultOrigins;
-
     options.AddPolicy("WebDev", policy =>
     {
-        policy.WithOrigins(allowedOrigins)
+        if (productionOrigins.Length > 0)
+        {
+            policy.WithOrigins(productionOrigins)
+                .AllowAnyHeader()
+                .AllowAnyMethod();
+            return;
+        }
+
+        // Fallback for local dev and sslip.io preview hosts when no env CORS list is provided.
+        policy.SetIsOriginAllowed(origin =>
+            Uri.TryCreate(origin, UriKind.Absolute, out var uri) &&
+            (
+                defaultOrigins.Contains($"{uri.Scheme}://{uri.Host}:{uri.Port}", StringComparer.OrdinalIgnoreCase) ||
+                uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
+                uri.Host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
+                uri.Host.EndsWith(".sslip.io", StringComparison.OrdinalIgnoreCase)
+            ))
             .AllowAnyHeader()
             .AllowAnyMethod();
     });

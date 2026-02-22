@@ -8,17 +8,17 @@
 
     <label>
       {{ i18n.text('Tenant Slug', 'رمز الشركة') }}
-      <input formControlName="tenantSlug" [placeholder]="i18n.text('e.g. acme-ksa', 'مثال: acme-ksa')" />
+      <input id="tenantSlug" name="tenantSlug" formControlName="tenantSlug" [placeholder]="i18n.text('e.g. acme-ksa', 'مثال: acme-ksa')" />
     </label>
 
     <label>
       {{ i18n.text('Email', 'البريد الإلكتروني') }}
-      <input type="email" formControlName="email" [placeholder]="i18n.text('owner@company.com', 'owner@company.com')" />
+      <input id="email" name="email" type="email" formControlName="email" [placeholder]="i18n.text('owner@company.com', 'owner@company.com')" />
     </label>
 
     <label>
       {{ i18n.text('Password', 'كلمة المرور') }}
-      <input type="password" formControlName="password" [placeholder]="i18n.text('********', '********')" />
+      <input id="password" name="password" type="password" formControlName="password" [placeholder]="i18n.text('********', '********')" />
     </label>
 
     @if (error()) {
@@ -44,15 +44,15 @@
     <form class="card signup-card" [formGroup]="signupForm" (ngSubmit)="onSignUpSubmit()">
       <h2>{{ i18n.text('Sign Up', 'تسجيل شركة جديدة') }}</h2>
 
-      <label>{{ i18n.text('Tenant Name', 'اسم الشركة') }} <input formControlName="tenantName" [placeholder]="i18n.text('Acme HR', 'شركة أكمي')" /></label>
-      <label>{{ i18n.text('Tenant Slug', 'رمز الشركة') }} <input formControlName="slug" [placeholder]="i18n.text('acme-ksa', 'acme-ksa')" /></label>
-      <label>{{ i18n.text('Company Legal Name', 'الاسم القانوني للشركة') }} <input formControlName="companyLegalName" [placeholder]="i18n.text('Acme LLC', 'شركة أكمي المحدودة')" /></label>
-      <label>{{ i18n.text('Currency', 'العملة') }} <input formControlName="currencyCode" [placeholder]="i18n.text('SAR', 'SAR')" /></label>
-      <label>{{ i18n.text('Default Pay Day', 'يوم صرف الرواتب') }} <input type="number" formControlName="defaultPayDay" min="1" max="31" /></label>
-      <label>{{ i18n.text('Owner First Name', 'الاسم الأول للمالك') }} <input formControlName="ownerFirstName" /></label>
-      <label>{{ i18n.text('Owner Last Name', 'اسم العائلة للمالك') }} <input formControlName="ownerLastName" /></label>
-      <label>{{ i18n.text('Owner Email', 'بريد المالك') }} <input type="email" formControlName="ownerEmail" [placeholder]="i18n.text('owner@company.com', 'owner@company.com')" /></label>
-      <label>{{ i18n.text('Owner Password', 'كلمة مرور المالك') }} <input type="password" formControlName="ownerPassword" [placeholder]="i18n.text('********', '********')" /></label>
+      <label>{{ i18n.text('Tenant Name', 'اسم الشركة') }} <input id="tenantName" name="tenantName" formControlName="tenantName" [placeholder]="i18n.text('Acme HR', 'شركة أكمي')" /></label>
+      <label>{{ i18n.text('Tenant Slug', 'رمز الشركة') }} <input id="slug" name="slug" formControlName="slug" [placeholder]="i18n.text('acme-ksa', 'acme-ksa')" /></label>
+      <label>{{ i18n.text('Company Legal Name', 'الاسم القانوني للشركة') }} <input id="companyLegalName" name="companyLegalName" formControlName="companyLegalName" [placeholder]="i18n.text('Acme LLC', 'شركة أكمي المحدودة')" /></label>
+      <label>{{ i18n.text('Currency', 'العملة') }} <input id="currencyCode" name="currencyCode" formControlName="currencyCode" [placeholder]="i18n.text('SAR', 'SAR')" /></label>
+      <label>{{ i18n.text('Default Pay Day', 'يوم صرف الرواتب') }} <input id="defaultPayDay" name="defaultPayDay" type="number" formControlName="defaultPayDay" min="1" max="31" /></label>
+      <label>{{ i18n.text('Owner First Name', 'الاسم الأول للمالك') }} <input id="ownerFirstName" name="ownerFirstName" formControlName="ownerFirstName" /></label>
+      <label>{{ i18n.text('Owner Last Name', 'اسم العائلة للمالك') }} <input id="ownerLastName" name="ownerLastName" formControlName="ownerLastName" /></label>
+      <label>{{ i18n.text('Owner Email', 'بريد المالك') }} <input id="ownerEmail" name="ownerEmail" type="email" formControlName="ownerEmail" [placeholder]="i18n.text('owner@company.com', 'owner@company.com')" /></label>
+      <label>{{ i18n.text('Owner Password', 'كلمة مرور المالك') }} <input id="ownerPassword" name="ownerPassword" type="password" formControlName="ownerPassword" [placeholder]="i18n.text('********', '********')" /></label>
 
       @if (signupError()) {
         <p class="error">{{ signupError() }}</p>
