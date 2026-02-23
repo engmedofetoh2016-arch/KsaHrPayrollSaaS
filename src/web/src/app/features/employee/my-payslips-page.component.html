@@ -1,0 +1,44 @@
+<section class="panel">
+  <h2>{{ i18n.text('My Payslips', 'قسائم راتبي') }}</h2>
+
+  @if (loading()) {
+    <p>{{ i18n.text('Loading...', 'جاري التحميل...') }}</p>
+  } @else {
+    @if (error()) {
+      <p class="error">{{ error() }}</p>
+    }
+
+    @if (payslips().length === 0) {
+      <p>{{ i18n.text('No payslips found yet.', 'لا توجد قسائم راتب حتى الآن.') }}</p>
+    } @else {
+      <table>
+        <thead>
+          <tr>
+            <th>{{ i18n.text('Period', 'الفترة') }}</th>
+            <th>{{ i18n.text('Created', 'تاريخ الإنشاء') }}</th>
+            <th>{{ i18n.text('Status', 'الحالة') }}</th>
+            <th>{{ i18n.text('File', 'الملف') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (item of payslips(); track item.id) {
+            <tr>
+              <td>{{ item.periodYear }}/{{ item.periodMonth.toString().padStart(2, '0') }}</td>
+              <td>{{ item.createdAtUtc | date: 'yyyy-MM-dd HH:mm' }}</td>
+              <td>{{ statusLabel(item.status) }}</td>
+              <td>
+                @if (canDownload(item.status)) {
+                  <button type="button" (click)="download(item)" [disabled]="busy()">
+                    {{ i18n.text('Download', 'تحميل') }}
+                  </button>
+                } @else {
+                  <span>{{ i18n.text('Not ready', 'غير جاهز') }}</span>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+  }
+</section>

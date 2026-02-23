@@ -17,6 +17,13 @@ export class ShellLayoutComponent {
   readonly i18n = inject(I18nService);
 
   readonly session = this.auth.session;
+  readonly isEmployee = computed(() => this.auth.hasAnyRole(['Employee']));
+  readonly canAccessCompliance = computed(() => this.auth.hasAnyRole(['Owner', 'Admin', 'HR', 'Manager']));
+  readonly canAccessCompany = computed(() => this.auth.hasAnyRole(['Owner', 'Admin', 'HR']));
+  readonly canAccessEmployees = computed(() => this.auth.hasAnyRole(['Owner', 'Admin', 'HR']));
+  readonly canAccessFinalSettlement = computed(() => this.auth.hasAnyRole(['Owner', 'Admin', 'HR']));
+  readonly canAccessAttendance = computed(() => this.auth.hasAnyRole(['Owner', 'Admin', 'HR', 'Manager']));
+  readonly canAccessPayroll = computed(() => this.auth.hasAnyRole(['Owner', 'Admin', 'HR']));
   readonly canManageUsers = computed(() => this.auth.hasAnyRole(['Owner', 'Admin']));
   readonly canApproveLeave = computed(() => this.auth.hasAnyRole(['Owner', 'Admin', 'HR', 'Manager']));
   isMobileNavOpen = false;

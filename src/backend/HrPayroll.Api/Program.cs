@@ -224,6 +224,233 @@ api.MapPost("/auth/login", async (
     .AddEndpointFilter<ValidationFilter<LoginRequest>>()
     .AllowAnonymous();
 
+api.MapGet("/me/profile", [Authorize] async (
+    ITenantContext tenantContext,
+    HttpContext httpContext,
+    UserManager<ApplicationUser> userManager,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    if (tenantContext.TenantId == Guid.Empty)
+    {
+        return Results.BadRequest(new { error = "Tenant was not resolved." });
+    }
+
+    var userIdClaim = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (!Guid.TryParse(userIdClaim, out var userId))
+    {
+        return Results.Unauthorized();
+    }
+
+    var user = await userManager.Users
+        .Where(x => x.Id == userId && x.TenantId == tenantContext.TenantId)
+        .Select(x => new
+        {
+            x.Id,
+            x.TenantId,
+            x.FirstName,
+            x.LastName,
+            x.Email
+        })
+        .FirstOrDefaultAsync(cancellationToken);
+
+    if (user is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    var normalizedEmail = (user.Email ?? string.Empty).Trim().ToUpperInvariant();
+    var employee = await dbContext.Employees
+        .Where(x => x.Email.ToUpper() == normalizedEmail)
+        .Select(x => new
+        {
+            x.Id,
+            x.StartDate,
+            x.FirstName,
+            x.LastName,
+            x.Email,
+            x.JobTitle,
+            x.BaseSalary,
+            x.EmployeeNumber,
+            x.BankName,
+            x.BankIban,
+            x.IqamaNumber,
+            x.IqamaExpiryDate,
+            x.WorkPermitExpiryDate
+        })
+        .FirstOrDefaultAsync(cancellationToken);
+
+    return Results.Ok(new
+    {
+        user,
+        employee
+    });
+});
+
+api.MapGet("/me/payslips", [Authorize(Roles = RoleNames.Employee)] async (
+    ITenantContext tenantContext,
+    HttpContext httpContext,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    if (tenantContext.TenantId == Guid.Empty)
+    {
+        return Results.BadRequest(new { error = "Tenant was not resolved." });
+    }
+
+    var userEmail = httpContext.User.Claims
+        .Where(x => x.Type is "email" or ClaimTypes.Email)
+        .Select(x => x.Value)
+        .FirstOrDefault();
+
+    if (string.IsNullOrWhiteSpace(userEmail))
+    {
+        return Results.BadRequest(new { error = "Your account email was not found in token." });
+    }
+
+    var normalizedEmail = userEmail.Trim().ToUpperInvariant();
+    var employee = await dbContext.Employees
+        .Where(x => x.Email.ToUpper() == normalizedEmail)
+        .Select(x => new { x.Id })
+        .FirstOrDefaultAsync(cancellationToken);
+
+    if (employee is null)
+    {
+        return Results.BadRequest(new { error = "No employee profile linked to your account email." });
+    }
+
+    var rows = await (from artifact in dbContext.ExportArtifacts
+                      join run in dbContext.PayrollRuns on artifact.PayrollRunId equals run.Id
+                      join period in dbContext.PayrollPeriods on run.PayrollPeriodId equals period.Id
+                      where artifact.ArtifactType == "PayslipPdf" && artifact.EmployeeId == employee.Id
+                      orderby artifact.CreatedAtUtc descending
+                      select new
+                      {
+                          artifact.Id,
+                          artifact.PayrollRunId,
+                          artifact.EmployeeId,
+                          artifact.ArtifactType,
+                          artifact.Status,
+                          artifact.ErrorMessage,
+                          artifact.FileName,
+                          artifact.ContentType,
+                          artifact.SizeBytes,
+                          artifact.CreatedAtUtc,
+                          artifact.CompletedAtUtc,
+                          PeriodYear = period.Year,
+                          PeriodMonth = period.Month
+                      }).ToListAsync(cancellationToken);
+
+    return Results.Ok(rows);
+});
+
+api.MapGet("/me/payslips/latest", [Authorize(Roles = RoleNames.Employee)] async (
+    ITenantContext tenantContext,
+    HttpContext httpContext,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    if (tenantContext.TenantId == Guid.Empty)
+    {
+        return Results.BadRequest(new { error = "Tenant was not resolved." });
+    }
+
+    var userEmail = httpContext.User.Claims
+        .Where(x => x.Type is "email" or ClaimTypes.Email)
+        .Select(x => x.Value)
+        .FirstOrDefault();
+
+    if (string.IsNullOrWhiteSpace(userEmail))
+    {
+        return Results.BadRequest(new { error = "Your account email was not found in token." });
+    }
+
+    var normalizedEmail = userEmail.Trim().ToUpperInvariant();
+    var employee = await dbContext.Employees
+        .Where(x => x.Email.ToUpper() == normalizedEmail)
+        .Select(x => new { x.Id })
+        .FirstOrDefaultAsync(cancellationToken);
+
+    if (employee is null)
+    {
+        return Results.BadRequest(new { error = "No employee profile linked to your account email." });
+    }
+
+    var latest = await (from artifact in dbContext.ExportArtifacts
+                        join run in dbContext.PayrollRuns on artifact.PayrollRunId equals run.Id
+                        join period in dbContext.PayrollPeriods on run.PayrollPeriodId equals period.Id
+                        where artifact.ArtifactType == "PayslipPdf" && artifact.EmployeeId == employee.Id
+                        orderby artifact.CreatedAtUtc descending
+                        select new
+                        {
+                            artifact.Id,
+                            artifact.PayrollRunId,
+                            artifact.EmployeeId,
+                            artifact.ArtifactType,
+                            artifact.Status,
+                            artifact.ErrorMessage,
+                            artifact.FileName,
+                            artifact.ContentType,
+                            artifact.SizeBytes,
+                            artifact.CreatedAtUtc,
+                            artifact.CompletedAtUtc,
+                            PeriodYear = period.Year,
+                            PeriodMonth = period.Month
+                        }).FirstOrDefaultAsync(cancellationToken);
+
+    return Results.Ok(latest);
+});
+
+api.MapGet("/me/payslips/{exportId:guid}/download", [Authorize(Roles = RoleNames.Employee)] async (
+    Guid exportId,
+    ITenantContext tenantContext,
+    HttpContext httpContext,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    if (tenantContext.TenantId == Guid.Empty)
+    {
+        return Results.BadRequest(new { error = "Tenant was not resolved." });
+    }
+
+    var userEmail = httpContext.User.Claims
+        .Where(x => x.Type is "email" or ClaimTypes.Email)
+        .Select(x => x.Value)
+        .FirstOrDefault();
+
+    if (string.IsNullOrWhiteSpace(userEmail))
+    {
+        return Results.BadRequest(new { error = "Your account email was not found in token." });
+    }
+
+    var normalizedEmail = userEmail.Trim().ToUpperInvariant();
+    var employee = await dbContext.Employees
+        .Where(x => x.Email.ToUpper() == normalizedEmail)
+        .Select(x => new { x.Id })
+        .FirstOrDefaultAsync(cancellationToken);
+
+    if (employee is null)
+    {
+        return Results.BadRequest(new { error = "No employee profile linked to your account email." });
+    }
+
+    var export = await dbContext.ExportArtifacts.FirstOrDefaultAsync(
+        x => x.Id == exportId && x.ArtifactType == "PayslipPdf" && x.EmployeeId == employee.Id,
+        cancellationToken);
+
+    if (export is null)
+    {
+        return Results.NotFound();
+    }
+
+    if (export.Status != ExportArtifactStatus.Completed || export.FileData is null || export.FileData.Length == 0)
+    {
+        return Results.Conflict(new { error = "Export file is not ready yet." });
+    }
+
+    return Results.File(export.FileData, export.ContentType, export.FileName);
+});
+
 api.MapGet("/company-profile", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
     ITenantContext tenantContext,
     IApplicationDbContext dbContext,

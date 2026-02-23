@@ -63,16 +63,34 @@
 
   <div class="grid">
     <article class="panel">
-      <h3>{{ i18n.text('Quick Actions', 'إجراءات سريعة') }}</h3>
+      <h3>{{ i18n.text('Quick Actions', 'Quick Actions') }}</h3>
       <div class="actions">
-        <a routerLink="/employees">{{ i18n.text('Add Employee', 'إضافة موظف') }}</a>
-        <a routerLink="/attendance">{{ i18n.text('Capture Attendance', 'تسجيل الحضور') }}</a>
-        <a routerLink="/payroll">{{ i18n.text('Run Payroll', 'تشغيل الرواتب') }}</a>
-        <a routerLink="/final-settlement">{{ i18n.text('Final Settlement', 'التسوية النهائية') }}</a>
-        <a routerLink="/company">{{ i18n.text('Update Company Settings', 'تحديث إعدادات الشركة') }}</a>
+        @if (isEmployee()) {
+          <a routerLink="/employee/profile">{{ i18n.text('My Profile', 'My Profile') }}</a>
+          <a routerLink="/employee/payslips">{{ i18n.text('My Payslips', 'My Payslips') }}</a>
+          <a routerLink="/leave/my">{{ i18n.text('My Leave', 'My Leave') }}</a>
+        } @else {
+          <a routerLink="/employees">{{ i18n.text('Add Employee', 'Add Employee') }}</a>
+          <a routerLink="/attendance">{{ i18n.text('Capture Attendance', 'Capture Attendance') }}</a>
+          <a routerLink="/payroll">{{ i18n.text('Run Payroll', 'Run Payroll') }}</a>
+          <a routerLink="/final-settlement">{{ i18n.text('Final Settlement', 'Final Settlement') }}</a>
+          <a routerLink="/company">{{ i18n.text('Update Company Settings', 'Update Company Settings') }}</a>
+        }
       </div>
+      @if (isEmployee()) {
+        <div class="latest-payslip">
+          <p class="meta">{{ i18n.text('Latest Payslip', 'Latest Payslip') }}</p>
+          @if (latestPayslip(); as payslip) {
+            <p class="meta">{{ payslip.periodYear }}/{{ payslip.periodMonth.toString().padStart(2, '0') }} - {{ payslip.fileName }}</p>
+            <button type="button" class="action-button" (click)="downloadLatestPayslip()" [disabled]="latestPayslipBusy() || payslip.status !== 3">
+              {{ i18n.text('Download Latest Payslip', 'Download Latest Payslip') }}
+            </button>
+          } @else {
+            <p class="meta">{{ i18n.text('No payslip has been generated yet.', 'No payslip has been generated yet.') }}</p>
+          }
+        </div>
+      }
     </article>
-
     <article class="panel wps">
       <h3>{{ i18n.text('WPS Readiness', 'جاهزية حماية الأجور') }}</h3>
       @if (wpsReadiness().ready) {
@@ -202,3 +220,4 @@
     </article>
   </div>
 </section>
+

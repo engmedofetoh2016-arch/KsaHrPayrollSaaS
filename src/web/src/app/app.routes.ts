@@ -7,6 +7,8 @@ import { CompanyPageComponent } from './features/company/company-page.component'
 import { CompliancePageComponent } from './features/compliance/compliance-page.component';
 import { DashboardPageComponent } from './features/dashboard/dashboard-page.component';
 import { EmployeesPageComponent } from './features/employees/employees-page.component';
+import { MyPayslipsPageComponent } from './features/employee/my-payslips-page.component';
+import { MyProfilePageComponent } from './features/employee/my-profile-page.component';
 import { FinalSettlementPageComponent } from './features/final-settlement/final-settlement-page.component';
 import { LeaveApprovalsPageComponent } from './features/leave/leave-approvals-page.component';
 import { MyLeavePageComponent } from './features/leave/my-leave-page.component';
@@ -30,6 +32,8 @@ export const routes: Routes = [
       { path: 'employees', component: EmployeesPageComponent, canActivate: [roleGuard], data: { roles: ['Owner', 'Admin', 'HR'] } },
       { path: 'final-settlement', component: FinalSettlementPageComponent, canActivate: [roleGuard], data: { roles: ['Owner', 'Admin', 'HR'] } },
       { path: 'leave/my', component: MyLeavePageComponent },
+      { path: 'employee/profile', component: MyProfilePageComponent, canActivate: [roleGuard], data: { roles: ['Employee'] } },
+      { path: 'employee/payslips', component: MyPayslipsPageComponent, canActivate: [roleGuard], data: { roles: ['Employee'] } },
       {
         path: 'leave/approvals',
         component: LeaveApprovalsPageComponent,

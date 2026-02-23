@@ -139,6 +139,32 @@ h3 {
   background: #eef6ff;
 }
 
+.latest-payslip {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed #cddaea;
+}
+
+.action-button {
+  border: 1px solid #c6d6e6;
+  color: #15456f;
+  border-radius: 8px;
+  padding: 10px;
+  background: #f9fcff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.action-button:hover {
+  border-color: #95b7d3;
+  background: #eef6ff;
+}
+
+.action-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 ul {
   margin: 0;
   padding-left: 18px;

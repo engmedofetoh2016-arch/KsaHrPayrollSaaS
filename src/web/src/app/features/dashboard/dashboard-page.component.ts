@@ -4,8 +4,11 @@ import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { catchError, forkJoin, of } from 'rxjs';
 import { apiConfig } from '../../core/config/api.config';
+import { MyPayslipItem } from '../../core/models/me.models';
 import { AuthService } from '../../core/services/auth.service';
 import { I18nService } from '../../core/services/i18n.service';
+import { MeService } from '../../core/services/me.service';
+import { getApiErrorMessage } from '../../core/utils/api-error.util';
 
 @Component({
   selector: 'app-dashboard-page',
@@ -17,6 +20,7 @@ import { I18nService } from '../../core/services/i18n.service';
 export class DashboardPageComponent implements OnInit {
   private readonly http = inject(HttpClient);
   private readonly auth = inject(AuthService);
+  private readonly meService = inject(MeService);
   readonly i18n = inject(I18nService);
   private readonly base = `${apiConfig.baseUrl}/api`;
 
@@ -25,6 +29,9 @@ export class DashboardPageComponent implements OnInit {
   readonly session = this.auth.session;
   readonly today = new Date();
   readonly canSeeUsers = computed(() => this.auth.hasAnyRole(['Owner', 'Admin']));
+  readonly isEmployee = computed(() => this.auth.hasAnyRole(['Employee']));
+  readonly latestPayslip = signal<MyPayslipItem | null>(null);
+  readonly latestPayslipBusy = signal(false);
 
   readonly stats = signal({
     employees: 0,
@@ -101,6 +108,7 @@ export class DashboardPageComponent implements OnInit {
       employeePaymentPage: this.http.get<any>(`${this.base}/employees?page=1&pageSize=500`).pipe(catchError(() => of({ items: [], total: 0 }))),
       compliance: this.http.get<any>(`${this.base}/compliance/alerts?take=8`).pipe(catchError(() => of({ critical: 0, warning: 0, notice: 0, items: [] }))),
       complianceScore: this.http.get<any>(`${this.base}/compliance/score`).pipe(catchError(() => of(null))),
+      latestPayslip: this.isEmployee() ? this.meService.getLatestPayslip().pipe(catchError(() => of(null))) : of(null),
       complianceBrief: this.http
         .post<any>(`${this.base}/compliance/ai-brief`, {
           language: this.i18n.language(),
@@ -111,7 +119,7 @@ export class DashboardPageComponent implements OnInit {
         })
         .pipe(catchError(() => of(null)))
     }).subscribe({
-      next: ({ employeesPage, attendancePage, payrollPeriods, usersPage, companyProfile, employeePaymentPage, compliance, complianceScore, complianceBrief }) => {
+      next: ({ employeesPage, attendancePage, payrollPeriods, usersPage, companyProfile, employeePaymentPage, compliance, complianceScore, latestPayslip, complianceBrief }) => {
         this.stats.set({
           employees: this.extractCount(employeesPage),
           saudiEmployees: this.extractItems(employeePaymentPage).filter((x) => !!x.isSaudiNational).length,
@@ -171,6 +179,8 @@ export class DashboardPageComponent implements OnInit {
             brief: String(complianceBrief?.brief ?? '')
           });
         }
+
+        this.latestPayslip.set(latestPayslip);
       },
       complete: () => this.loading.set(false),
       error: () => {
@@ -235,6 +245,32 @@ export class DashboardPageComponent implements OnInit {
       next: () => this.loadStats(),
       error: () => {},
       complete: () => this.resolvingAlertIds.update((ids) => ids.filter((id) => id !== alertId))
+    });
+  }
+
+  downloadLatestPayslip() {
+    const payslip = this.latestPayslip();
+    if (!payslip || payslip.status !== 3 || this.latestPayslipBusy()) {
+      return;
+    }
+
+    this.latestPayslipBusy.set(true);
+    this.error.set('');
+
+    this.meService.downloadPayslip(payslip.id).subscribe({
+      next: (blob) => {
+        this.latestPayslipBusy.set(false);
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = payslip.fileName || `payslip-${payslip.periodYear}-${String(payslip.periodMonth).padStart(2, '0')}.pdf`;
+        link.click();
+        window.URL.revokeObjectURL(url);
+      },
+      error: (err) => {
+        this.latestPayslipBusy.set(false);
+        this.error.set(getApiErrorMessage(err, 'Failed to download latest payslip.'));
+      }
     });
   }
 }

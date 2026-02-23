@@ -1,0 +1,33 @@
+<section class="panel">
+  <h2>{{ i18n.text('My Profile', 'ملفي الشخصي') }}</h2>
+
+  @if (loading()) {
+    <p>{{ i18n.text('Loading...', 'جاري التحميل...') }}</p>
+  } @else {
+    @if (error()) {
+      <p class="error">{{ error() }}</p>
+    }
+
+    @if (profile(); as data) {
+      <div class="card">
+        <h3>{{ i18n.text('Account', 'الحساب') }}</h3>
+        <p><strong>{{ i18n.text('Name', 'الاسم') }}:</strong> {{ data.user.firstName }} {{ data.user.lastName }}</p>
+        <p><strong>{{ i18n.text('Email', 'البريد الإلكتروني') }}:</strong> {{ data.user.email }}</p>
+      </div>
+
+      @if (data.employee) {
+        <div class="card">
+          <h3>{{ i18n.text('Employee Record', 'سجل الموظف') }}</h3>
+          <p><strong>{{ i18n.text('Job Title', 'المسمى الوظيفي') }}:</strong> {{ data.employee.jobTitle }}</p>
+          <p><strong>{{ i18n.text('Start Date', 'تاريخ المباشرة') }}:</strong> {{ data.employee.startDate }}</p>
+          <p><strong>{{ i18n.text('Employee #', 'الرقم الوظيفي') }}:</strong> {{ data.employee.employeeNumber || '-' }}</p>
+          <p><strong>{{ i18n.text('Iqama Number', 'رقم الإقامة') }}:</strong> {{ data.employee.iqamaNumber || '-' }}</p>
+          <p><strong>{{ i18n.text('Iqama Expiry', 'انتهاء الإقامة') }}:</strong> {{ data.employee.iqamaExpiryDate || '-' }}</p>
+          <p><strong>{{ i18n.text('Work Permit Expiry', 'انتهاء رخصة العمل') }}:</strong> {{ data.employee.workPermitExpiryDate || '-' }}</p>
+        </div>
+      } @else {
+        <p class="warn">{{ i18n.text('No employee record is linked to your account email yet.', 'لا يوجد سجل موظف مرتبط ببريد حسابك حتى الآن.') }}</p>
+      }
+    }
+  }
+</section>
