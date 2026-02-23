@@ -34,6 +34,7 @@ export class EmployeesPageComponent implements OnInit, OnDestroy {
   readonly exportingFinalSettlementPdf = signal(false);
   readonly queueingFinalSettlementPdf = signal(false);
   readonly loadingFinalSettlementExports = signal(false);
+  readonly editingEmployeeId = signal<string | null>(null);
   readonly message = signal('');
   readonly error = signal('');
   readonly eosResult = signal<EosEstimateResult | null>(null);
@@ -115,55 +116,102 @@ export class EmployeesPageComponent implements OnInit, OnDestroy {
     this.message.set('');
     this.error.set('');
 
-    const value = this.form.getRawValue();
-    this.employeesService
-      .create({
-        startDate: value.startDate ?? new Date().toISOString().slice(0, 10),
-        firstName: value.firstName ?? '',
-        lastName: value.lastName ?? '',
-        email: value.email ?? '',
-        jobTitle: value.jobTitle ?? '',
-        baseSalary: Number(value.baseSalary ?? 0),
-        isSaudiNational: Boolean(value.isSaudiNational),
-        isGosiEligible: Boolean(value.isGosiEligible),
-        gosiBasicWage: Number(value.gosiBasicWage ?? 0),
-        gosiHousingAllowance: Number(value.gosiHousingAllowance ?? 0),
-        employeeNumber: value.employeeNumber ?? '',
-        bankName: value.bankName ?? '',
-        bankIban: value.bankIban ?? '',
-        iqamaNumber: value.iqamaNumber ?? '',
-        iqamaExpiryDate: value.iqamaExpiryDate || null,
-        workPermitExpiryDate: value.workPermitExpiryDate || null
-      })
-      .subscribe({
-        next: () => {
-          this.saving.set(false);
-          this.message.set('Employee created.');
-          this.form.reset({
-            startDate: new Date().toISOString().slice(0, 10),
-            firstName: '',
-            lastName: '',
-            email: '',
-            jobTitle: '',
-            baseSalary: 0,
-            isSaudiNational: false,
-            isGosiEligible: false,
-            gosiBasicWage: 0,
-            gosiHousingAllowance: 0,
-            employeeNumber: '',
-            bankName: '',
-            bankIban: '',
-            iqamaNumber: '',
-            iqamaExpiryDate: '',
-            workPermitExpiryDate: ''
-          });
-          this.load();
-        },
-        error: (err) => {
-          this.saving.set(false);
-          this.error.set(getApiErrorMessage(err, 'Failed to create employee.'));
+    const editingEmployeeId = this.editingEmployeeId();
+    const request = this.mapFormToEmployeeRequest();
+    const op$ = editingEmployeeId
+      ? this.employeesService.update(editingEmployeeId, request)
+      : this.employeesService.create(request);
+
+    op$.subscribe({
+      next: () => {
+        this.saving.set(false);
+        this.message.set(editingEmployeeId ? 'Employee updated.' : 'Employee created.');
+        this.resetForm();
+        this.load();
+      },
+      error: (err) => {
+        this.saving.set(false);
+        this.error.set(getApiErrorMessage(err, editingEmployeeId ? 'Failed to update employee.' : 'Failed to create employee.'));
+      }
+    });
+  }
+
+  startEdit(employee: Employee) {
+    this.editingEmployeeId.set(employee.id);
+    this.message.set('');
+    this.error.set('');
+    this.form.reset({
+      startDate: employee.startDate,
+      firstName: employee.firstName,
+      lastName: employee.lastName,
+      email: employee.email,
+      jobTitle: employee.jobTitle,
+      baseSalary: employee.baseSalary,
+      isSaudiNational: employee.isSaudiNational,
+      isGosiEligible: employee.isGosiEligible,
+      gosiBasicWage: employee.gosiBasicWage,
+      gosiHousingAllowance: employee.gosiHousingAllowance,
+      employeeNumber: employee.employeeNumber ?? '',
+      bankName: employee.bankName ?? '',
+      bankIban: employee.bankIban ?? '',
+      iqamaNumber: employee.iqamaNumber ?? '',
+      iqamaExpiryDate: employee.iqamaExpiryDate ?? '',
+      workPermitExpiryDate: employee.workPermitExpiryDate ?? ''
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  cancelEdit() {
+    this.editingEmployeeId.set(null);
+    this.resetForm();
+    this.message.set('');
+    this.error.set('');
+  }
+
+  deleteEmployee(employee: Employee) {
+    const confirmed = window.confirm(`Delete ${employee.firstName} ${employee.lastName}?`);
+    if (!confirmed) {
+      return;
+    }
+
+    this.error.set('');
+    this.message.set('');
+    this.employeesService.delete(employee.id).subscribe({
+      next: () => {
+        if (this.editingEmployeeId() === employee.id) {
+          this.cancelEdit();
         }
-      });
+        this.message.set('Employee deleted.');
+        this.load();
+      },
+      error: (err) => {
+        this.error.set(getApiErrorMessage(err, 'Failed to delete employee.'));
+      }
+    });
+  }
+
+  connectEmployeeLogin(employee: Employee) {
+    const password = window.prompt(`Set login password for ${employee.email} (min 8 characters):`);
+    if (password === null) {
+      return;
+    }
+
+    if (password.trim().length < 8) {
+      this.error.set('Password must be at least 8 characters.');
+      this.message.set('');
+      return;
+    }
+
+    this.error.set('');
+    this.message.set('');
+    this.employeesService.createUserLogin(employee.id, { password: password.trim() }).subscribe({
+      next: () => {
+        this.message.set(`Login created for ${employee.email}.`);
+      },
+      error: (err) => {
+        this.error.set(getApiErrorMessage(err, 'Failed to create user login for employee.'));
+      }
+    });
   }
 
   estimateEos() {
@@ -425,5 +473,49 @@ export class EmployeesPageComponent implements OnInit, OnDestroy {
     anchor.download = fileName;
     anchor.click();
     URL.revokeObjectURL(url);
+  }
+
+  private mapFormToEmployeeRequest() {
+    const value = this.form.getRawValue();
+    return {
+      startDate: value.startDate ?? new Date().toISOString().slice(0, 10),
+      firstName: value.firstName ?? '',
+      lastName: value.lastName ?? '',
+      email: value.email ?? '',
+      jobTitle: value.jobTitle ?? '',
+      baseSalary: Number(value.baseSalary ?? 0),
+      isSaudiNational: Boolean(value.isSaudiNational),
+      isGosiEligible: Boolean(value.isGosiEligible),
+      gosiBasicWage: Number(value.gosiBasicWage ?? 0),
+      gosiHousingAllowance: Number(value.gosiHousingAllowance ?? 0),
+      employeeNumber: value.employeeNumber ?? '',
+      bankName: value.bankName ?? '',
+      bankIban: value.bankIban ?? '',
+      iqamaNumber: value.iqamaNumber ?? '',
+      iqamaExpiryDate: value.iqamaExpiryDate || null,
+      workPermitExpiryDate: value.workPermitExpiryDate || null
+    };
+  }
+
+  private resetForm() {
+    this.editingEmployeeId.set(null);
+    this.form.reset({
+      startDate: new Date().toISOString().slice(0, 10),
+      firstName: '',
+      lastName: '',
+      email: '',
+      jobTitle: '',
+      baseSalary: 0,
+      isSaudiNational: false,
+      isGosiEligible: false,
+      gosiBasicWage: 0,
+      gosiHousingAllowance: 0,
+      employeeNumber: '',
+      bankName: '',
+      bankIban: '',
+      iqamaNumber: '',
+      iqamaExpiryDate: '',
+      workPermitExpiryDate: ''
+    });
   }
 }

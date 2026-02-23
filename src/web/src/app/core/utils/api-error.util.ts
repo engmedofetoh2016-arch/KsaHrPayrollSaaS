@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 
 export function getApiErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof HttpErrorResponse) {
-    const payload = error.error as { error?: string; message?: string } | string | null;
+    const payload = error.error as { error?: string; message?: string; details?: unknown } | string | null;
 
     if (typeof payload === 'string' && payload.trim().length > 0) {
       return payload;
@@ -15,6 +15,13 @@ export function getApiErrorMessage(error: unknown, fallback: string): string {
 
       if (typeof payload.message === 'string' && payload.message.trim().length > 0) {
         return payload.message;
+      }
+
+      if (Array.isArray(payload.details)) {
+        const firstDetail = payload.details.find((x) => typeof x === 'string' && x.trim().length > 0);
+        if (typeof firstDetail === 'string' && firstDetail.trim().length > 0) {
+          return firstDetail;
+        }
       }
     }
 

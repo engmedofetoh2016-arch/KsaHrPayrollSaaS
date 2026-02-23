@@ -38,6 +38,12 @@ export interface CreateEmployeeRequest {
   workPermitExpiryDate?: string | null;
 }
 
+export type UpdateEmployeeRequest = CreateEmployeeRequest;
+
+export interface CreateEmployeeLoginRequest {
+  password: string;
+}
+
 export interface EosEstimateResult {
   id: string;
   startDate: string;

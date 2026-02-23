@@ -693,6 +693,122 @@ api.MapPost("/employees", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.A
 })
     .AddEndpointFilter<ValidationFilter<CreateEmployeeRequest>>();
 
+api.MapPut("/employees/{employeeId:guid}", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    Guid employeeId,
+    UpdateEmployeeRequest request,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var employee = await dbContext.Employees.FirstOrDefaultAsync(x => x.Id == employeeId, cancellationToken);
+    if (employee is null)
+    {
+        return Results.NotFound(new { error = "Employee not found." });
+    }
+
+    employee.StartDate = request.StartDate;
+    employee.FirstName = request.FirstName.Trim();
+    employee.LastName = request.LastName.Trim();
+    employee.Email = request.Email.Trim();
+    employee.JobTitle = request.JobTitle.Trim();
+    employee.BaseSalary = request.BaseSalary;
+    employee.IsSaudiNational = request.IsSaudiNational;
+    employee.IsGosiEligible = request.IsGosiEligible;
+    employee.GosiBasicWage = request.IsGosiEligible ? request.GosiBasicWage : 0m;
+    employee.GosiHousingAllowance = request.IsGosiEligible ? request.GosiHousingAllowance : 0m;
+    employee.EmployeeNumber = (request.EmployeeNumber ?? string.Empty).Trim();
+    employee.BankName = (request.BankName ?? string.Empty).Trim();
+    employee.BankIban = (request.BankIban ?? string.Empty).Trim().ToUpperInvariant();
+    employee.IqamaNumber = (request.IqamaNumber ?? string.Empty).Trim();
+    employee.IqamaExpiryDate = request.IqamaExpiryDate;
+    employee.WorkPermitExpiryDate = request.WorkPermitExpiryDate;
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Ok(employee);
+})
+    .AddEndpointFilter<ValidationFilter<UpdateEmployeeRequest>>();
+
+api.MapDelete("/employees/{employeeId:guid}", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    Guid employeeId,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var employee = await dbContext.Employees.FirstOrDefaultAsync(x => x.Id == employeeId, cancellationToken);
+    if (employee is null)
+    {
+        return Results.NotFound(new { error = "Employee not found." });
+    }
+
+    dbContext.RemoveEntities([employee]);
+    try
+    {
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+    catch (DbUpdateException)
+    {
+        return Results.BadRequest(new { error = "Cannot delete employee because related records exist." });
+    }
+
+    return Results.NoContent();
+});
+
+api.MapPost("/employees/{employeeId:guid}/create-user-login", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    Guid employeeId,
+    CreateEmployeeLoginRequest request,
+    ITenantContext tenantContext,
+    IApplicationDbContext dbContext,
+    UserManager<ApplicationUser> userManager,
+    CancellationToken cancellationToken) =>
+{
+    if (tenantContext.TenantId == Guid.Empty)
+    {
+        return Results.BadRequest(new { error = "Tenant was not resolved." });
+    }
+
+    var employee = await dbContext.Employees.FirstOrDefaultAsync(x => x.Id == employeeId, cancellationToken);
+    if (employee is null)
+    {
+        return Results.NotFound(new { error = "Employee not found." });
+    }
+
+    var email = employee.Email.Trim();
+    var normalizedEmail = email.ToUpperInvariant();
+    var exists = await userManager.Users.AnyAsync(x => x.TenantId == tenantContext.TenantId && x.NormalizedEmail == normalizedEmail, cancellationToken);
+    if (exists)
+    {
+        return Results.BadRequest(new { error = "A user login already exists for this employee email." });
+    }
+
+    var user = new ApplicationUser
+    {
+        TenantId = tenantContext.TenantId,
+        FirstName = employee.FirstName.Trim(),
+        LastName = employee.LastName.Trim(),
+        Email = email,
+        UserName = email,
+        NormalizedEmail = normalizedEmail,
+        NormalizedUserName = normalizedEmail,
+        EmailConfirmed = true
+    };
+
+    var createResult = await userManager.CreateAsync(user, request.Password);
+    if (!createResult.Succeeded)
+    {
+        return Results.BadRequest(new { error = "Failed to create user.", details = createResult.Errors.Select(x => x.Description) });
+    }
+
+    await userManager.AddToRoleAsync(user, RoleNames.Employee);
+
+    return Results.Created($"/api/users/{user.Id}", new
+    {
+        user.Id,
+        user.Email,
+        user.FirstName,
+        user.LastName,
+        Role = RoleNames.Employee
+    });
+})
+    .AddEndpointFilter<ValidationFilter<CreateEmployeeLoginRequest>>();
+
 api.MapPost("/employees/{employeeId:guid}/eos-estimate", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
     Guid employeeId,
     EstimateEosRequest request,
@@ -3347,6 +3463,26 @@ public sealed record CreateEmployeeRequest(
     string IqamaNumber,
     DateOnly? IqamaExpiryDate,
     DateOnly? WorkPermitExpiryDate);
+
+public sealed record UpdateEmployeeRequest(
+    DateOnly StartDate,
+    string FirstName,
+    string LastName,
+    string Email,
+    string JobTitle,
+    decimal BaseSalary,
+    bool IsSaudiNational,
+    bool IsGosiEligible,
+    decimal GosiBasicWage,
+    decimal GosiHousingAllowance,
+    string EmployeeNumber,
+    string BankName,
+    string BankIban,
+    string IqamaNumber,
+    DateOnly? IqamaExpiryDate,
+    DateOnly? WorkPermitExpiryDate);
+
+public sealed record CreateEmployeeLoginRequest(string Password);
 
 public sealed record EstimateEosRequest(DateOnly? TerminationDate);
 public sealed record FinalSettlementEstimateRequest(

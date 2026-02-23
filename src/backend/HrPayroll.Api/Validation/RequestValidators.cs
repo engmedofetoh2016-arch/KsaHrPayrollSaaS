@@ -100,6 +100,42 @@ public class CreateEmployeeRequestValidator : AbstractValidator<CreateEmployeeRe
     }
 }
 
+public class UpdateEmployeeRequestValidator : AbstractValidator<UpdateEmployeeRequest>
+{
+    public UpdateEmployeeRequestValidator()
+    {
+        RuleFor(x => x.StartDate).NotEmpty();
+        RuleFor(x => x.FirstName).NotEmpty().MaximumLength(80);
+        RuleFor(x => x.LastName).NotEmpty().MaximumLength(80);
+        RuleFor(x => x.Email).NotEmpty().EmailAddress();
+        RuleFor(x => x.JobTitle).NotEmpty().MaximumLength(120);
+        RuleFor(x => x.BaseSalary).GreaterThan(0);
+        RuleFor(x => x.GosiBasicWage).GreaterThanOrEqualTo(0);
+        RuleFor(x => x.GosiHousingAllowance).GreaterThanOrEqualTo(0);
+        RuleFor(x => x.EmployeeNumber).MaximumLength(50);
+        RuleFor(x => x.BankName).MaximumLength(120);
+        RuleFor(x => x.BankIban).MaximumLength(34);
+        RuleFor(x => x.IqamaNumber).MaximumLength(50);
+        RuleFor(x => x.IqamaExpiryDate)
+            .Must(x => x is null || x.Value >= DateOnly.FromDateTime(new DateTime(2000, 1, 1)))
+            .WithMessage("iqamaExpiryDate is invalid.");
+        RuleFor(x => x.WorkPermitExpiryDate)
+            .Must(x => x is null || x.Value >= DateOnly.FromDateTime(new DateTime(2000, 1, 1)))
+            .WithMessage("workPermitExpiryDate is invalid.");
+        RuleFor(x => x)
+            .Must(x => !x.IsGosiEligible || x.GosiBasicWage > 0)
+            .WithMessage("GOSI basic wage must be greater than 0 when employee is GOSI eligible.");
+    }
+}
+
+public class CreateEmployeeLoginRequestValidator : AbstractValidator<CreateEmployeeLoginRequest>
+{
+    public CreateEmployeeLoginRequestValidator()
+    {
+        RuleFor(x => x.Password).NotEmpty().MinimumLength(8);
+    }
+}
+
 public class EstimateEosRequestValidator : AbstractValidator<EstimateEosRequest>
 {
     public EstimateEosRequestValidator()

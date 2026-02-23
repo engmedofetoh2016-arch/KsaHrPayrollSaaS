@@ -13,6 +13,15 @@ input[type='checkbox'] {
 button { border: 0; background: #0a4ea1; color: #fff; border-radius: 8px; padding: 10px 14px; cursor: pointer; }
 table { width: 100%; border-collapse: collapse; }
 th, td { border-bottom: 1px solid #e2eaf3; text-align: left; padding: 8px; }
+.row-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.row-actions button {
+  padding: 6px 10px;
+  font-size: 0.85rem;
+}
 .ok { color: #166a2d; }
 .error { color: #a32020; }
 .badge {

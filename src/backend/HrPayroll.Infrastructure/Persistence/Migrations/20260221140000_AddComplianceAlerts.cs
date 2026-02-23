@@ -1,14 +1,11 @@
 using System;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace HrPayroll.Infrastructure.Persistence.Migrations
 {
-    [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260221140000_AddComplianceAlerts")]
     public partial class AddComplianceAlerts : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -59,3 +56,4 @@ namespace HrPayroll.Infrastructure.Persistence.Migrations
         }
     }
 }
+

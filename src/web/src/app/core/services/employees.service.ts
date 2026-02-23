@@ -3,12 +3,14 @@ import { Injectable, inject } from '@angular/core';
 import { map } from 'rxjs/operators';
 import { apiConfig } from '../config/api.config';
 import {
+  CreateEmployeeLoginRequest,
   CreateEmployeeRequest,
   Employee,
   EosEstimateResult,
   FinalSettlementExportJob,
   FinalSettlementEstimateRequest,
-  FinalSettlementEstimateResult
+  FinalSettlementEstimateResult,
+  UpdateEmployeeRequest
 } from '../models/employee.models';
 
 @Injectable({ providedIn: 'root' })
@@ -25,6 +27,21 @@ export class EmployeesService {
 
   create(request: CreateEmployeeRequest) {
     return this.http.post<Employee>(this.base, request);
+  }
+
+  update(employeeId: string, request: UpdateEmployeeRequest) {
+    return this.http.put<Employee>(`${this.base}/${employeeId}`, request);
+  }
+
+  delete(employeeId: string) {
+    return this.http.delete<void>(`${this.base}/${employeeId}`);
+  }
+
+  createUserLogin(employeeId: string, request: CreateEmployeeLoginRequest) {
+    return this.http.post<{ id: string; email: string; firstName: string; lastName: string; role: string }>(
+      `${this.base}/${employeeId}/create-user-login`,
+      request
+    );
   }
 
   estimateEos(employeeId: string, terminationDate?: string) {

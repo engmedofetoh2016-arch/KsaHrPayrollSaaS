@@ -1,36 +1,36 @@
 <div class="shell">
   <aside [class.open]="isMobileNavOpen">
-    <div class="brand">{{ i18n.text('KSA HR Payroll', 'KSA HR Payroll') }}</div>
+    <div class="brand">{{ i18n.text('KSA HR Payroll', 'كشوف رواتب الموارد') }}</div>
     <nav>
-      <a routerLink="/dashboard" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Dashboard', 'Dashboard') }}</a>
+      <a routerLink="/dashboard" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Dashboard', 'لوحة التحكم') }}</a>
       @if (canAccessCompliance()) {
-        <a routerLink="/compliance" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Compliance Center', 'Compliance Center') }}</a>
+        <a routerLink="/compliance" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Compliance Center', 'مركز الالتزام') }}</a>
       }
       @if (canAccessCompany()) {
-        <a routerLink="/company" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Company', 'Company') }}</a>
+        <a routerLink="/company" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Company', 'الشركة') }}</a>
       }
       @if (canAccessEmployees()) {
-        <a routerLink="/employees" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Employees', 'Employees') }}</a>
+        <a routerLink="/employees" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Employees', 'الموظفون') }}</a>
       }
       @if (canAccessFinalSettlement()) {
-        <a routerLink="/final-settlement" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Final Settlement', 'Final Settlement') }}</a>
+        <a routerLink="/final-settlement" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Final Settlement', 'التسوية النهائية') }}</a>
       }
-      <a routerLink="/leave/my" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('My Leave', 'My Leave') }}</a>
+      <a routerLink="/leave/my" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('My Leave', 'إجازاتي') }}</a>
       @if (isEmployee()) {
-        <a routerLink="/employee/profile" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('My Profile', 'My Profile') }}</a>
-        <a routerLink="/employee/payslips" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('My Payslips', 'My Payslips') }}</a>
+        <a routerLink="/employee/profile" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('My Profile', 'ملفي الشخصي') }}</a>
+        <a routerLink="/employee/payslips" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('My Payslips', 'قسائم راتبي') }}</a>
       }
       @if (canApproveLeave()) {
-        <a routerLink="/leave/approvals" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Leave Approvals', 'Leave Approvals') }}</a>
+        <a routerLink="/leave/approvals" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Leave Approvals', 'موافقات الإجازات') }}</a>
       }
       @if (canAccessAttendance()) {
-        <a routerLink="/attendance" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Attendance', 'Attendance') }}</a>
+        <a routerLink="/attendance" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Attendance', 'الحضور') }}</a>
       }
       @if (canAccessPayroll()) {
-        <a routerLink="/payroll" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Payroll', 'Payroll') }}</a>
+        <a routerLink="/payroll" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Payroll', 'الرواتب') }}</a>
       }
       @if (canManageUsers()) {
-        <a routerLink="/users" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Users', 'Users') }}</a>
+        <a routerLink="/users" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Users', 'المستخدمون') }}</a>
       }
     </nav>
   </aside>
@@ -41,7 +41,7 @@
 
   <main>
     <header>
-      <button class="menu-toggle" type="button" (click)="toggleMobileNav()" aria-label="Open menu">Menu</button>
+      <button class="menu-toggle" type="button" (click)="toggleMobileNav()" aria-label="Open menu">{{ i18n.text('Menu', 'القائمة') }}</button>
       <div>
         <strong>{{ session()?.firstName }} {{ session()?.lastName }}</strong>
         <span>{{ session()?.email }}</span>
@@ -50,7 +50,7 @@
         <button type="button" class="lang" (click)="i18n.toggleLanguage()">
           {{ i18n.isArabic() ? 'EN' : 'AR' }}
         </button>
-        <button (click)="logout()">{{ i18n.text('Logout', 'Logout') }}</button>
+        <button (click)="logout()">{{ i18n.text('Logout', 'تسجيل الخروج') }}</button>
       </div>
     </header>
 
