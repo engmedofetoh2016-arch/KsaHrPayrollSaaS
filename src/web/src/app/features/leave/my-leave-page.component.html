@@ -1,38 +1,50 @@
 <section class="panel">
-  <h2>{{ i18n.text('My Leave', 'إجازاتي') }}</h2>
+  <h2>{{ i18n.text('My Leave', 'My Leave') }}</h2>
   @if (!isEmployee()) {
-    <p class="hint">{{ i18n.text('You can still submit leave requests if your account email matches an employee profile.', 'يمكنك إرسال طلبات الإجازة إذا كان بريد حسابك مطابقاً لملف موظف.') }}</p>
+    <p class="hint">{{ i18n.text('You can still submit leave requests if your account email matches an employee profile.', 'You can still submit leave requests if your account email matches an employee profile.') }}</p>
   }
 
   <div class="grid">
     <form class="card" [formGroup]="requestForm" (ngSubmit)="submitRequest()">
-      <h3>{{ i18n.text('Request Leave', 'طلب إجازة') }}</h3>
+      <h3>{{ i18n.text('Request Leave', 'Request Leave') }}</h3>
       <label>
-        {{ i18n.text('Leave Type', 'نوع الإجازة') }}
+        {{ i18n.text('Leave Type', 'Leave Type') }}
         <select formControlName="leaveType">
-          <option [value]="1">{{ i18n.text('Annual', 'سنوية') }}</option>
-          <option [value]="2">{{ i18n.text('Sick', 'مرضية') }}</option>
-          <option [value]="3">{{ i18n.text('Unpaid', 'غير مدفوعة') }}</option>
+          <option [value]="1">{{ i18n.text('Annual', 'Annual') }}</option>
+          <option [value]="2">{{ i18n.text('Sick', 'Sick') }}</option>
+          <option [value]="3">{{ i18n.text('Unpaid', 'Unpaid') }}</option>
         </select>
       </label>
-      <label>{{ i18n.text('Start Date', 'تاريخ البداية') }} <input type="date" formControlName="startDate" /></label>
-      <label>{{ i18n.text('End Date', 'تاريخ النهاية') }} <input type="date" formControlName="endDate" /></label>
+      <label>{{ i18n.text('Start Date', 'Start Date') }} <input type="date" formControlName="startDate" /></label>
+      <label>{{ i18n.text('End Date', 'End Date') }} <input type="date" formControlName="endDate" /></label>
       <label>
-        {{ i18n.text('Reason', 'السبب') }}
+        {{ i18n.text('Reason', 'Reason') }}
         <textarea rows="3" formControlName="reason"></textarea>
       </label>
-      <button type="submit" [disabled]="busy()">{{ i18n.text('Submit', 'إرسال') }}</button>
+      <div class="row-actions">
+        <button type="button" [disabled]="previewLoading()" (click)="previewBalance()">{{ previewLoading() ? i18n.text('Previewing...', 'Previewing...') : i18n.text('Preview Balance', 'Preview Balance') }}</button>
+        <button type="submit" [disabled]="busy()">{{ i18n.text('Submit', 'Submit') }}</button>
+      </div>
+
+      @if (preview(); as p) {
+        <div class="preview" [class.error-preview]="!p.canSubmit">
+          <p>{{ i18n.text('Requested Days', 'Requested Days') }}: {{ p.requestedDays }}</p>
+          <p>{{ i18n.text('Remaining Before', 'Remaining Before') }}: {{ p.remainingBefore | number: '1.0-2' }}</p>
+          <p>{{ i18n.text('Remaining After', 'Remaining After') }}: {{ p.remainingAfter | number: '1.0-2' }}</p>
+          <p>{{ p.message }}</p>
+        </div>
+      }
     </form>
 
     <div class="card">
-      <h3>{{ i18n.text('Leave Balance', 'رصيد الإجازات') }} ({{ currentYear() }})</h3>
+      <h3>{{ i18n.text('Leave Balance', 'Leave Balance') }} ({{ currentYear() }})</h3>
       <table>
         <thead>
           <tr>
-            <th>{{ i18n.text('Type', 'النوع') }}</th>
-            <th>{{ i18n.text('Allocated', 'المخصص') }}</th>
-            <th>{{ i18n.text('Used', 'المستخدم') }}</th>
-            <th>{{ i18n.text('Remaining', 'المتبقي') }}</th>
+            <th>{{ i18n.text('Type', 'Type') }}</th>
+            <th>{{ i18n.text('Allocated', 'Allocated') }}</th>
+            <th>{{ i18n.text('Used', 'Used') }}</th>
+            <th>{{ i18n.text('Remaining', 'Remaining') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -52,16 +64,17 @@
   @if (message()) { <p class="ok">{{ message() }}</p> }
   @if (error()) { <p class="error">{{ error() }}</p> }
 
-  <h3>{{ i18n.text('Request History', 'سجل الطلبات') }}</h3>
+  <h3>{{ i18n.text('Request History', 'Request History') }}</h3>
   <table>
     <thead>
       <tr>
-        <th>{{ i18n.text('Type', 'النوع') }}</th>
-        <th>{{ i18n.text('Start', 'البداية') }}</th>
-        <th>{{ i18n.text('End', 'النهاية') }}</th>
-        <th>{{ i18n.text('Days', 'الأيام') }}</th>
-        <th>{{ i18n.text('Status', 'الحالة') }}</th>
-        <th>{{ i18n.text('Reason', 'السبب') }}</th>
+        <th>{{ i18n.text('Type', 'Type') }}</th>
+        <th>{{ i18n.text('Start', 'Start') }}</th>
+        <th>{{ i18n.text('End', 'End') }}</th>
+        <th>{{ i18n.text('Days', 'Days') }}</th>
+        <th>{{ i18n.text('Status', 'Status') }}</th>
+        <th>{{ i18n.text('Reason', 'Reason') }}</th>
+        <th>{{ i18n.text('Attachments', 'Attachments') }}</th>
       </tr>
     </thead>
     <tbody>
@@ -75,7 +88,28 @@
           <td>
             {{ request.reason }}
             @if (request.status === 3 && request.rejectionReason) {
-              <div class="reject">{{ i18n.text('Rejected:', 'مرفوض:') }} {{ request.rejectionReason }}</div>
+              <div class="reject">{{ i18n.text('Rejected:', 'Rejected:') }} {{ request.rejectionReason }}</div>
+            } @else if (request.status === 2 && request.rejectionReason) {
+              <div class="reject">{{ i18n.text('Review Comment:', 'Review Comment:') }} {{ request.rejectionReason }}</div>
+            }
+          </td>
+          <td>
+            <div class="row-actions">
+              <button type="button" (click)="selectAttachments(request.id)">{{ selectedRequestIdForAttachments() === request.id ? i18n.text('Hide', 'Hide') : i18n.text('View', 'View') }}</button>
+              <input type="file" (change)="uploadAttachment(request.id, $event)" [disabled]="attachmentBusyRequestId() === request.id" />
+            </div>
+            @if (selectedRequestIdForAttachments() === request.id) {
+              <div class="attachment-list">
+                @if (attachments().length === 0) {
+                  <span>{{ i18n.text('No attachments', 'No attachments') }}</span>
+                } @else {
+                  @for (file of attachments(); track file.id) {
+                    <div>
+                      <button type="button" (click)="downloadAttachment(file.id)">{{ file.fileName }}</button>
+                    </div>
+                  }
+                }
+              </div>
             }
           </td>
         </tr>

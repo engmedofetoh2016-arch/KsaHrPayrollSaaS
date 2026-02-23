@@ -10,6 +10,11 @@ th, td { border-bottom: 1px solid #e2eaf3; text-align: left; padding: 8px; verti
 .error { color: #a32020; }
 .reject { color: #8f2b2b; font-size: 0.85rem; margin-top: 4px; }
 .hint { color: #4d5c6b; margin-bottom: 10px; }
+.row-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.preview { border: 1px solid #cde3d2; background: #f1faf3; border-radius: 8px; padding: 8px; }
+.error-preview { border-color: #eac9c9; background: #fff3f3; }
+.attachment-list { margin-top: 6px; display: grid; gap: 6px; }
+.attachment-list button { padding: 6px 10px; font-size: 0.82rem; }
 
 @media (max-width: 640px) {
   .panel {
@@ -22,5 +27,9 @@ th, td { border-bottom: 1px solid #e2eaf3; text-align: left; padding: 8px; verti
 
   button {
     width: 100%;
+  }
+
+  .row-actions {
+    display: grid;
   }
 }

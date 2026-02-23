@@ -191,7 +191,7 @@ export class EmployeesPageComponent implements OnInit, OnDestroy {
   }
 
   connectEmployeeLogin(employee: Employee) {
-    const password = window.prompt(`Set login password for ${employee.email} (min 8 characters):`);
+    const password = window.prompt(`Set login password for ${employee.email} (min 8 chars, uppercase, lowercase, number):`);
     if (password === null) {
       return;
     }

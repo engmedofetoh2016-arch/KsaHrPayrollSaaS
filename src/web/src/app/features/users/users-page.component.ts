@@ -21,6 +21,9 @@ export class UsersPageComponent implements OnInit {
   readonly users = signal<AppUser[]>([]);
   readonly loading = signal(false);
   readonly saving = signal(false);
+  readonly unlockingUserId = signal<string | null>(null);
+  readonly togglingUserId = signal<string | null>(null);
+  readonly resettingPasswordUserId = signal<string | null>(null);
   readonly message = signal('');
   readonly error = signal('');
 
@@ -85,5 +88,131 @@ export class UsersPageComponent implements OnInit {
           this.error.set(getApiErrorMessage(err, 'Failed to create user.'));
         }
       });
+  }
+
+  isLocked(user: AppUser): boolean {
+    if (this.isDisabled(user)) {
+      return false;
+    }
+
+    if (!user.lockoutEnd) {
+      return false;
+    }
+    return new Date(user.lockoutEnd).getTime() > Date.now();
+  }
+
+  isDisabled(user: AppUser): boolean {
+    if (!user.lockoutEnd) {
+      return false;
+    }
+    const yearsFromNow = Date.now() + (1000 * 60 * 60 * 24 * 365 * 50);
+    return new Date(user.lockoutEnd).getTime() > yearsFromNow;
+  }
+
+  unlock(user: AppUser) {
+    if (this.unlockingUserId()) {
+      return;
+    }
+
+    this.unlockingUserId.set(user.id);
+    this.message.set('');
+    this.error.set('');
+
+    this.usersService.unlock(user.id).subscribe({
+      next: () => {
+        this.unlockingUserId.set(null);
+        this.message.set(`User ${user.email} unlocked.`);
+        this.load();
+      },
+      error: (err) => {
+        this.unlockingUserId.set(null);
+        this.error.set(getApiErrorMessage(err, 'Failed to unlock user.'));
+      }
+    });
+  }
+
+  disable(user: AppUser) {
+    if (this.togglingUserId()) {
+      return;
+    }
+
+    const confirmed = window.confirm(`Disable ${user.email}?`);
+    if (!confirmed) {
+      return;
+    }
+
+    this.togglingUserId.set(user.id);
+    this.message.set('');
+    this.error.set('');
+
+    this.usersService.disable(user.id).subscribe({
+      next: () => {
+        this.togglingUserId.set(null);
+        this.message.set(`User ${user.email} disabled.`);
+        this.load();
+      },
+      error: (err) => {
+        this.togglingUserId.set(null);
+        this.error.set(getApiErrorMessage(err, 'Failed to disable user.'));
+      }
+    });
+  }
+
+  enable(user: AppUser) {
+    if (this.togglingUserId()) {
+      return;
+    }
+
+    this.togglingUserId.set(user.id);
+    this.message.set('');
+    this.error.set('');
+
+    this.usersService.enable(user.id).subscribe({
+      next: () => {
+        this.togglingUserId.set(null);
+        this.message.set(`User ${user.email} enabled.`);
+        this.load();
+      },
+      error: (err) => {
+        this.togglingUserId.set(null);
+        this.error.set(getApiErrorMessage(err, 'Failed to enable user.'));
+      }
+    });
+  }
+
+  adminResetPassword(user: AppUser) {
+    if (this.resettingPasswordUserId()) {
+      return;
+    }
+
+    const newPassword = window.prompt(`Set new password for ${user.email} (min 8 chars, uppercase, lowercase, number):`);
+    if (newPassword === null) {
+      return;
+    }
+
+    const confirmPassword = window.prompt('Confirm new password:');
+    if (confirmPassword === null) {
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      this.error.set('Passwords do not match.');
+      return;
+    }
+
+    this.resettingPasswordUserId.set(user.id);
+    this.message.set('');
+    this.error.set('');
+
+    this.usersService.adminResetPassword(user.id, newPassword).subscribe({
+      next: () => {
+        this.resettingPasswordUserId.set(null);
+        this.message.set(`Password reset for ${user.email}. User must change it on next login.`);
+      },
+      error: (err) => {
+        this.resettingPasswordUserId.set(null);
+        this.error.set(getApiErrorMessage(err, 'Failed to reset user password.'));
+      }
+    });
   }
 }

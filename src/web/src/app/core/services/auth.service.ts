@@ -2,7 +2,15 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { map, tap } from 'rxjs';
 import { apiConfig } from '../config/api.config';
-import { AuthSession, LoginRequest, LoginResponse, SignUpRequest } from '../models/auth.models';
+import {
+  AuthSession,
+  ChangePasswordRequest,
+  ForgotPasswordRequest,
+  LoginRequest,
+  LoginResponse,
+  ResetPasswordRequest,
+  SignUpRequest
+} from '../models/auth.models';
 
 const STORAGE_KEY = 'hrpayroll.session';
 
@@ -25,7 +33,8 @@ export class AuthService {
           roles: response.user.roles,
           email: response.user.email,
           firstName: response.user.firstName,
-          lastName: response.user.lastName
+          lastName: response.user.lastName,
+          mustChangePassword: Boolean(response.mustChangePassword)
         })),
         tap((session) => this.setSession(session))
       );
@@ -33,6 +42,26 @@ export class AuthService {
 
   signUp(request: SignUpRequest) {
     return this.http.post(`${apiConfig.baseUrl}/api/tenants`, request);
+  }
+
+  forgotPassword(request: ForgotPasswordRequest) {
+    return this.http.post<{ message: string }>(`${apiConfig.baseUrl}/api/auth/forgot-password`, request);
+  }
+
+  resetPassword(request: ResetPasswordRequest) {
+    return this.http.post<{ message: string }>(`${apiConfig.baseUrl}/api/auth/reset-password`, request);
+  }
+
+  changePassword(request: ChangePasswordRequest) {
+    return this.http.post<{ message: string }>(`${apiConfig.baseUrl}/api/auth/change-password`, request).pipe(
+      tap(() => {
+        const session = this.sessionSignal();
+        if (!session) {
+          return;
+        }
+        this.setSession({ ...session, mustChangePassword: false });
+      })
+    );
   }
 
   logout() {
@@ -69,7 +98,16 @@ export class AuthService {
     }
 
     try {
-      return JSON.parse(raw) as AuthSession;
+      const parsed = JSON.parse(raw) as Partial<AuthSession>;
+      return {
+        accessToken: parsed.accessToken ?? '',
+        tenantId: parsed.tenantId ?? '',
+        roles: parsed.roles ?? [],
+        email: parsed.email ?? '',
+        firstName: parsed.firstName ?? '',
+        lastName: parsed.lastName ?? '',
+        mustChangePassword: Boolean(parsed.mustChangePassword)
+      };
     } catch {
       localStorage.removeItem(STORAGE_KEY);
       return null;

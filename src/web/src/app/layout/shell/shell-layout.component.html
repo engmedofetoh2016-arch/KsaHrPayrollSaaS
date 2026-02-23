@@ -47,6 +47,7 @@
         <span>{{ session()?.email }}</span>
       </div>
       <div class="header-actions">
+        <button type="button" class="lang" routerLink="/change-password">{{ i18n.text('Password', 'Password') }}</button>
         <button type="button" class="lang" (click)="i18n.toggleLanguage()">
           {{ i18n.isArabic() ? 'EN' : 'AR' }}
         </button>

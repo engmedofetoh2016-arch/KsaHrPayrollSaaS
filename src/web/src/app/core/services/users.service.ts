@@ -19,4 +19,20 @@ export class UsersService {
   create(request: CreateUserRequest) {
     return this.http.post<AppUser>(this.base, request);
   }
+
+  unlock(userId: string) {
+    return this.http.post<AppUser>(`${this.base}/${userId}/unlock`, {});
+  }
+
+  disable(userId: string) {
+    return this.http.post<AppUser>(`${this.base}/${userId}/disable`, {});
+  }
+
+  enable(userId: string) {
+    return this.http.post<AppUser>(`${this.base}/${userId}/enable`, {});
+  }
+
+  adminResetPassword(userId: string, newPassword: string) {
+    return this.http.post<{ forcePasswordChange: boolean }>(`${this.base}/${userId}/admin-reset-password`, { newPassword });
+  }
 }

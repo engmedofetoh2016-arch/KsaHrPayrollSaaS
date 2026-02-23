@@ -6,6 +6,7 @@ export interface LoginRequest {
 
 export interface LoginResponse {
   accessToken: string;
+  mustChangePassword?: boolean;
   user: {
     id: string;
     email: string;
@@ -23,6 +24,7 @@ export interface AuthSession {
   email: string;
   firstName: string;
   lastName: string;
+  mustChangePassword: boolean;
 }
 
 export interface SignUpRequest {
@@ -35,4 +37,21 @@ export interface SignUpRequest {
   ownerLastName: string;
   ownerEmail: string;
   ownerPassword: string;
+}
+
+export interface ForgotPasswordRequest {
+  tenantSlug: string;
+  email: string;
+}
+
+export interface ResetPasswordRequest {
+  tenantSlug: string;
+  email: string;
+  token: string;
+  newPassword: string;
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
 }

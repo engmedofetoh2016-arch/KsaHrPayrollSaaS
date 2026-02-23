@@ -33,6 +33,14 @@ export function getApiErrorMessage(error: unknown, fallback: string): string {
       return 'Session expired or unauthorized. Please login again.';
     }
 
+    if (error.status === 423) {
+      return 'Account is temporarily locked after multiple failed logins. Try again in 15 minutes.';
+    }
+
+    if (error.status === 429) {
+      return 'Too many login attempts. Please wait a minute and retry.';
+    }
+
     if (error.status === 403) {
       return 'You do not have permission for this action.';
     }

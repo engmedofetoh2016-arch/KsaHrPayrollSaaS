@@ -20,6 +20,7 @@ using System.Net.Mail;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -28,6 +29,20 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddValidatorsFromAssemblyContaining<CreateTenantRequestValidator>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("AuthLogin", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                Window = TimeSpan.FromMinutes(1),
+                PermitLimit = 8,
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+});
 builder.Services.AddCors(options =>
 {
     var configuredOrigins = builder.Configuration["Cors:AllowedOrigins"];
@@ -83,6 +98,7 @@ QuestPDF.Settings.License = LicenseType.Community;
 app.UseMiddleware<GlobalExceptionMiddleware>();
 app.UseMiddleware<TenantResolutionMiddleware>();
 app.UseCors("WebDev");
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<AuditLogMiddleware>();
@@ -135,7 +151,8 @@ api.MapPost("/tenants", async (
         UserName = request.OwnerEmail.Trim(),
         NormalizedEmail = request.OwnerEmail.Trim().ToUpperInvariant(),
         NormalizedUserName = request.OwnerEmail.Trim().ToUpperInvariant(),
-        EmailConfirmed = true
+        EmailConfirmed = true,
+        LockoutEnabled = true
     };
 
     var createOwnerResult = await userManager.CreateAsync(owner, request.OwnerPassword);
@@ -162,6 +179,7 @@ api.MapPost("/auth/login", async (
     LoginRequest request,
     IApplicationDbContext dbContext,
     UserManager<ApplicationUser> userManager,
+    SignInManager<ApplicationUser> signInManager,
     IJwtTokenGenerator tokenGenerator,
     CancellationToken cancellationToken) =>
 {
@@ -198,18 +216,44 @@ api.MapPost("/auth/login", async (
         return Results.Unauthorized();
     }
 
-    var validPassword = await userManager.CheckPasswordAsync(user, request.Password);
-    if (!validPassword)
+    if (!user.LockoutEnabled)
+    {
+        user.LockoutEnabled = true;
+        await userManager.UpdateAsync(user);
+    }
+
+    if (user.LockoutEnd.HasValue && user.LockoutEnd.Value > DateTimeOffset.UtcNow.AddYears(50))
+    {
+        return Results.Json(new { error = "Account is disabled. Contact your administrator." }, statusCode: StatusCodes.Status403Forbidden);
+    }
+
+    if (await userManager.IsLockedOutAsync(user))
+    {
+        return Results.Json(new { error = "Account locked due to repeated failed logins. Try again in 15 minutes." }, statusCode: StatusCodes.Status423Locked);
+    }
+
+    var signInResult = await signInManager.CheckPasswordSignInAsync(user, request.Password, lockoutOnFailure: true);
+    if (signInResult.IsLockedOut)
+    {
+        return Results.Json(new { error = "Account locked due to repeated failed logins. Try again in 15 minutes." }, statusCode: StatusCodes.Status423Locked);
+    }
+
+    if (!signInResult.Succeeded)
     {
         return Results.Unauthorized();
     }
 
     var roles = await userManager.GetRolesAsync(user);
+    var claims = await userManager.GetClaimsAsync(user);
+    var mustChangePassword = claims.Any(x =>
+        string.Equals(x.Type, "must_change_password", StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(x.Value, "true", StringComparison.OrdinalIgnoreCase));
     var token = tokenGenerator.GenerateToken(user.Id, user.Email ?? string.Empty, user.TenantId, roles.ToArray());
 
     return Results.Ok(new
     {
         accessToken = token,
+        mustChangePassword,
         user = new
         {
             user.Id,
@@ -222,7 +266,123 @@ api.MapPost("/auth/login", async (
     });
 })
     .AddEndpointFilter<ValidationFilter<LoginRequest>>()
+    .RequireRateLimiting("AuthLogin")
     .AllowAnonymous();
+
+api.MapPost("/auth/forgot-password", async (
+    ForgotPasswordRequest request,
+    IConfiguration configuration,
+    IApplicationDbContext dbContext,
+    UserManager<ApplicationUser> userManager,
+    CancellationToken cancellationToken) =>
+{
+    var genericResult = Results.Ok(new { message = "If the account exists, reset instructions were sent." });
+
+    var tenantSlug = request.TenantSlug.Trim().ToLowerInvariant();
+    var tenant = await dbContext.Tenants
+        .FirstOrDefaultAsync(x => x.Slug == tenantSlug && x.IsActive, cancellationToken);
+    if (tenant is null)
+    {
+        return genericResult;
+    }
+
+    var normalizedEmail = request.Email.Trim().ToUpperInvariant();
+    var user = await userManager.Users
+        .FirstOrDefaultAsync(x => x.TenantId == tenant.Id && x.NormalizedEmail == normalizedEmail, cancellationToken);
+    if (user is null)
+    {
+        return genericResult;
+    }
+
+    var token = await userManager.GeneratePasswordResetTokenAsync(user);
+    var appBaseUrl = configuration["App:BaseUrl"] ?? configuration["APP_URL"] ?? "http://localhost:4200";
+    var resetLink =
+        $"{appBaseUrl.TrimEnd('/')}/reset-password?tenantSlug={Uri.EscapeDataString(tenant.Slug)}&email={Uri.EscapeDataString(user.Email ?? request.Email)}&token={Uri.EscapeDataString(token)}";
+
+    var subject = "Reset your password";
+    var textBody = $"Use this link to reset your password: {resetLink}";
+    var htmlBody =
+        $"<p>You requested a password reset.</p><p><a href=\"{WebUtility.HtmlEncode(resetLink)}\">Reset Password</a></p><p>If you did not request this, you can ignore this email.</p>";
+
+    await TrySendComplianceDigestEmailAsync(configuration, user.Email ?? request.Email, subject, textBody, htmlBody, cancellationToken);
+    return genericResult;
+})
+    .AddEndpointFilter<ValidationFilter<ForgotPasswordRequest>>()
+    .AllowAnonymous();
+
+api.MapPost("/auth/reset-password", async (
+    ResetPasswordRequest request,
+    IApplicationDbContext dbContext,
+    UserManager<ApplicationUser> userManager,
+    CancellationToken cancellationToken) =>
+{
+    var tenantSlug = request.TenantSlug.Trim().ToLowerInvariant();
+    var tenant = await dbContext.Tenants
+        .FirstOrDefaultAsync(x => x.Slug == tenantSlug && x.IsActive, cancellationToken);
+    if (tenant is null)
+    {
+        return Results.BadRequest(new { error = "Invalid reset request." });
+    }
+
+    var normalizedEmail = request.Email.Trim().ToUpperInvariant();
+    var user = await userManager.Users
+        .FirstOrDefaultAsync(x => x.TenantId == tenant.Id && x.NormalizedEmail == normalizedEmail, cancellationToken);
+    if (user is null)
+    {
+        return Results.BadRequest(new { error = "Invalid reset request." });
+    }
+
+    var resetResult = await userManager.ResetPasswordAsync(user, request.Token, request.NewPassword);
+    if (!resetResult.Succeeded)
+    {
+        return Results.BadRequest(new { error = "Failed to reset password.", details = resetResult.Errors.Select(x => x.Description) });
+    }
+
+    var claims = await userManager.GetClaimsAsync(user);
+    var mustChangeClaims = claims.Where(x => x.Type == "must_change_password").ToArray();
+    foreach (var claim in mustChangeClaims)
+    {
+        await userManager.RemoveClaimAsync(user, claim);
+    }
+
+    return Results.Ok(new { message = "Password reset successful." });
+})
+    .AddEndpointFilter<ValidationFilter<ResetPasswordRequest>>()
+    .AllowAnonymous();
+
+api.MapPost("/auth/change-password", [Authorize] async (
+    ChangePasswordRequest request,
+    HttpContext httpContext,
+    UserManager<ApplicationUser> userManager) =>
+{
+    var userIdClaim = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (!Guid.TryParse(userIdClaim, out var userId))
+    {
+        return Results.Unauthorized();
+    }
+
+    var user = await userManager.FindByIdAsync(userId.ToString());
+    if (user is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    var changeResult = await userManager.ChangePasswordAsync(user, request.CurrentPassword, request.NewPassword);
+    if (!changeResult.Succeeded)
+    {
+        return Results.BadRequest(new { error = "Failed to change password.", details = changeResult.Errors.Select(x => x.Description) });
+    }
+
+    var claims = await userManager.GetClaimsAsync(user);
+    var mustChangeClaims = claims.Where(x => x.Type == "must_change_password").ToArray();
+    foreach (var claim in mustChangeClaims)
+    {
+        await userManager.RemoveClaimAsync(user, claim);
+    }
+
+    return Results.Ok(new { message = "Password changed successfully." });
+})
+    .AddEndpointFilter<ValidationFilter<ChangePasswordRequest>>();
 
 api.MapGet("/me/profile", [Authorize] async (
     ITenantContext tenantContext,
@@ -539,7 +699,8 @@ api.MapPost("/users", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin
         UserName = email,
         NormalizedEmail = normalizedEmail,
         NormalizedUserName = normalizedEmail,
-        EmailConfirmed = true
+        EmailConfirmed = true,
+        LockoutEnabled = true
     };
 
     var createResult = await userManager.CreateAsync(user, request.Password);
@@ -602,12 +763,223 @@ api.MapGet("/users", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin)
             x.FirstName,
             x.LastName,
             x.Email,
-            x.TenantId
+            x.TenantId,
+            x.AccessFailedCount,
+            x.LockoutEnd
         })
         .ToListAsync(cancellationToken);
 
     return Results.Ok(new { items = users, total, page = safePage, pageSize = safePageSize });
 });
+
+api.MapPost("/users/{userId:guid}/unlock", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin)] async (
+    Guid userId,
+    ITenantContext tenantContext,
+    UserManager<ApplicationUser> userManager,
+    CancellationToken cancellationToken) =>
+{
+    if (tenantContext.TenantId == Guid.Empty)
+    {
+        return Results.BadRequest(new { error = "Tenant was not resolved." });
+    }
+
+    var user = await userManager.Users
+        .FirstOrDefaultAsync(x => x.Id == userId && x.TenantId == tenantContext.TenantId, cancellationToken);
+
+    if (user is null)
+    {
+        return Results.NotFound(new { error = "User not found." });
+    }
+
+    user.LockoutEnabled = true;
+    user.LockoutEnd = null;
+    user.AccessFailedCount = 0;
+
+    var updateResult = await userManager.UpdateAsync(user);
+    if (!updateResult.Succeeded)
+    {
+        return Results.BadRequest(new { error = "Failed to unlock user.", details = updateResult.Errors.Select(x => x.Description) });
+    }
+
+    return Results.Ok(new
+    {
+        user.Id,
+        user.Email,
+        user.FirstName,
+        user.LastName,
+        user.TenantId,
+        user.AccessFailedCount,
+        user.LockoutEnd
+    });
+});
+
+api.MapPost("/users/{userId:guid}/disable", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin)] async (
+    Guid userId,
+    ITenantContext tenantContext,
+    HttpContext httpContext,
+    UserManager<ApplicationUser> userManager,
+    CancellationToken cancellationToken) =>
+{
+    if (tenantContext.TenantId == Guid.Empty)
+    {
+        return Results.BadRequest(new { error = "Tenant was not resolved." });
+    }
+
+    var callerIdClaim = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (!Guid.TryParse(callerIdClaim, out var callerId))
+    {
+        return Results.Unauthorized();
+    }
+
+    if (callerId == userId)
+    {
+        return Results.BadRequest(new { error = "You cannot disable your own account." });
+    }
+
+    var user = await userManager.Users
+        .FirstOrDefaultAsync(x => x.Id == userId && x.TenantId == tenantContext.TenantId, cancellationToken);
+
+    if (user is null)
+    {
+        return Results.NotFound(new { error = "User not found." });
+    }
+
+    user.LockoutEnabled = true;
+    user.LockoutEnd = DateTimeOffset.UtcNow.AddYears(100);
+    user.AccessFailedCount = 0;
+
+    var updateResult = await userManager.UpdateAsync(user);
+    if (!updateResult.Succeeded)
+    {
+        return Results.BadRequest(new { error = "Failed to disable user.", details = updateResult.Errors.Select(x => x.Description) });
+    }
+
+    return Results.Ok(new
+    {
+        user.Id,
+        user.Email,
+        user.FirstName,
+        user.LastName,
+        user.TenantId,
+        user.AccessFailedCount,
+        user.LockoutEnd
+    });
+});
+
+api.MapPost("/users/{userId:guid}/enable", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin)] async (
+    Guid userId,
+    ITenantContext tenantContext,
+    UserManager<ApplicationUser> userManager,
+    CancellationToken cancellationToken) =>
+{
+    if (tenantContext.TenantId == Guid.Empty)
+    {
+        return Results.BadRequest(new { error = "Tenant was not resolved." });
+    }
+
+    var user = await userManager.Users
+        .FirstOrDefaultAsync(x => x.Id == userId && x.TenantId == tenantContext.TenantId, cancellationToken);
+
+    if (user is null)
+    {
+        return Results.NotFound(new { error = "User not found." });
+    }
+
+    user.LockoutEnabled = true;
+    user.LockoutEnd = null;
+    user.AccessFailedCount = 0;
+
+    var updateResult = await userManager.UpdateAsync(user);
+    if (!updateResult.Succeeded)
+    {
+        return Results.BadRequest(new { error = "Failed to enable user.", details = updateResult.Errors.Select(x => x.Description) });
+    }
+
+    return Results.Ok(new
+    {
+        user.Id,
+        user.Email,
+        user.FirstName,
+        user.LastName,
+        user.TenantId,
+        user.AccessFailedCount,
+        user.LockoutEnd
+    });
+});
+
+api.MapPost("/users/{userId:guid}/admin-reset-password", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin)] async (
+    Guid userId,
+    AdminResetUserPasswordRequest request,
+    ITenantContext tenantContext,
+    HttpContext httpContext,
+    UserManager<ApplicationUser> userManager,
+    CancellationToken cancellationToken) =>
+{
+    if (tenantContext.TenantId == Guid.Empty)
+    {
+        return Results.BadRequest(new { error = "Tenant was not resolved." });
+    }
+
+    var callerIdClaim = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (!Guid.TryParse(callerIdClaim, out var callerId))
+    {
+        return Results.Unauthorized();
+    }
+
+    var user = await userManager.Users
+        .FirstOrDefaultAsync(x => x.Id == userId && x.TenantId == tenantContext.TenantId, cancellationToken);
+
+    if (user is null)
+    {
+        return Results.NotFound(new { error = "User not found." });
+    }
+
+    IdentityResult passwordResult;
+    if (await userManager.HasPasswordAsync(user))
+    {
+        var resetToken = await userManager.GeneratePasswordResetTokenAsync(user);
+        passwordResult = await userManager.ResetPasswordAsync(user, resetToken, request.NewPassword);
+    }
+    else
+    {
+        passwordResult = await userManager.AddPasswordAsync(user, request.NewPassword);
+    }
+
+    if (!passwordResult.Succeeded)
+    {
+        return Results.BadRequest(new { error = "Failed to reset user password.", details = passwordResult.Errors.Select(x => x.Description) });
+    }
+
+    // Force user to change this admin-set password at next login.
+    var claims = await userManager.GetClaimsAsync(user);
+    var existingFlagClaims = claims.Where(x => x.Type == "must_change_password").ToArray();
+    foreach (var claim in existingFlagClaims)
+    {
+        await userManager.RemoveClaimAsync(user, claim);
+    }
+    await userManager.AddClaimAsync(user, new Claim("must_change_password", "true"));
+
+    // Also unlock user in case previous failed attempts locked account.
+    user.LockoutEnabled = true;
+    user.LockoutEnd = null;
+    user.AccessFailedCount = 0;
+    var updateResult = await userManager.UpdateAsync(user);
+    if (!updateResult.Succeeded)
+    {
+        return Results.BadRequest(new { error = "Password changed but failed to update user state.", details = updateResult.Errors.Select(x => x.Description) });
+    }
+
+    return Results.Ok(new
+    {
+        user.Id,
+        user.Email,
+        user.FirstName,
+        user.LastName,
+        user.TenantId,
+        ForcePasswordChange = true
+    });
+})
+    .AddEndpointFilter<ValidationFilter<AdminResetUserPasswordRequest>>();
 
 api.MapGet("/employees", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] (
     int? page,
@@ -787,7 +1159,8 @@ api.MapPost("/employees/{employeeId:guid}/create-user-login", [Authorize(Roles =
         UserName = email,
         NormalizedEmail = normalizedEmail,
         NormalizedUserName = normalizedEmail,
-        EmailConfirmed = true
+        EmailConfirmed = true,
+        LockoutEnabled = true
     };
 
     var createResult = await userManager.CreateAsync(user, request.Password);
@@ -797,6 +1170,7 @@ api.MapPost("/employees/{employeeId:guid}/create-user-login", [Authorize(Roles =
     }
 
     await userManager.AddToRoleAsync(user, RoleNames.Employee);
+    await userManager.AddClaimAsync(user, new Claim("must_change_password", "true"));
 
     return Results.Created($"/api/users/{user.Id}", new
     {
@@ -2379,8 +2753,306 @@ api.MapPost("/leave/requests", [Authorize(Roles = RoleNames.Owner + "," + RoleNa
 })
     .AddEndpointFilter<ValidationFilter<CreateLeaveRequestRequest>>();
 
+api.MapPost("/leave/preview", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager + "," + RoleNames.Employee)] async (
+    LeaveBalancePreviewRequest request,
+    IApplicationDbContext dbContext,
+    HttpContext httpContext,
+    CancellationToken cancellationToken) =>
+{
+    var canReview = httpContext.User.IsInRole(RoleNames.Owner) ||
+                    httpContext.User.IsInRole(RoleNames.Admin) ||
+                    httpContext.User.IsInRole(RoleNames.Hr) ||
+                    httpContext.User.IsInRole(RoleNames.Manager);
+
+    Guid resolvedEmployeeId;
+    if (canReview && request.EmployeeId.HasValue)
+    {
+        resolvedEmployeeId = request.EmployeeId.Value;
+    }
+    else
+    {
+        var userEmail = httpContext.User.Claims
+            .Where(x => x.Type is "email" or ClaimTypes.Email)
+            .Select(x => x.Value)
+            .FirstOrDefault();
+
+        if (string.IsNullOrWhiteSpace(userEmail))
+        {
+            return Results.BadRequest(new { error = "Your account email was not found in token." });
+        }
+
+        var ownEmployee = await dbContext.Employees.FirstOrDefaultAsync(
+            x => x.Email.ToLower() == userEmail.ToLower(),
+            cancellationToken);
+
+        if (ownEmployee is null)
+        {
+            return Results.BadRequest(new { error = "No employee profile linked to your account email." });
+        }
+
+        resolvedEmployeeId = ownEmployee.Id;
+    }
+
+    if (request.EndDate < request.StartDate)
+    {
+        return Results.BadRequest(new { error = "End date must be on or after start date." });
+    }
+
+    var requestedDays = request.EndDate.DayNumber - request.StartDate.DayNumber + 1;
+    if (requestedDays <= 0)
+    {
+        return Results.BadRequest(new { error = "Requested leave days must be greater than zero." });
+    }
+
+    if (request.LeaveType == LeaveType.Unpaid)
+    {
+        return Results.Ok(new
+        {
+            employeeId = resolvedEmployeeId,
+            request.LeaveType,
+            request.StartDate,
+            request.EndDate,
+            requestedDays,
+            allocatedDays = 0m,
+            usedDays = 0m,
+            remainingBefore = 0m,
+            remainingAfter = 0m,
+            canSubmit = true,
+            message = "Unpaid leave does not consume balance."
+        });
+    }
+
+    var year = request.StartDate.Year;
+    var balance = await dbContext.LeaveBalances.FirstOrDefaultAsync(
+        x => x.EmployeeId == resolvedEmployeeId && x.Year == year && x.LeaveType == request.LeaveType,
+        cancellationToken);
+
+    var allocatedDays = balance?.AllocatedDays ?? (request.LeaveType switch
+    {
+        LeaveType.Annual => 21m,
+        LeaveType.Sick => 10m,
+        _ => 0m
+    });
+    var usedDays = balance?.UsedDays ?? 0m;
+    var remainingBefore = allocatedDays - usedDays;
+    var remainingAfter = remainingBefore - requestedDays;
+    var canSubmit = remainingAfter >= 0;
+
+    return Results.Ok(new
+    {
+        employeeId = resolvedEmployeeId,
+        request.LeaveType,
+        request.StartDate,
+        request.EndDate,
+        requestedDays,
+        allocatedDays,
+        usedDays,
+        remainingBefore,
+        remainingAfter,
+        canSubmit,
+        message = canSubmit ? "Sufficient balance." : "Insufficient leave balance."
+    });
+})
+    .AddEndpointFilter<ValidationFilter<LeaveBalancePreviewRequest>>();
+
+api.MapGet("/leave/requests/{requestId:guid}/attachments", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager + "," + RoleNames.Employee)] async (
+    Guid requestId,
+    IApplicationDbContext dbContext,
+    HttpContext httpContext,
+    CancellationToken cancellationToken) =>
+{
+    var leaveRequest = await dbContext.LeaveRequests.FirstOrDefaultAsync(x => x.Id == requestId, cancellationToken);
+    if (leaveRequest is null)
+    {
+        return Results.NotFound(new { error = "Leave request not found." });
+    }
+
+    var canReview = httpContext.User.IsInRole(RoleNames.Owner) ||
+                    httpContext.User.IsInRole(RoleNames.Admin) ||
+                    httpContext.User.IsInRole(RoleNames.Hr) ||
+                    httpContext.User.IsInRole(RoleNames.Manager);
+
+    if (!canReview)
+    {
+        var userEmail = httpContext.User.Claims
+            .Where(x => x.Type is "email" or ClaimTypes.Email)
+            .Select(x => x.Value)
+            .FirstOrDefault();
+
+        if (string.IsNullOrWhiteSpace(userEmail))
+        {
+            return Results.BadRequest(new { error = "Your account email was not found in token." });
+        }
+
+        var ownEmployee = await dbContext.Employees.FirstOrDefaultAsync(
+            x => x.Email.ToLower() == userEmail.ToLower(),
+            cancellationToken);
+
+        if (ownEmployee is null || ownEmployee.Id != leaveRequest.EmployeeId)
+        {
+            return Results.Forbid();
+        }
+    }
+
+    var metadata = BuildLeaveAttachmentMetadata(requestId);
+    var items = await dbContext.ExportArtifacts
+        .Where(x => x.ArtifactType == "LeaveAttachment" && x.MetadataJson == metadata)
+        .OrderByDescending(x => x.CreatedAtUtc)
+        .Select(x => new
+        {
+            x.Id,
+            x.FileName,
+            x.ContentType,
+            x.SizeBytes,
+            x.CreatedAtUtc,
+            x.EmployeeId
+        })
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(items);
+});
+
+api.MapPost("/leave/requests/{requestId:guid}/attachments", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager + "," + RoleNames.Employee)] async (
+    Guid requestId,
+    HttpRequest request,
+    IApplicationDbContext dbContext,
+    HttpContext httpContext,
+    CancellationToken cancellationToken) =>
+{
+    var leaveRequest = await dbContext.LeaveRequests.FirstOrDefaultAsync(x => x.Id == requestId, cancellationToken);
+    if (leaveRequest is null)
+    {
+        return Results.NotFound(new { error = "Leave request not found." });
+    }
+
+    var canReview = httpContext.User.IsInRole(RoleNames.Owner) ||
+                    httpContext.User.IsInRole(RoleNames.Admin) ||
+                    httpContext.User.IsInRole(RoleNames.Hr) ||
+                    httpContext.User.IsInRole(RoleNames.Manager);
+
+    if (!canReview)
+    {
+        var userEmail = httpContext.User.Claims
+            .Where(x => x.Type is "email" or ClaimTypes.Email)
+            .Select(x => x.Value)
+            .FirstOrDefault();
+
+        if (string.IsNullOrWhiteSpace(userEmail))
+        {
+            return Results.BadRequest(new { error = "Your account email was not found in token." });
+        }
+
+        var ownEmployee = await dbContext.Employees.FirstOrDefaultAsync(
+            x => x.Email.ToLower() == userEmail.ToLower(),
+            cancellationToken);
+
+        if (ownEmployee is null || ownEmployee.Id != leaveRequest.EmployeeId)
+        {
+            return Results.Forbid();
+        }
+    }
+
+    if (!request.HasFormContentType)
+    {
+        return Results.BadRequest(new { error = "Attachment upload requires multipart/form-data." });
+    }
+
+    var form = await request.ReadFormAsync(cancellationToken);
+    var file = form.Files.FirstOrDefault();
+    if (file is null || file.Length == 0)
+    {
+        return Results.BadRequest(new { error = "No attachment file provided." });
+    }
+
+    const long maxFileSize = 5 * 1024 * 1024;
+    if (file.Length > maxFileSize)
+    {
+        return Results.BadRequest(new { error = "Attachment exceeds 5 MB size limit." });
+    }
+
+    var fileData = new byte[file.Length];
+    await using (var stream = file.OpenReadStream())
+    {
+        await stream.ReadExactlyAsync(fileData, cancellationToken);
+    }
+
+    var artifact = new ExportArtifact
+    {
+        PayrollRunId = Guid.Empty,
+        EmployeeId = leaveRequest.EmployeeId,
+        ArtifactType = "LeaveAttachment",
+        Status = ExportArtifactStatus.Completed,
+        FileName = string.IsNullOrWhiteSpace(file.FileName) ? $"leave-attachment-{DateTime.UtcNow:yyyyMMddHHmmss}.bin" : file.FileName,
+        ContentType = string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType,
+        FileData = fileData,
+        SizeBytes = file.Length,
+        CreatedByUserId = null,
+        CompletedAtUtc = DateTime.UtcNow,
+        ErrorMessage = string.Empty,
+        MetadataJson = BuildLeaveAttachmentMetadata(requestId)
+    };
+
+    dbContext.AddEntity(artifact);
+    await dbContext.SaveChangesAsync(cancellationToken);
+
+    return Results.Created($"/api/leave/attachments/{artifact.Id}/download", new
+    {
+        artifact.Id,
+        artifact.FileName,
+        artifact.ContentType,
+        artifact.SizeBytes,
+        artifact.CreatedAtUtc
+    });
+});
+
+api.MapGet("/leave/attachments/{attachmentId:guid}/download", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager + "," + RoleNames.Employee)] async (
+    Guid attachmentId,
+    IApplicationDbContext dbContext,
+    HttpContext httpContext,
+    CancellationToken cancellationToken) =>
+{
+    var attachment = await dbContext.ExportArtifacts.FirstOrDefaultAsync(
+        x => x.Id == attachmentId && x.ArtifactType == "LeaveAttachment",
+        cancellationToken);
+
+    if (attachment is null || attachment.FileData is null || attachment.FileData.Length == 0)
+    {
+        return Results.NotFound(new { error = "Attachment not found." });
+    }
+
+    var canReview = httpContext.User.IsInRole(RoleNames.Owner) ||
+                    httpContext.User.IsInRole(RoleNames.Admin) ||
+                    httpContext.User.IsInRole(RoleNames.Hr) ||
+                    httpContext.User.IsInRole(RoleNames.Manager);
+
+    if (!canReview)
+    {
+        var userEmail = httpContext.User.Claims
+            .Where(x => x.Type is "email" or ClaimTypes.Email)
+            .Select(x => x.Value)
+            .FirstOrDefault();
+
+        if (string.IsNullOrWhiteSpace(userEmail))
+        {
+            return Results.BadRequest(new { error = "Your account email was not found in token." });
+        }
+
+        var ownEmployee = await dbContext.Employees.FirstOrDefaultAsync(
+            x => x.Email.ToLower() == userEmail.ToLower(),
+            cancellationToken);
+
+        if (ownEmployee is null || ownEmployee.Id != attachment.EmployeeId)
+        {
+            return Results.Forbid();
+        }
+    }
+
+    return Results.File(attachment.FileData, attachment.ContentType, attachment.FileName);
+});
+
 api.MapPost("/leave/requests/{requestId:guid}/approve", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
     Guid requestId,
+    ApproveLeaveRequestRequest request,
     IApplicationDbContext dbContext,
     IDateTimeProvider dateTimeProvider,
     HttpContext httpContext,
@@ -2443,11 +3115,12 @@ api.MapPost("/leave/requests/{requestId:guid}/approve", [Authorize(Roles = RoleN
     leaveRequest.Status = LeaveRequestStatus.Approved;
     leaveRequest.ReviewedByUserId = reviewedBy;
     leaveRequest.ReviewedAtUtc = dateTimeProvider.UtcNow;
-    leaveRequest.RejectionReason = null;
+    leaveRequest.RejectionReason = string.IsNullOrWhiteSpace(request.Comment) ? null : request.Comment.Trim();
 
     await dbContext.SaveChangesAsync(cancellationToken);
     return Results.Ok(new { leaveRequest.Id, leaveRequest.Status });
-});
+})
+    .AddEndpointFilter<ValidationFilter<ApproveLeaveRequestRequest>>();
 
 api.MapPost("/leave/requests/{requestId:guid}/reject", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
     Guid requestId,
@@ -3415,6 +4088,9 @@ static async Task<EmailSendResult> TrySendComplianceDigestEmailAsync(
     }
 }
 
+static string BuildLeaveAttachmentMetadata(Guid leaveRequestId) =>
+    JsonSerializer.Serialize(new { leaveRequestId });
+
 app.Run();
 
 public sealed record CreateTenantRequest(
@@ -3429,6 +4105,9 @@ public sealed record CreateTenantRequest(
     string OwnerPassword);
 
 public sealed record LoginRequest(Guid? TenantId, string? TenantSlug, string Email, string Password);
+public sealed record ForgotPasswordRequest(string TenantSlug, string Email);
+public sealed record ResetPasswordRequest(string TenantSlug, string Email, string Token, string NewPassword);
+public sealed record ChangePasswordRequest(string CurrentPassword, string NewPassword);
 
 public sealed record UpdateCompanyProfileRequest(
     string LegalName,
@@ -3445,6 +4124,7 @@ public sealed record UpdateCompanyProfileRequest(
     int ComplianceDigestHourUtc);
 
 public sealed record CreateUserRequest(string FirstName, string LastName, string Email, string Password, string Role);
+public sealed record AdminResetUserPasswordRequest(string NewPassword);
 
 public sealed record CreateEmployeeRequest(
     DateOnly StartDate,
@@ -3537,6 +4217,14 @@ public sealed record CreateLeaveRequestRequest(
     DateOnly StartDate,
     DateOnly EndDate,
     string Reason);
+
+public sealed record LeaveBalancePreviewRequest(
+    Guid? EmployeeId,
+    LeaveType LeaveType,
+    DateOnly StartDate,
+    DateOnly EndDate);
+
+public sealed record ApproveLeaveRequestRequest(string? Comment);
 
 public sealed record RejectLeaveRequestRequest(string RejectionReason);
 

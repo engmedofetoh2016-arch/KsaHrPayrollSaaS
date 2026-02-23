@@ -27,6 +27,10 @@ export class LoginPageComponent {
   readonly signupError = signal('');
   readonly signupMessage = signal('');
   readonly showSignUp = signal(false);
+  readonly forgotLoading = signal(false);
+  readonly forgotMessage = signal('');
+  readonly forgotError = signal('');
+  readonly showForgot = signal(false);
 
   readonly form = this.fb.group({
     tenantSlug: ['', Validators.required],
@@ -44,6 +48,11 @@ export class LoginPageComponent {
     ownerLastName: ['', [Validators.required, Validators.maxLength(80)]],
     ownerEmail: ['', [Validators.required, Validators.email]],
     ownerPassword: ['', [Validators.required, Validators.minLength(8)]]
+  });
+
+  readonly forgotForm = this.fb.group({
+    tenantSlug: ['', Validators.required],
+    email: ['', [Validators.required, Validators.email]]
   });
 
   constructor() {
@@ -66,8 +75,12 @@ export class LoginPageComponent {
     this.error.set('');
 
     this.authService.login(this.form.getRawValue() as { tenantSlug: string; email: string; password: string }).subscribe({
-      next: () => {
+      next: (session) => {
         this.loading.set(false);
+        if (session.mustChangePassword) {
+          this.router.navigateByUrl('/change-password');
+          return;
+        }
         this.router.navigateByUrl('/dashboard');
       },
       error: (err) => {
@@ -81,6 +94,43 @@ export class LoginPageComponent {
     this.showSignUp.set(!this.showSignUp());
     this.signupError.set('');
     this.signupMessage.set('');
+  }
+
+  toggleForgotPassword() {
+    this.showForgot.set(!this.showForgot());
+    this.forgotError.set('');
+    this.forgotMessage.set('');
+    if (this.showForgot()) {
+      this.forgotForm.patchValue({
+        tenantSlug: this.form.getRawValue().tenantSlug ?? '',
+        email: this.form.getRawValue().email ?? ''
+      });
+    }
+  }
+
+  onForgotSubmit() {
+    if (this.forgotForm.invalid || this.forgotLoading()) {
+      this.forgotForm.markAllAsTouched();
+      if (this.forgotForm.invalid) {
+        this.forgotError.set('Please enter tenant slug and valid email.');
+      }
+      return;
+    }
+
+    this.forgotLoading.set(true);
+    this.forgotError.set('');
+    this.forgotMessage.set('');
+    const payload = this.forgotForm.getRawValue() as { tenantSlug: string; email: string };
+    this.authService.forgotPassword(payload).subscribe({
+      next: () => {
+        this.forgotLoading.set(false);
+        this.forgotMessage.set('If account exists, reset instructions were sent.');
+      },
+      error: (err) => {
+        this.forgotLoading.set(false);
+        this.forgotError.set(getApiErrorMessage(err, 'Failed to submit forgot password request.'));
+      }
+    });
   }
 
   onSignUpSubmit() {

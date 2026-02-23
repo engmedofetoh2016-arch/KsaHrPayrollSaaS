@@ -4,6 +4,8 @@ export interface AppUser {
   lastName: string;
   email: string;
   tenantId: string;
+  accessFailedCount: number;
+  lockoutEnd?: string | null;
 }
 
 export interface CreateUserRequest {

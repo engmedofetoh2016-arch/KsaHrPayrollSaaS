@@ -8,6 +8,34 @@ table { width: 100%; border-collapse: collapse; }
 th, td { border-bottom: 1px solid #e2eaf3; text-align: left; padding: 8px; }
 .ok { color: #166a2d; }
 .error { color: #a32020; }
+.badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.badge.active {
+  background: #e8f7ec;
+  color: #166a2d;
+}
+.badge.locked {
+  background: #ffeaea;
+  color: #a32020;
+}
+.badge.disabled {
+  background: #eef1f6;
+  color: #49566b;
+}
+.attempts {
+  display: inline-block;
+  margin-inline-start: 8px;
+  color: #4b5f79;
+  font-size: 0.8rem;
+}
+td button + button {
+  margin-inline-start: 6px;
+}
 
 @media (max-width: 640px) {
   .panel {

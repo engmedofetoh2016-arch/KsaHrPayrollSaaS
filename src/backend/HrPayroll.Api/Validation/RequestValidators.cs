@@ -33,6 +33,35 @@ public class LoginRequestValidator : AbstractValidator<LoginRequest>
     }
 }
 
+public class ForgotPasswordRequestValidator : AbstractValidator<ForgotPasswordRequest>
+{
+    public ForgotPasswordRequestValidator()
+    {
+        RuleFor(x => x.TenantSlug).NotEmpty().MaximumLength(120);
+        RuleFor(x => x.Email).NotEmpty().EmailAddress();
+    }
+}
+
+public class ResetPasswordRequestValidator : AbstractValidator<ResetPasswordRequest>
+{
+    public ResetPasswordRequestValidator()
+    {
+        RuleFor(x => x.TenantSlug).NotEmpty().MaximumLength(120);
+        RuleFor(x => x.Email).NotEmpty().EmailAddress();
+        RuleFor(x => x.Token).NotEmpty();
+        RuleFor(x => x.NewPassword).NotEmpty().MinimumLength(8);
+    }
+}
+
+public class ChangePasswordRequestValidator : AbstractValidator<ChangePasswordRequest>
+{
+    public ChangePasswordRequestValidator()
+    {
+        RuleFor(x => x.CurrentPassword).NotEmpty().MinimumLength(8);
+        RuleFor(x => x.NewPassword).NotEmpty().MinimumLength(8);
+    }
+}
+
 public class UpdateCompanyProfileRequestValidator : AbstractValidator<UpdateCompanyProfileRequest>
 {
     public UpdateCompanyProfileRequestValidator()
@@ -69,6 +98,14 @@ public class CreateUserRequestValidator : AbstractValidator<CreateUserRequest>
         RuleFor(x => x.Email).NotEmpty().EmailAddress();
         RuleFor(x => x.Password).NotEmpty().MinimumLength(8);
         RuleFor(x => x.Role).NotEmpty();
+    }
+}
+
+public class AdminResetUserPasswordRequestValidator : AbstractValidator<AdminResetUserPasswordRequest>
+{
+    public AdminResetUserPasswordRequestValidator()
+    {
+        RuleFor(x => x.NewPassword).NotEmpty().MinimumLength(8);
     }
 }
 
@@ -241,6 +278,24 @@ public class CreateLeaveRequestRequestValidator : AbstractValidator<CreateLeaveR
         RuleFor(x => x.StartDate).NotEmpty();
         RuleFor(x => x.EndDate).NotEmpty().GreaterThanOrEqualTo(x => x.StartDate);
         RuleFor(x => x.Reason).NotEmpty().MaximumLength(500);
+    }
+}
+
+public class LeaveBalancePreviewRequestValidator : AbstractValidator<LeaveBalancePreviewRequest>
+{
+    public LeaveBalancePreviewRequestValidator()
+    {
+        RuleFor(x => x.LeaveType).Must(t => t is LeaveType.Annual or LeaveType.Sick or LeaveType.Unpaid);
+        RuleFor(x => x.StartDate).NotEmpty();
+        RuleFor(x => x.EndDate).NotEmpty().GreaterThanOrEqualTo(x => x.StartDate);
+    }
+}
+
+public class ApproveLeaveRequestRequestValidator : AbstractValidator<ApproveLeaveRequestRequest>
+{
+    public ApproveLeaveRequestRequestValidator()
+    {
+        RuleFor(x => x.Comment).MaximumLength(500);
     }
 }
 

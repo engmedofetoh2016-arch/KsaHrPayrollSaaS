@@ -2,7 +2,9 @@ import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
 import { roleGuard } from './core/guards/role.guard';
 import { AttendancePageComponent } from './features/attendance/attendance-page.component';
+import { ChangePasswordPageComponent } from './features/auth/change-password-page.component';
 import { LoginPageComponent } from './features/auth/login-page.component';
+import { ResetPasswordPageComponent } from './features/auth/reset-password-page.component';
 import { CompanyPageComponent } from './features/company/company-page.component';
 import { CompliancePageComponent } from './features/compliance/compliance-page.component';
 import { DashboardPageComponent } from './features/dashboard/dashboard-page.component';
@@ -22,10 +24,15 @@ export const routes: Routes = [
     component: LoginPageComponent
   },
   {
+    path: 'reset-password',
+    component: ResetPasswordPageComponent
+  },
+  {
     path: '',
     component: ShellLayoutComponent,
     canActivate: [authGuard],
     children: [
+      { path: 'change-password', component: ChangePasswordPageComponent },
       { path: 'dashboard', component: DashboardPageComponent },
       { path: 'compliance', component: CompliancePageComponent, canActivate: [roleGuard], data: { roles: ['Owner', 'Admin', 'HR', 'Manager'] } },
       { path: 'company', component: CompanyPageComponent, canActivate: [roleGuard], data: { roles: ['Owner', 'Admin', 'HR'] } },

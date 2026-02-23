@@ -49,11 +49,12 @@ export class LeaveApprovalsPageComponent implements OnInit {
 
   approve(requestId: string) {
     if (this.busy()) return;
+    const comment = window.prompt(this.i18n.text('Optional approval comment', 'Optional approval comment')) ?? '';
     this.busy.set(true);
     this.message.set('');
     this.error.set('');
 
-    this.leaveService.approveRequest(requestId).subscribe({
+    this.leaveService.approveRequest(requestId, comment.trim()).subscribe({
       next: () => {
         this.busy.set(false);
         this.message.set('Leave request approved.');

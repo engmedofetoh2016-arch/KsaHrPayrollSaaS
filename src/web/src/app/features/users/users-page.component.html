@@ -1,13 +1,13 @@
 <section class="panel">
-  <h2>{{ i18n.text('Users', 'المستخدمون') }}</h2>
+  <h2>{{ i18n.text('Users', 'Users') }}</h2>
 
   <form class="form-grid" [formGroup]="form" (ngSubmit)="create()">
-    <label>{{ i18n.text('First Name', 'الاسم الأول') }}<input formControlName="firstName" /></label>
-    <label>{{ i18n.text('Last Name', 'اسم العائلة') }}<input formControlName="lastName" /></label>
-    <label>{{ i18n.text('Email', 'البريد الإلكتروني') }}<input type="email" formControlName="email" /></label>
-    <label>{{ i18n.text('Password', 'كلمة المرور') }}<input type="password" formControlName="password" /></label>
+    <label>{{ i18n.text('First Name', 'First Name') }}<input formControlName="firstName" /></label>
+    <label>{{ i18n.text('Last Name', 'Last Name') }}<input formControlName="lastName" /></label>
+    <label>{{ i18n.text('Email', 'Email') }}<input type="email" formControlName="email" /></label>
+    <label>{{ i18n.text('Password', 'Password') }}<input type="password" formControlName="password" /></label>
     <label>
-      {{ i18n.text('Role', 'الدور') }}
+      {{ i18n.text('Role', 'Role') }}
       <select formControlName="role">
         @for (role of roles; track role) {
           <option [value]="role">{{ role }}</option>
@@ -16,7 +16,7 @@
     </label>
     <div class="actions">
       <button type="submit" [disabled]="saving()">
-        {{ saving() ? i18n.text('Creating...', 'جاري الإنشاء...') : i18n.text('Create User', 'إنشاء مستخدم') }}
+        {{ saving() ? i18n.text('Creating...', 'Creating...') : i18n.text('Create User', 'Create User') }}
       </button>
     </div>
   </form>
@@ -24,22 +24,53 @@
   @if (message()) { <p class="ok">{{ message() }}</p> }
   @if (error()) { <p class="error">{{ error() }}</p> }
 
-  <h3>{{ i18n.text('Existing Users', 'المستخدمون الحاليون') }}</h3>
+  <h3>{{ i18n.text('Existing Users', 'Existing Users') }}</h3>
   @if (loading()) {
-    <p>{{ i18n.text('Loading...', 'جاري التحميل...') }}</p>
+    <p>{{ i18n.text('Loading...', 'Loading...') }}</p>
   } @else {
     <table class="responsive-table">
       <thead>
         <tr>
-          <th>{{ i18n.text('Name', 'الاسم') }}</th>
-          <th>{{ i18n.text('Email', 'البريد الإلكتروني') }}</th>
+          <th>{{ i18n.text('Name', 'Name') }}</th>
+          <th>{{ i18n.text('Email', 'Email') }}</th>
+          <th>{{ i18n.text('Login Status', 'Login Status') }}</th>
+          <th>{{ i18n.text('Action', 'Action') }}</th>
         </tr>
       </thead>
       <tbody>
         @for (user of users(); track user.id) {
           <tr>
-            <td [attr.data-label]="i18n.text('Name', 'الاسم')">{{ user.firstName }} {{ user.lastName }}</td>
-            <td [attr.data-label]="i18n.text('Email', 'البريد الإلكتروني')">{{ user.email }}</td>
+            <td [attr.data-label]="i18n.text('Name', 'Name')">{{ user.firstName }} {{ user.lastName }}</td>
+            <td [attr.data-label]="i18n.text('Email', 'Email')">{{ user.email }}</td>
+            <td [attr.data-label]="i18n.text('Login Status', 'Login Status')">
+              @if (isDisabled(user)) {
+                <span class="badge disabled">{{ i18n.text('Disabled', 'Disabled') }}</span>
+              } @else if (isLocked(user)) {
+                <span class="badge locked">{{ i18n.text('Locked', 'Locked') }}</span>
+              } @else {
+                <span class="badge active">{{ i18n.text('Active', 'Active') }}</span>
+              }
+            </td>
+            <td [attr.data-label]="i18n.text('Action', 'Action')">
+              <button type="button" [disabled]="!isLocked(user) || unlockingUserId() === user.id || togglingUserId() === user.id" (click)="unlock(user)">
+                {{ unlockingUserId() === user.id ? i18n.text('Unlocking...', 'Unlocking...') : i18n.text('Unlock', 'Unlock') }}
+              </button>
+              <button type="button" [disabled]="resettingPasswordUserId() === user.id || togglingUserId() === user.id || unlockingUserId() === user.id" (click)="adminResetPassword(user)">
+                {{ resettingPasswordUserId() === user.id ? i18n.text('Resetting...', 'Resetting...') : i18n.text('Reset Password', 'Reset Password') }}
+              </button>
+              @if (isDisabled(user)) {
+                <button type="button" [disabled]="togglingUserId() === user.id || unlockingUserId() === user.id" (click)="enable(user)">
+                  {{ togglingUserId() === user.id ? i18n.text('Enabling...', 'Enabling...') : i18n.text('Enable', 'Enable') }}
+                </button>
+              } @else {
+                <button type="button" [disabled]="togglingUserId() === user.id || unlockingUserId() === user.id" (click)="disable(user)">
+                  {{ togglingUserId() === user.id ? i18n.text('Disabling...', 'Disabling...') : i18n.text('Disable', 'Disable') }}
+                </button>
+              }
+              @if (isLocked(user) && !isDisabled(user) && user.accessFailedCount > 0) {
+                <span class="attempts">{{ i18n.text('Failed attempts', 'Failed attempts') }}: {{ user.accessFailedCount }}</span>
+              }
+            </td>
           </tr>
         }
       </tbody>

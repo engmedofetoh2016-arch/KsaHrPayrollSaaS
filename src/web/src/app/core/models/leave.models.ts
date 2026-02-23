@@ -14,12 +14,42 @@ export interface LeaveRequest {
   createdAtUtc: string;
 }
 
+export interface LeaveAttachment {
+  id: string;
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  createdAtUtc: string;
+  employeeId: string;
+}
+
 export interface CreateLeaveRequestPayload {
   employeeId?: string;
   leaveType: number;
   startDate: string;
   endDate: string;
   reason: string;
+}
+
+export interface LeaveBalancePreviewRequest {
+  employeeId?: string;
+  leaveType: number;
+  startDate: string;
+  endDate: string;
+}
+
+export interface LeaveBalancePreviewResult {
+  employeeId: string;
+  leaveType: number;
+  startDate: string;
+  endDate: string;
+  requestedDays: number;
+  allocatedDays: number;
+  usedDays: number;
+  remainingBefore: number;
+  remainingAfter: number;
+  canSubmit: boolean;
+  message: string;
 }
 
 export interface LeaveBalance {

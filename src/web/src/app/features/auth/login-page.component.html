@@ -1,38 +1,41 @@
 <section class="login-wrap">
   <button type="button" class="lang-switch" (click)="i18n.toggleLanguage()">
-    {{ i18n.isArabic() ? 'EN' : 'عربي' }}
+    {{ i18n.isArabic() ? 'EN' : 'AR' }}
   </button>
 
   <form class="card" [formGroup]="form" (ngSubmit)="onSubmit()">
-    <h1>{{ i18n.text('HR Payroll Login', 'تسجيل الدخول لنظام الموارد البشرية والرواتب') }}</h1>
+    <h1>{{ i18n.text('HR Payroll Login', 'HR Payroll Login') }}</h1>
 
     <label>
-      {{ i18n.text('Tenant Slug', 'رمز الشركة') }}
-      <input id="tenantSlug" name="tenantSlug" formControlName="tenantSlug" [placeholder]="i18n.text('e.g. acme-ksa', 'مثال: acme-ksa')" />
+      {{ i18n.text('Tenant Slug', 'Tenant Slug') }}
+      <input id="tenantSlug" name="tenantSlug" formControlName="tenantSlug" [placeholder]="i18n.text('e.g. acme-ksa', 'e.g. acme-ksa')" />
     </label>
 
     <label>
-      {{ i18n.text('Email', 'البريد الإلكتروني') }}
+      {{ i18n.text('Email', 'Email') }}
       <input id="email" name="email" type="email" formControlName="email" [placeholder]="i18n.text('owner@company.com', 'owner@company.com')" />
     </label>
 
     <label>
-      {{ i18n.text('Password', 'كلمة المرور') }}
+      {{ i18n.text('Password', 'Password') }}
       <input id="password" name="password" type="password" formControlName="password" [placeholder]="i18n.text('********', '********')" />
     </label>
+    <p class="hint">{{ i18n.text('Password must be at least 8 characters and include uppercase, lowercase, and a number.', 'Password must be at least 8 characters and include uppercase, lowercase, and a number.') }}</p>
 
     @if (error()) {
       <p class="error">{{ error() }}</p>
     }
 
     <button type="submit" [disabled]="loading()">
-      {{ loading() ? i18n.text('Signing in...', 'جاري تسجيل الدخول...') : i18n.text('Sign in', 'تسجيل الدخول') }}
+      {{ loading() ? i18n.text('Signing in...', 'Signing in...') : i18n.text('Sign in', 'Sign in') }}
+    </button>
+
+    <button type="button" class="secondary" (click)="toggleForgotPassword()">
+      {{ showForgot() ? i18n.text('Hide Forgot Password', 'Hide Forgot Password') : i18n.text('Forgot Password?', 'Forgot Password?') }}
     </button>
 
     <button type="button" class="secondary" (click)="toggleSignUp()">
-      {{ showSignUp()
-          ? i18n.text('Hide Sign Up', 'إخفاء التسجيل')
-          : i18n.text('Create New Company Account', 'إنشاء حساب شركة جديد') }}
+      {{ showSignUp() ? i18n.text('Hide Sign Up', 'Hide Sign Up') : i18n.text('Create New Company Account', 'Create New Company Account') }}
     </button>
 
     @if (signupMessage()) {
@@ -40,26 +43,46 @@
     }
   </form>
 
+  @if (showForgot()) {
+    <form class="card signup-card" [formGroup]="forgotForm" (ngSubmit)="onForgotSubmit()">
+      <h2>{{ i18n.text('Forgot Password', 'Forgot Password') }}</h2>
+      <label>{{ i18n.text('Tenant Slug', 'Tenant Slug') }} <input formControlName="tenantSlug" /></label>
+      <label>{{ i18n.text('Email', 'Email') }} <input type="email" formControlName="email" /></label>
+
+      @if (forgotError()) {
+        <p class="error">{{ forgotError() }}</p>
+      }
+      @if (forgotMessage()) {
+        <p class="ok">{{ forgotMessage() }}</p>
+      }
+
+      <button type="submit" [disabled]="forgotLoading()">
+        {{ forgotLoading() ? i18n.text('Sending...', 'Sending...') : i18n.text('Send Reset Link', 'Send Reset Link') }}
+      </button>
+    </form>
+  }
+
   @if (showSignUp()) {
     <form class="card signup-card" [formGroup]="signupForm" (ngSubmit)="onSignUpSubmit()">
-      <h2>{{ i18n.text('Sign Up', 'تسجيل شركة جديدة') }}</h2>
+      <h2>{{ i18n.text('Sign Up', 'Sign Up') }}</h2>
 
-      <label>{{ i18n.text('Tenant Name', 'اسم الشركة') }} <input id="tenantName" name="tenantName" formControlName="tenantName" [placeholder]="i18n.text('Acme HR', 'شركة أكمي')" /></label>
-      <label>{{ i18n.text('Tenant Slug', 'رمز الشركة') }} <input id="slug" name="slug" formControlName="slug" [placeholder]="i18n.text('acme-ksa', 'acme-ksa')" /></label>
-      <label>{{ i18n.text('Company Legal Name', 'الاسم القانوني للشركة') }} <input id="companyLegalName" name="companyLegalName" formControlName="companyLegalName" [placeholder]="i18n.text('Acme LLC', 'شركة أكمي المحدودة')" /></label>
-      <label>{{ i18n.text('Currency', 'العملة') }} <input id="currencyCode" name="currencyCode" formControlName="currencyCode" [placeholder]="i18n.text('SAR', 'SAR')" /></label>
-      <label>{{ i18n.text('Default Pay Day', 'يوم صرف الرواتب') }} <input id="defaultPayDay" name="defaultPayDay" type="number" formControlName="defaultPayDay" min="1" max="31" /></label>
-      <label>{{ i18n.text('Owner First Name', 'الاسم الأول للمالك') }} <input id="ownerFirstName" name="ownerFirstName" formControlName="ownerFirstName" /></label>
-      <label>{{ i18n.text('Owner Last Name', 'اسم العائلة للمالك') }} <input id="ownerLastName" name="ownerLastName" formControlName="ownerLastName" /></label>
-      <label>{{ i18n.text('Owner Email', 'بريد المالك') }} <input id="ownerEmail" name="ownerEmail" type="email" formControlName="ownerEmail" [placeholder]="i18n.text('owner@company.com', 'owner@company.com')" /></label>
-      <label>{{ i18n.text('Owner Password', 'كلمة مرور المالك') }} <input id="ownerPassword" name="ownerPassword" type="password" formControlName="ownerPassword" [placeholder]="i18n.text('********', '********')" /></label>
+      <label>{{ i18n.text('Tenant Name', 'Tenant Name') }} <input id="tenantName" name="tenantName" formControlName="tenantName" [placeholder]="i18n.text('Acme HR', 'Acme HR')" /></label>
+      <label>{{ i18n.text('Tenant Slug', 'Tenant Slug') }} <input id="slug" name="slug" formControlName="slug" [placeholder]="i18n.text('acme-ksa', 'acme-ksa')" /></label>
+      <label>{{ i18n.text('Company Legal Name', 'Company Legal Name') }} <input id="companyLegalName" name="companyLegalName" formControlName="companyLegalName" [placeholder]="i18n.text('Acme LLC', 'Acme LLC')" /></label>
+      <label>{{ i18n.text('Currency', 'Currency') }} <input id="currencyCode" name="currencyCode" formControlName="currencyCode" [placeholder]="i18n.text('SAR', 'SAR')" /></label>
+      <label>{{ i18n.text('Default Pay Day', 'Default Pay Day') }} <input id="defaultPayDay" name="defaultPayDay" type="number" formControlName="defaultPayDay" min="1" max="31" /></label>
+      <label>{{ i18n.text('Owner First Name', 'Owner First Name') }} <input id="ownerFirstName" name="ownerFirstName" formControlName="ownerFirstName" /></label>
+      <label>{{ i18n.text('Owner Last Name', 'Owner Last Name') }} <input id="ownerLastName" name="ownerLastName" formControlName="ownerLastName" /></label>
+      <label>{{ i18n.text('Owner Email', 'Owner Email') }} <input id="ownerEmail" name="ownerEmail" type="email" formControlName="ownerEmail" [placeholder]="i18n.text('owner@company.com', 'owner@company.com')" /></label>
+      <label>{{ i18n.text('Owner Password', 'Owner Password') }} <input id="ownerPassword" name="ownerPassword" type="password" formControlName="ownerPassword" [placeholder]="i18n.text('********', '********')" /></label>
+      <p class="hint">{{ i18n.text('Password must be at least 8 characters and include uppercase, lowercase, and a number.', 'Password must be at least 8 characters and include uppercase, lowercase, and a number.') }}</p>
 
       @if (signupError()) {
         <p class="error">{{ signupError() }}</p>
       }
 
       <button type="submit" [disabled]="signupLoading()">
-        {{ signupLoading() ? i18n.text('Creating account...', 'جاري إنشاء الحساب...') : i18n.text('Sign Up', 'تسجيل') }}
+        {{ signupLoading() ? i18n.text('Creating account...', 'Creating account...') : i18n.text('Sign Up', 'Sign Up') }}
       </button>
     </form>
   }
