@@ -15,9 +15,9 @@
     <label>{{ i18n.text('Employee Number', 'الرقم الوظيفي') }}<input formControlName="employeeNumber" /></label>
     <label>{{ i18n.text('Bank Name', 'اسم البنك') }}<input formControlName="bankName" /></label>
     <label>{{ i18n.text('Bank IBAN', 'الآيبان') }}<input formControlName="bankIban" /></label>
-    <label>{{ i18n.text('Iqama Number', '??? ???????') }}<input formControlName="iqamaNumber" /></label>
-    <label>{{ i18n.text('Iqama Expiry Date', '????? ?????? ???????') }}<input type="date" formControlName="iqamaExpiryDate" /></label>
-    <label>{{ i18n.text('Work Permit Expiry', '????? ?????? ???? ?????') }}<input type="date" formControlName="workPermitExpiryDate" /></label>
+    <label>{{ i18n.text('Iqama Number', 'رقم الإقامة') }}<input formControlName="iqamaNumber" /></label>
+    <label>{{ i18n.text('Iqama Expiry Date', 'تاريخ انتهاء الإقامة') }}<input type="date" formControlName="iqamaExpiryDate" /></label>
+    <label>{{ i18n.text('Work Permit Expiry', 'تاريخ انتهاء رخصة العمل') }}<input type="date" formControlName="workPermitExpiryDate" /></label>
     <div class="actions">
       <button type="submit" [disabled]="saving()">
         {{ saving() ? i18n.text('Creating...', 'جاري الإنشاء...') : i18n.text('Create Employee', 'إنشاء موظف') }}
@@ -42,9 +42,9 @@
           <th>{{ i18n.text('Base Salary', 'الراتب الأساسي') }}</th>
           <th>{{ i18n.text('Employee #', 'الرقم الوظيفي') }}</th>
           <th>{{ i18n.text('IBAN', 'الآيبان') }}</th>
-          <th>{{ i18n.text('Iqama #', '??? ???????') }}</th>
-          <th>{{ i18n.text('Iqama Expiry', '?????? ???????') }}</th>
-          <th>{{ i18n.text('Work Permit Expiry', '?????? ???? ?????') }}</th>
+          <th>{{ i18n.text('Iqama #', 'رقم الإقامة') }}</th>
+          <th>{{ i18n.text('Iqama Expiry', 'انتهاء الإقامة') }}</th>
+          <th>{{ i18n.text('Work Permit Expiry', 'انتهاء رخصة العمل') }}</th>
           <th>{{ i18n.text('Saudi', 'سعودي') }}</th>
           <th>{{ i18n.text('GOSI', 'التأمينات') }}</th>
           <th>{{ i18n.text('GOSI Wage Base', 'وعاء التأمينات') }}</th>
