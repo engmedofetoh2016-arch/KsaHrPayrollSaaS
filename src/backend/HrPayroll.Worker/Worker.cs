@@ -411,11 +411,11 @@ public class Worker : BackgroundService
                 {
                     col.Spacing(6);
                     col.Item().Text($"{profile.LegalName}").FontSize(18).SemiBold();
-                    col.Item().Text("Final Settlement Statement / بيان التسوية النهائية").FontSize(13).SemiBold();
+                    col.Item().Text("Final Settlement Letter / بيان التسوية النهائية").FontSize(13).SemiBold();
                     col.Item().Text($"Employee / الموظف: {employee.FirstName} {employee.LastName}");
-                    col.Item().Text($"Start Date / تاريخ المباشرة: {employee.StartDate:yyyy-MM-dd}");
-                    col.Item().Text($"Termination Date / تاريخ نهاية الخدمة: {terminationDate:yyyy-MM-dd}");
-                    col.Item().Text($"Period / الفترة: {targetYear}-{targetMonth:00}");
+                    col.Item().Text($"Start Date / تاريخ المباشرة: {employee.StartDate:dd-MM-yyyy}");
+                    col.Item().Text($"Termination Date / تاريخ نهاية الخدمة: {terminationDate:dd-MM-yyyy}");
+                    col.Item().Text($"Period / الفترة: {targetMonth:00}-{targetYear}");
                     col.Item().Text($"Currency / العملة: {profile.CurrencyCode}");
                     col.Item().PaddingVertical(8).LineHorizontal(1);
                     col.Item().Text($"EOS Amount / مكافأة نهاية الخدمة: {eosAmount:F2}");
@@ -1019,3 +1019,4 @@ public class Worker : BackgroundService
         decimal AdditionalManualDeduction,
         string? Notes);
 }
+

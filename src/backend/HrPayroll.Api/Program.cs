@@ -1411,9 +1411,9 @@ api.MapPost("/employees/{employeeId:guid}/final-settlement/export-csv", [Authori
     var csv = new StringBuilder();
     csv.AppendLine("Final Settlement Statement");
     csv.AppendLine($"Employee,{employee.FirstName} {employee.LastName}");
-    csv.AppendLine($"Start Date,{employee.StartDate:yyyy-MM-dd}");
-    csv.AppendLine($"Termination Date,{request.TerminationDate:yyyy-MM-dd}");
-    csv.AppendLine($"Period,{targetYear}-{targetMonth:00}");
+    csv.AppendLine($"Start Date,{employee.StartDate:dd-MM-yyyy}");
+    csv.AppendLine($"Termination Date,{request.TerminationDate:dd-MM-yyyy}");
+    csv.AppendLine($"Period,{targetMonth:00}-{targetYear}");
     csv.AppendLine($"Currency,{profile.CurrencyCode}");
     csv.AppendLine();
     csv.AppendLine("Item,Amount");
@@ -1518,11 +1518,11 @@ api.MapPost("/employees/{employeeId:guid}/final-settlement/export-pdf", [Authori
             {
                 col.Spacing(6);
                 col.Item().Text($"{profile.LegalName}").FontSize(18).SemiBold();
-                col.Item().Text("Final Settlement Statement / بيان التسوية النهائية").FontSize(13).SemiBold();
+                col.Item().Text("Final Settlement Letter / بيان التسوية النهائية").FontSize(13).SemiBold();
                 col.Item().Text($"Employee / الموظف: {employee.FirstName} {employee.LastName}");
-                col.Item().Text($"Start Date / تاريخ المباشرة: {employee.StartDate:yyyy-MM-dd}");
-                col.Item().Text($"Termination Date / تاريخ نهاية الخدمة: {request.TerminationDate:yyyy-MM-dd}");
-                col.Item().Text($"Period / الفترة: {targetYear}-{targetMonth:00}");
+                col.Item().Text($"Start Date / تاريخ المباشرة: {employee.StartDate:dd-MM-yyyy}");
+                col.Item().Text($"Termination Date / تاريخ نهاية الخدمة: {request.TerminationDate:dd-MM-yyyy}");
+                col.Item().Text($"Period / الفترة: {targetMonth:00}-{targetYear}");
                 col.Item().Text($"Currency / العملة: {profile.CurrencyCode}");
                 col.Item().PaddingVertical(8).LineHorizontal(1);
                 col.Item().Text($"EOS Amount / مكافأة نهاية الخدمة: {eosAmount:F2}");
@@ -5664,3 +5664,4 @@ public sealed record SmartAlertResponse(
     string Message,
     int? DaysLeft,
     string? DueDate);
+
