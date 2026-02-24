@@ -4,6 +4,7 @@ import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { LeaveAttachment, LeaveBalance, LeaveBalancePreviewResult, LeaveRequest } from '../../core/models/leave.models';
 import { AuthService } from '../../core/services/auth.service';
+import { I18nService } from '../../core/services/i18n.service';
 import { LeaveService } from '../../core/services/leave.service';
 import { getApiErrorMessage } from '../../core/utils/api-error.util';
 
@@ -18,6 +19,7 @@ export class MyLeavePageComponent implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly leaveService = inject(LeaveService);
   private readonly authService = inject(AuthService);
+  readonly i18n = inject(I18nService);
 
   readonly requests = signal<LeaveRequest[]>([]);
   readonly balances = signal<LeaveBalance[]>([]);
@@ -187,26 +189,26 @@ export class MyLeavePageComponent implements OnInit {
   leaveTypeLabel(value: number) {
     switch (value) {
       case 1:
-        return 'Annual';
+        return this.i18n.text('Annual', 'سنوية');
       case 2:
-        return 'Sick';
+        return this.i18n.text('Sick', 'مرضية');
       case 3:
-        return 'Unpaid';
+        return this.i18n.text('Unpaid', 'غير مدفوعة');
       default:
-        return 'Unknown';
+        return this.i18n.text('Unknown', 'غير معروف');
     }
   }
 
   statusLabel(value: number) {
     switch (value) {
       case 1:
-        return 'Pending';
+        return this.i18n.text('Pending', 'معلق');
       case 2:
-        return 'Approved';
+        return this.i18n.text('Approved', 'معتمد');
       case 3:
-        return 'Rejected';
+        return this.i18n.text('Rejected', 'مرفوض');
       default:
-        return 'Unknown';
+        return this.i18n.text('Unknown', 'غير معروف');
     }
   }
 

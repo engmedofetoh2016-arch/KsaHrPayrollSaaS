@@ -1,50 +1,50 @@
 <section class="panel">
-  <h2>My Leave</h2>
+  <h2>{{ i18n.text('My Leave', 'إجازاتي') }}</h2>
   @if (!isEmployee()) {
-    <p class="hint">You can still submit leave requests if your account email matches an employee profile.</p>
+    <p class="hint">{{ i18n.text('You can still submit leave requests if your account email matches an employee profile.', 'لا يزال بإمكانك تقديم طلبات الإجازة إذا كان بريد حسابك يطابق ملف موظف.') }}</p>
   }
 
   <div class="grid">
     <form class="card" [formGroup]="requestForm" (ngSubmit)="submitRequest()">
-      <h3>Request Leave</h3>
+      <h3>{{ i18n.text('Request Leave', 'طلب إجازة') }}</h3>
       <label>
-        Leave Type
+        {{ i18n.text('Leave Type', 'نوع الإجازة') }}
         <select formControlName="leaveType">
-          <option [value]="1">Annual</option>
-          <option [value]="2">Sick</option>
-          <option [value]="3">Unpaid</option>
+          <option [value]="1">{{ i18n.text('Annual', 'سنوية') }}</option>
+          <option [value]="2">{{ i18n.text('Sick', 'مرضية') }}</option>
+          <option [value]="3">{{ i18n.text('Unpaid', 'غير مدفوعة') }}</option>
         </select>
       </label>
-      <label>Start Date <input type="date" formControlName="startDate" /></label>
-      <label>End Date <input type="date" formControlName="endDate" /></label>
+      <label>{{ i18n.text('Start Date', 'تاريخ البداية') }} <input type="date" formControlName="startDate" /></label>
+      <label>{{ i18n.text('End Date', 'تاريخ النهاية') }} <input type="date" formControlName="endDate" /></label>
       <label>
-        Reason
+        {{ i18n.text('Reason', 'السبب') }}
         <textarea rows="3" formControlName="reason"></textarea>
       </label>
       <div class="row-actions">
-        <button type="button" [disabled]="previewLoading()" (click)="previewBalance()">{{ previewLoading() ? 'Previewing...' : 'Preview Balance' }}</button>
-        <button type="submit" [disabled]="busy()">Submit</button>
+        <button type="button" [disabled]="previewLoading()" (click)="previewBalance()">{{ previewLoading() ? i18n.text('Previewing...', 'جارٍ المعاينة...') : i18n.text('Preview Balance', 'معاينة الرصيد') }}</button>
+        <button type="submit" [disabled]="busy()">{{ i18n.text('Submit', 'إرسال') }}</button>
       </div>
 
       @if (preview(); as p) {
         <div class="preview" [class.error-preview]="!p.canSubmit">
-          <p>Requested Days: {{ p.requestedDays }}</p>
-          <p>Remaining Before: {{ p.remainingBefore | number: '1.0-2' }}</p>
-          <p>Remaining After: {{ p.remainingAfter | number: '1.0-2' }}</p>
+          <p>{{ i18n.text('Requested Days', 'الأيام المطلوبة') }}: {{ p.requestedDays }}</p>
+          <p>{{ i18n.text('Remaining Before', 'المتبقي قبل الطلب') }}: {{ p.remainingBefore | number: '1.0-2' }}</p>
+          <p>{{ i18n.text('Remaining After', 'المتبقي بعد الطلب') }}: {{ p.remainingAfter | number: '1.0-2' }}</p>
           <p>{{ p.message }}</p>
         </div>
       }
     </form>
 
     <div class="card">
-      <h3>Leave Balance ({{ currentYear() }})</h3>
+      <h3>{{ i18n.text('Leave Balance', 'رصيد الإجازات') }} ({{ currentYear() }})</h3>
       <table>
         <thead>
           <tr>
-            <th>Type</th>
-            <th>Allocated</th>
-            <th>Used</th>
-            <th>Remaining</th>
+            <th>{{ i18n.text('Type', 'النوع') }}</th>
+            <th>{{ i18n.text('Allocated', 'المخصص') }}</th>
+            <th>{{ i18n.text('Used', 'المستخدم') }}</th>
+            <th>{{ i18n.text('Remaining', 'المتبقي') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -64,17 +64,17 @@
   @if (message()) { <p class="ok">{{ message() }}</p> }
   @if (error()) { <p class="error">{{ error() }}</p> }
 
-  <h3>Request History</h3>
+  <h3>{{ i18n.text('Request History', 'سجل الطلبات') }}</h3>
   <table>
     <thead>
       <tr>
-        <th>Type</th>
-        <th>Start</th>
-        <th>End</th>
-        <th>Days</th>
-        <th>Status</th>
-        <th>Reason</th>
-        <th>Attachments</th>
+        <th>{{ i18n.text('Type', 'النوع') }}</th>
+        <th>{{ i18n.text('Start', 'البداية') }}</th>
+        <th>{{ i18n.text('End', 'النهاية') }}</th>
+        <th>{{ i18n.text('Days', 'الأيام') }}</th>
+        <th>{{ i18n.text('Status', 'الحالة') }}</th>
+        <th>{{ i18n.text('Reason', 'السبب') }}</th>
+        <th>{{ i18n.text('Attachments', 'المرفقات') }}</th>
       </tr>
     </thead>
     <tbody>
@@ -88,20 +88,20 @@
           <td>
             {{ request.reason }}
             @if (request.status === 3 && request.rejectionReason) {
-              <div class="reject">Rejected: {{ request.rejectionReason }}</div>
+              <div class="reject">{{ i18n.text('Rejected:', 'مرفوض:') }} {{ request.rejectionReason }}</div>
             } @else if (request.status === 2 && request.rejectionReason) {
-              <div class="reject">Review Comment: {{ request.rejectionReason }}</div>
+              <div class="reject">{{ i18n.text('Review Comment:', 'تعليق المراجعة:') }} {{ request.rejectionReason }}</div>
             }
           </td>
           <td>
             <div class="row-actions">
-              <button type="button" (click)="selectAttachments(request.id)">{{ selectedRequestIdForAttachments() === request.id ? 'Hide' : 'View' }}</button>
+              <button type="button" (click)="selectAttachments(request.id)">{{ selectedRequestIdForAttachments() === request.id ? i18n.text('Hide', 'إخفاء') : i18n.text('View', 'عرض') }}</button>
               <input type="file" (change)="uploadAttachment(request.id, $event)" [disabled]="attachmentBusyRequestId() === request.id" />
             </div>
             @if (selectedRequestIdForAttachments() === request.id) {
               <div class="attachment-list">
                 @if (attachments().length === 0) {
-                  <span>No attachments</span>
+                  <span>{{ i18n.text('No attachments', 'لا توجد مرفقات') }}</span>
                 } @else {
                   @for (file of attachments(); track file.id) {
                     <div>

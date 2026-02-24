@@ -7,7 +7,7 @@
         <a routerLink="/compliance" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Compliance Center', 'مركز الالتزام') }}</a>
       }
       @if (canAccessSmartAlerts()) {
-        <a routerLink="/smart-alerts" routerLinkActive="active" (click)="closeMobileNav()">Smart Alerts</a>
+        <a routerLink="/smart-alerts" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Smart Alerts', 'التنبيهات الذكية') }}</a>
       }
       @if (canAccessCompany()) {
         <a routerLink="/company" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Company', 'الشركة') }}</a>
@@ -18,13 +18,13 @@
       @if (canAccessFinalSettlement()) {
         <a routerLink="/final-settlement" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Final Settlement', 'التسوية النهائية') }}</a>
       }
-      <a routerLink="/leave/my" routerLinkActive="active" (click)="closeMobileNav()">My Leave</a>
+      <a routerLink="/leave/my" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('My Leave', 'إجازاتي') }}</a>
       @if (isEmployee()) {
         <a routerLink="/employee/profile" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('My Profile', 'ملفي الشخصي') }}</a>
         <a routerLink="/employee/payslips" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('My Payslips', 'قسائم رواتبي') }}</a>
       }
       @if (canApproveLeave()) {
-        <a routerLink="/leave/approvals" routerLinkActive="active" (click)="closeMobileNav()">Leave Approvals</a>
+        <a routerLink="/leave/approvals" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Leave Approvals', 'موافقات الإجازات') }}</a>
       }
       @if (canAccessAttendance()) {
         <a routerLink="/attendance" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Attendance', 'الحضور') }}</a>

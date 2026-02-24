@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { LeaveRequest } from '../../core/models/leave.models';
+import { I18nService } from '../../core/services/i18n.service';
 import { LeaveService } from '../../core/services/leave.service';
 import { getApiErrorMessage } from '../../core/utils/api-error.util';
 
@@ -13,6 +14,7 @@ import { getApiErrorMessage } from '../../core/utils/api-error.util';
 })
 export class LeaveApprovalsPageComponent implements OnInit {
   private readonly leaveService = inject(LeaveService);
+  readonly i18n = inject(I18nService);
 
   readonly requests = signal<LeaveRequest[]>([]);
   readonly loading = signal(false);
@@ -47,7 +49,7 @@ export class LeaveApprovalsPageComponent implements OnInit {
 
   approve(requestId: string) {
     if (this.busy()) return;
-    const comment = window.prompt('Optional approval comment') ?? '';
+    const comment = window.prompt(this.i18n.text('Optional approval comment', 'تعليق اعتماد اختياري')) ?? '';
     this.busy.set(true);
     this.message.set('');
     this.error.set('');
@@ -67,7 +69,7 @@ export class LeaveApprovalsPageComponent implements OnInit {
 
   reject(requestId: string) {
     if (this.busy()) return;
-    const reason = window.prompt('Enter rejection reason');
+    const reason = window.prompt(this.i18n.text('Enter rejection reason', 'أدخل سبب الرفض'));
     if (!reason || !reason.trim()) return;
 
     this.busy.set(true);
@@ -90,26 +92,26 @@ export class LeaveApprovalsPageComponent implements OnInit {
   leaveTypeLabel(value: number) {
     switch (value) {
       case 1:
-        return 'Annual';
+        return this.i18n.text('Annual', 'سنوية');
       case 2:
-        return 'Sick';
+        return this.i18n.text('Sick', 'مرضية');
       case 3:
-        return 'Unpaid';
+        return this.i18n.text('Unpaid', 'غير مدفوعة');
       default:
-        return 'Unknown';
+        return this.i18n.text('Unknown', 'غير معروف');
     }
   }
 
   statusLabel(value: number) {
     switch (value) {
       case 1:
-        return 'Pending';
+        return this.i18n.text('Pending', 'معلق');
       case 2:
-        return 'Approved';
+        return this.i18n.text('Approved', 'معتمد');
       case 3:
-        return 'Rejected';
+        return this.i18n.text('Rejected', 'مرفوض');
       default:
-        return 'Unknown';
+        return this.i18n.text('Unknown', 'غير معروف');
     }
   }
 }

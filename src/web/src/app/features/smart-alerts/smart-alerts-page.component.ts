@@ -3,6 +3,7 @@ import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { catchError, of } from 'rxjs';
 import { SmartAlertItem } from '../../core/models/smart-alert.models';
+import { I18nService } from '../../core/services/i18n.service';
 import { SmartAlertsService } from '../../core/services/smart-alerts.service';
 
 @Component({
@@ -14,6 +15,7 @@ import { SmartAlertsService } from '../../core/services/smart-alerts.service';
 })
 export class SmartAlertsPageComponent implements OnInit {
   private readonly smartAlerts = inject(SmartAlertsService);
+  readonly i18n = inject(I18nService);
 
   readonly loading = signal(false);
   readonly error = signal('');
@@ -42,7 +44,7 @@ export class SmartAlertsPageComponent implements OnInit {
       .subscribe({
         next: (response) => {
           if (!response) {
-            this.error.set('Failed to load smart alerts.');
+            this.error.set(this.i18n.text('Failed to load smart alerts.', 'فشل في تحميل التنبيهات الذكية.'));
             return;
           }
           this.items.set(Array.isArray(response.items) ? response.items : []);
@@ -61,10 +63,10 @@ export class SmartAlertsPageComponent implements OnInit {
     this.message.set('');
     this.smartAlerts.acknowledge(key, { note: 'AcknowledgedFromUi' }).subscribe({
       next: () => {
-        this.message.set('Alert acknowledged.');
+        this.message.set(this.i18n.text('Alert acknowledged.', 'تم تأكيد التنبيه.'));
         this.load();
       },
-      error: () => this.error.set('Failed to acknowledge alert.'),
+      error: () => this.error.set(this.i18n.text('Failed to acknowledge alert.', 'فشل في تأكيد التنبيه.')),
       complete: () => this.actionKey.set('')
     });
   }
@@ -79,10 +81,10 @@ export class SmartAlertsPageComponent implements OnInit {
     this.message.set('');
     this.smartAlerts.snooze(key, { days, note: 'SnoozedFromUi' }).subscribe({
       next: () => {
-        this.message.set(`Alert snoozed for ${days} days.`);
+        this.message.set(this.i18n.text(`Alert snoozed for ${days} days.`, `تم تأجيل التنبيه لمدة ${days} يومًا.`));
         this.load();
       },
-      error: () => this.error.set('Failed to snooze alert.'),
+      error: () => this.error.set(this.i18n.text('Failed to snooze alert.', 'فشل في تأجيل التنبيه.')),
       complete: () => this.actionKey.set('')
     });
   }
