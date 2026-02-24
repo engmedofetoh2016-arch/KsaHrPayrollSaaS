@@ -1,7 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { LeaveRequest } from '../../core/models/leave.models';
-import { I18nService } from '../../core/services/i18n.service';
 import { LeaveService } from '../../core/services/leave.service';
 import { getApiErrorMessage } from '../../core/utils/api-error.util';
 
@@ -14,7 +13,6 @@ import { getApiErrorMessage } from '../../core/utils/api-error.util';
 })
 export class LeaveApprovalsPageComponent implements OnInit {
   private readonly leaveService = inject(LeaveService);
-  readonly i18n = inject(I18nService);
 
   readonly requests = signal<LeaveRequest[]>([]);
   readonly loading = signal(false);
@@ -49,7 +47,7 @@ export class LeaveApprovalsPageComponent implements OnInit {
 
   approve(requestId: string) {
     if (this.busy()) return;
-    const comment = window.prompt(this.i18n.text('Optional approval comment', 'Optional approval comment')) ?? '';
+    const comment = window.prompt('Optional approval comment') ?? '';
     this.busy.set(true);
     this.message.set('');
     this.error.set('');
@@ -69,7 +67,7 @@ export class LeaveApprovalsPageComponent implements OnInit {
 
   reject(requestId: string) {
     if (this.busy()) return;
-    const reason = window.prompt(this.i18n.text('Enter rejection reason', 'أدخل سبب الرفض'));
+    const reason = window.prompt('Enter rejection reason');
     if (!reason || !reason.trim()) return;
 
     this.busy.set(true);
@@ -92,26 +90,27 @@ export class LeaveApprovalsPageComponent implements OnInit {
   leaveTypeLabel(value: number) {
     switch (value) {
       case 1:
-        return this.i18n.text('Annual', 'سنوية');
+        return 'Annual';
       case 2:
-        return this.i18n.text('Sick', 'مرضية');
+        return 'Sick';
       case 3:
-        return this.i18n.text('Unpaid', 'غير مدفوعة');
+        return 'Unpaid';
       default:
-        return this.i18n.text('Unknown', 'غير معروف');
+        return 'Unknown';
     }
   }
 
   statusLabel(value: number) {
     switch (value) {
       case 1:
-        return this.i18n.text('Pending', 'معلق');
+        return 'Pending';
       case 2:
-        return this.i18n.text('Approved', 'معتمد');
+        return 'Approved';
       case 3:
-        return this.i18n.text('Rejected', 'مرفوض');
+        return 'Rejected';
       default:
-        return this.i18n.text('Unknown', 'غير معروف');
+        return 'Unknown';
     }
   }
 }
+

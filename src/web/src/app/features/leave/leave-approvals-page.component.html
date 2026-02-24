@@ -1,11 +1,11 @@
 <section class="panel">
-  <h2>{{ i18n.text('Leave Approvals', 'Leave Approvals') }}</h2>
+  <h2>Leave Approvals</h2>
 
   <div class="actions">
-    <button type="button" [class.active]="statusFilter() === 1" (click)="setStatusFilter(1)">{{ i18n.text('Pending', 'Pending') }}</button>
-    <button type="button" [class.active]="statusFilter() === 2" (click)="setStatusFilter(2)">{{ i18n.text('Approved', 'Approved') }}</button>
-    <button type="button" [class.active]="statusFilter() === 3" (click)="setStatusFilter(3)">{{ i18n.text('Rejected', 'Rejected') }}</button>
-    <button type="button" [class.active]="statusFilter() === 0" (click)="setStatusFilter(0)">{{ i18n.text('All', 'All') }}</button>
+    <button type="button" [class.active]="statusFilter() === 1" (click)="setStatusFilter(1)">Pending</button>
+    <button type="button" [class.active]="statusFilter() === 2" (click)="setStatusFilter(2)">Approved</button>
+    <button type="button" [class.active]="statusFilter() === 3" (click)="setStatusFilter(3)">Rejected</button>
+    <button type="button" [class.active]="statusFilter() === 0" (click)="setStatusFilter(0)">All</button>
   </div>
 
   @if (message()) { <p class="ok">{{ message() }}</p> }
@@ -14,14 +14,14 @@
   <table>
     <thead>
       <tr>
-        <th>{{ i18n.text('Employee', 'Employee') }}</th>
-        <th>{{ i18n.text('Type', 'Type') }}</th>
-        <th>{{ i18n.text('Start', 'Start') }}</th>
-        <th>{{ i18n.text('End', 'End') }}</th>
-        <th>{{ i18n.text('Days', 'Days') }}</th>
-        <th>{{ i18n.text('Status', 'Status') }}</th>
-        <th>{{ i18n.text('Reason', 'Reason') }}</th>
-        <th>{{ i18n.text('Actions', 'Actions') }}</th>
+        <th>Employee</th>
+        <th>Type</th>
+        <th>Start</th>
+        <th>End</th>
+        <th>Days</th>
+        <th>Status</th>
+        <th>Reason</th>
+        <th>Actions</th>
       </tr>
     </thead>
     <tbody>
@@ -36,16 +36,16 @@
           <td>
             {{ request.reason }}
             @if (request.status === 3 && request.rejectionReason) {
-              <div class="reject">{{ i18n.text('Rejected:', 'Rejected:') }} {{ request.rejectionReason }}</div>
+              <div class="reject">Rejected: {{ request.rejectionReason }}</div>
             } @else if (request.status === 2 && request.rejectionReason) {
-              <div class="reject">{{ i18n.text('Review Comment:', 'Review Comment:') }} {{ request.rejectionReason }}</div>
+              <div class="reject">Review Comment: {{ request.rejectionReason }}</div>
             }
           </td>
           <td>
             @if (request.status === 1) {
               <div class="row-actions">
-                <button type="button" (click)="approve(request.id)" [disabled]="busy()">{{ i18n.text('Approve', 'Approve') }}</button>
-                <button type="button" (click)="reject(request.id)" [disabled]="busy()">{{ i18n.text('Reject', 'Reject') }}</button>
+                <button type="button" (click)="approve(request.id)" [disabled]="busy()">Approve</button>
+                <button type="button" (click)="reject(request.id)" [disabled]="busy()">Reject</button>
               </div>
             } @else {
               <span>-</span>
