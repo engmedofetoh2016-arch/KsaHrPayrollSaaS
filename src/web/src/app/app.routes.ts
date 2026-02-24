@@ -12,9 +12,11 @@ import { EmployeesPageComponent } from './features/employees/employees-page.comp
 import { MyPayslipsPageComponent } from './features/employee/my-payslips-page.component';
 import { MyProfilePageComponent } from './features/employee/my-profile-page.component';
 import { FinalSettlementPageComponent } from './features/final-settlement/final-settlement-page.component';
+import { ReferenceRegistryPageComponent } from './features/governance/reference-registry-page.component';
 import { LeaveApprovalsPageComponent } from './features/leave/leave-approvals-page.component';
 import { MyLeavePageComponent } from './features/leave/my-leave-page.component';
 import { PayrollPageComponent } from './features/payroll/payroll-page.component';
+import { SmartAlertsPageComponent } from './features/smart-alerts/smart-alerts-page.component';
 import { UsersPageComponent } from './features/users/users-page.component';
 import { ShellLayoutComponent } from './layout/shell/shell-layout.component';
 
@@ -49,6 +51,8 @@ export const routes: Routes = [
       },
       { path: 'attendance', component: AttendancePageComponent, canActivate: [roleGuard], data: { roles: ['Owner', 'Admin', 'HR', 'Manager'] } },
       { path: 'payroll', component: PayrollPageComponent, canActivate: [roleGuard], data: { roles: ['Owner', 'Admin', 'HR'] } },
+      { path: 'smart-alerts', component: SmartAlertsPageComponent, canActivate: [roleGuard], data: { roles: ['Owner', 'Admin', 'HR', 'Manager'] } },
+      { path: 'governance/references', component: ReferenceRegistryPageComponent, canActivate: [roleGuard], data: { roles: ['Owner', 'Admin', 'HR', 'Manager'] } },
       { path: 'users', component: UsersPageComponent, canActivate: [roleGuard], data: { roles: ['Owner', 'Admin'] } },
       { path: '', pathMatch: 'full', redirectTo: 'dashboard' }
     ]

@@ -14,5 +14,10 @@ WORKDIR /usr/share/nginx/html
 
 COPY src/web/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist/hrpayroll-web/browser ./
+COPY src/web/docker-entrypoint.sh /docker-entrypoint.sh
+
+RUN chmod +x /docker-entrypoint.sh
 
 EXPOSE 80
+
+ENTRYPOINT ["/docker-entrypoint.sh"]

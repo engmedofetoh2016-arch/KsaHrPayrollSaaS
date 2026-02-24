@@ -30,6 +30,8 @@ export class DashboardPageComponent implements OnInit {
   readonly today = new Date();
   readonly canSeeUsers = computed(() => this.auth.hasAnyRole(['Owner', 'Admin']));
   readonly isEmployee = computed(() => this.auth.hasAnyRole(['Employee']));
+  readonly canSeeGovernance = computed(() => this.auth.hasAnyRole(['Owner', 'Admin', 'HR', 'Manager']));
+  readonly canSeePayrollIntelligence = computed(() => this.auth.hasAnyRole(['Owner', 'Admin', 'HR']));
   readonly latestPayslip = signal<MyPayslipItem | null>(null);
   readonly latestPayslipBusy = signal(false);
 
@@ -78,6 +80,68 @@ export class DashboardPageComponent implements OnInit {
     usedFallback: true,
     brief: ''
   });
+  readonly payrollGovernance = signal({
+    windowDays: 30,
+    totalApprovals: 0,
+    standardApprovals: 0,
+    overrideApprovals: 0,
+    overrideRatePercent: 0,
+    overridesWithReference: 0,
+    overrideReferenceCoveragePercent: 0,
+    overrideDocumentationQualityPercent: 0,
+    criticalDecisionCount: 0,
+    topCriticalCodes: [] as Array<{ code: string; count: number }>,
+    topOverrideCategories: [] as Array<{ category: string; count: number }>
+  });
+  readonly payrollGovernanceTrend = signal<Array<{
+    month: string;
+    totalApprovals: number;
+    overrideApprovals: number;
+    overrideRatePercent: number;
+  }>>([]);
+  readonly payrollIntelligenceLoading = signal(false);
+  readonly payrollIntelligenceError = signal('');
+  readonly payrollIntelligence = signal({
+    runsScanned: 0,
+    runsWithBlocking: 0,
+    criticalFindings: 0,
+    warningFindings: 0,
+    noticeFindings: 0,
+    items: [] as Array<{
+      runId: string;
+      hasBlockingFindings: boolean;
+      critical: number;
+      warning: number;
+      notice: number;
+      topFinding: string;
+      generatedAtUtc: string;
+    }>
+  });
+  readonly governanceDecisionDrilldown = signal({
+    loading: false,
+    selectedCode: '',
+      items: [] as Array<{
+        id: string;
+        createdAtUtc: string;
+        decisionType: 'Standard' | 'Override' | string;
+        runId?: string;
+        category?: string;
+        referenceId?: string;
+        criticalCodes?: string;
+        warningCount?: string;
+        reason?: string;
+      }>
+  });
+  readonly governanceRisk = computed(() => {
+    const rate = this.payrollGovernance().overrideRatePercent;
+    if (rate >= 15) {
+      return 'high';
+    }
+    if (rate >= 5) {
+      return 'medium';
+    }
+    return 'low';
+  });
 
   readonly saudization = computed(() => {
     const total = this.stats().employees;
@@ -109,6 +173,15 @@ export class DashboardPageComponent implements OnInit {
       compliance: this.http.get<any>(`${this.base}/compliance/alerts?take=8`).pipe(catchError(() => of({ critical: 0, warning: 0, notice: 0, items: [] }))),
       complianceScore: this.http.get<any>(`${this.base}/compliance/score`).pipe(catchError(() => of(null))),
       latestPayslip: this.isEmployee() ? this.meService.getLatestPayslip().pipe(catchError(() => of(null))) : of(null),
+      governance: this.canSeeGovernance()
+        ? this.http.get<any>(`${this.base}/payroll/governance/overview?days=30`).pipe(catchError(() => of(null)))
+        : of(null),
+      governanceTrend: this.canSeeGovernance()
+        ? this.http.get<any>(`${this.base}/payroll/governance/trend?months=6`).pipe(catchError(() => of(null)))
+        : of(null),
+      intelligenceSeed: this.canSeePayrollIntelligence()
+        ? this.http.get<any>(`${this.base}/payroll/governance/decisions?days=45&take=120`).pipe(catchError(() => of(null)))
+        : of(null),
       complianceBrief: this.http
         .post<any>(`${this.base}/compliance/ai-brief`, {
           language: this.i18n.language(),
@@ -119,7 +192,7 @@ export class DashboardPageComponent implements OnInit {
         })
         .pipe(catchError(() => of(null)))
     }).subscribe({
-      next: ({ employeesPage, attendancePage, payrollPeriods, usersPage, companyProfile, employeePaymentPage, compliance, complianceScore, latestPayslip, complianceBrief }) => {
+      next: ({ employeesPage, attendancePage, payrollPeriods, usersPage, companyProfile, employeePaymentPage, compliance, complianceScore, latestPayslip, governance, governanceTrend, intelligenceSeed, complianceBrief }) => {
         this.stats.set({
           employees: this.extractCount(employeesPage),
           saudiEmployees: this.extractItems(employeePaymentPage).filter((x) => !!x.isSaudiNational).length,
@@ -180,6 +253,46 @@ export class DashboardPageComponent implements OnInit {
           });
         }
 
+        if (governance) {
+          this.payrollGovernance.set({
+            windowDays: Number(governance?.windowDays ?? 30),
+            totalApprovals: Number(governance?.totalApprovals ?? 0),
+            standardApprovals: Number(governance?.standardApprovals ?? 0),
+            overrideApprovals: Number(governance?.overrideApprovals ?? 0),
+            overrideRatePercent: Number(governance?.overrideRatePercent ?? 0),
+            overridesWithReference: Number(governance?.overridesWithReference ?? 0),
+            overrideReferenceCoveragePercent: Number(governance?.overrideReferenceCoveragePercent ?? 0),
+            overrideDocumentationQualityPercent: Number(governance?.overrideDocumentationQualityPercent ?? 0),
+            criticalDecisionCount: Number(governance?.criticalDecisionCount ?? 0),
+            topCriticalCodes: Array.isArray(governance?.topCriticalCodes)
+              ? governance.topCriticalCodes.map((x: any) => ({
+                  code: String(x?.code ?? ''),
+                  count: Number(x?.count ?? 0)
+                }))
+              : [],
+            topOverrideCategories: Array.isArray(governance?.topOverrideCategories)
+              ? governance.topOverrideCategories.map((x: any) => ({
+                  category: String(x?.category ?? ''),
+                  count: Number(x?.count ?? 0)
+                }))
+              : []
+          });
+        }
+
+        if (governanceTrend && Array.isArray(governanceTrend?.items)) {
+          this.payrollGovernanceTrend.set(
+            governanceTrend.items.map((x: any) => ({
+              month: String(x?.month ?? ''),
+              totalApprovals: Number(x?.totalApprovals ?? 0),
+              overrideApprovals: Number(x?.overrideApprovals ?? 0),
+              overrideRatePercent: Number(x?.overrideRatePercent ?? 0)
+            }))
+          );
+        } else {
+          this.payrollGovernanceTrend.set([]);
+        }
+
+        this.loadPayrollIntelligence(intelligenceSeed);
         this.latestPayslip.set(latestPayslip);
       },
       complete: () => this.loading.set(false),
@@ -218,6 +331,108 @@ export class DashboardPageComponent implements OnInit {
     return typeof value === 'string' ? value.trim().length > 0 : value !== null && value !== undefined;
   }
 
+  private loadPayrollIntelligence(seed: any) {
+    if (!this.canSeePayrollIntelligence()) {
+      this.payrollIntelligence.set({
+        runsScanned: 0,
+        runsWithBlocking: 0,
+        criticalFindings: 0,
+        warningFindings: 0,
+        noticeFindings: 0,
+        items: []
+      });
+      this.payrollIntelligenceError.set('');
+      this.payrollIntelligenceLoading.set(false);
+      return;
+    }
+
+    const runIds = Array.from(
+      new Set(
+        (Array.isArray(seed?.items) ? seed.items : [])
+          .map((x: any) => String(x?.runId ?? '').trim())
+          .filter((x: string) => this.looksLikeGuid(x))
+      )
+    ).slice(0, 10);
+
+    if (runIds.length === 0) {
+      this.payrollIntelligence.set({
+        runsScanned: 0,
+        runsWithBlocking: 0,
+        criticalFindings: 0,
+        warningFindings: 0,
+        noticeFindings: 0,
+        items: []
+      });
+      this.payrollIntelligenceError.set('');
+      this.payrollIntelligenceLoading.set(false);
+      return;
+    }
+
+    this.payrollIntelligenceLoading.set(true);
+    this.payrollIntelligenceError.set('');
+
+    forkJoin(
+      runIds.map((runId) =>
+        this.http.get<any>(`${this.base}/payroll/runs/${runId}/pre-approval-checks`).pipe(
+          catchError(() =>
+            of({
+              runId,
+              hasBlockingFindings: false,
+              generatedAtUtc: '',
+              findings: []
+            })
+          )
+        )
+      )
+    ).subscribe({
+      next: (results) => {
+        const rows = results.map((result: any) => {
+          const findings = Array.isArray(result?.findings) ? result.findings : [];
+          const critical = findings.filter((x: any) => String(x?.severity ?? '') === 'Critical');
+          const warning = findings.filter((x: any) => String(x?.severity ?? '') === 'Warning');
+          const notice = findings.filter((x: any) => String(x?.severity ?? '') === 'Notice');
+          const topFinding = critical[0]?.message ?? warning[0]?.message ?? notice[0]?.message ?? '';
+          return {
+            runId: String(result?.runId ?? ''),
+            hasBlockingFindings: !!result?.hasBlockingFindings,
+            critical: critical.length,
+            warning: warning.length,
+            notice: notice.length,
+            topFinding: String(topFinding ?? ''),
+            generatedAtUtc: String(result?.generatedAtUtc ?? '')
+          };
+        });
+
+        const sortedRows = rows
+          .filter((x) => this.looksLikeGuid(x.runId))
+          .sort((a, b) => {
+            if (a.hasBlockingFindings !== b.hasBlockingFindings) {
+              return a.hasBlockingFindings ? -1 : 1;
+            }
+
+            if (a.critical !== b.critical) {
+              return b.critical - a.critical;
+            }
+
+            return b.warning - a.warning;
+          });
+
+        this.payrollIntelligence.set({
+          runsScanned: sortedRows.length,
+          runsWithBlocking: sortedRows.filter((x) => x.hasBlockingFindings).length,
+          criticalFindings: sortedRows.reduce((sum, row) => sum + row.critical, 0),
+          warningFindings: sortedRows.reduce((sum, row) => sum + row.warning, 0),
+          noticeFindings: sortedRows.reduce((sum, row) => sum + row.notice, 0),
+          items: sortedRows
+        });
+      },
+      error: () => {
+        this.payrollIntelligenceError.set(this.i18n.text('Failed to load payroll intelligence.', 'Failed to load payroll intelligence.'));
+      },
+      complete: () => this.payrollIntelligenceLoading.set(false)
+    });
+  }
+
   private isExpiringWithin(dateText: unknown, withinDays: number): boolean {
     if (typeof dateText !== 'string' || !dateText.trim()) {
       return false;
@@ -246,6 +461,65 @@ export class DashboardPageComponent implements OnInit {
       error: () => {},
       complete: () => this.resolvingAlertIds.update((ids) => ids.filter((id) => id !== alertId))
     });
+  }
+
+  governanceBarHeight(rate: number): string {
+    const clamped = Math.max(0, Math.min(100, Number(rate) || 0));
+    return `${Math.max(6, clamped)}%`;
+  }
+
+  loadGovernanceDecisionsByCode(code: string) {
+    const normalizedCode = String(code ?? '').trim();
+    if (!normalizedCode) {
+      return;
+    }
+
+    this.governanceDecisionDrilldown.set({
+      loading: true,
+      selectedCode: normalizedCode,
+      items: []
+    });
+
+    const url = `${this.base}/payroll/governance/decisions?days=30&criticalCode=${encodeURIComponent(normalizedCode)}&take=100`;
+    this.http.get<any>(url).pipe(catchError(() => of({ items: [] }))).subscribe({
+      next: (response) => {
+        const items = Array.isArray(response?.items) ? response.items : [];
+        this.governanceDecisionDrilldown.set({
+          loading: false,
+          selectedCode: normalizedCode,
+          items: items.map((x: any) => ({
+            id: String(x?.id ?? ''),
+            createdAtUtc: String(x?.createdAtUtc ?? ''),
+            decisionType: String(x?.decisionType ?? ''),
+            runId: x?.runId ? String(x.runId) : undefined,
+            category: x?.category ? String(x.category) : undefined,
+            referenceId: x?.referenceId ? String(x.referenceId) : undefined,
+            criticalCodes: x?.criticalCodes ? String(x.criticalCodes) : undefined,
+            warningCount: x?.warningCount ? String(x.warningCount) : undefined,
+            reason: x?.reason ? String(x.reason) : undefined
+          }))
+        });
+      },
+      error: () => {
+        this.governanceDecisionDrilldown.set({
+          loading: false,
+          selectedCode: normalizedCode,
+          items: []
+        });
+      }
+    });
+  }
+
+  clearGovernanceDrilldown() {
+    this.governanceDecisionDrilldown.set({
+      loading: false,
+      selectedCode: '',
+      items: []
+    });
+  }
+
+  private looksLikeGuid(value: string): boolean {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
   }
 
   downloadLatestPayslip() {

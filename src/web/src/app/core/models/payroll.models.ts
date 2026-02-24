@@ -78,3 +78,44 @@ export interface EnqueueExportResponse {
   id: string;
   status: number;
 }
+
+export interface PayrollPreApprovalCheck {
+  code: string;
+  severity: 'Critical' | 'Warning' | 'Notice';
+  employeeId?: string;
+  employeeName?: string;
+  message: string;
+  metricName?: string;
+  metricValue?: number;
+}
+
+export interface PayrollPreApprovalChecksResult {
+  runId: string;
+  hasBlockingFindings: boolean;
+  generatedAtUtc: string;
+  findings: PayrollPreApprovalCheck[];
+}
+
+export interface PayrollApprovalDecision {
+  id: string;
+  createdAtUtc: string;
+  decisionType: 'Standard' | 'Override';
+  userId?: string;
+  category?: string;
+  referenceId?: string;
+  reason?: string;
+  criticalCodes?: string;
+  warningCount?: string;
+  findingsSnapshotJson?: string;
+  findingsCount?: number;
+}
+
+export interface PayrollApprovalFindingSnapshot {
+  code: string;
+  severity: 'Critical' | 'Warning' | 'Notice' | string;
+  employeeId?: string;
+  employeeName?: string;
+  message: string;
+  metricName?: string;
+  metricValue?: number;
+}

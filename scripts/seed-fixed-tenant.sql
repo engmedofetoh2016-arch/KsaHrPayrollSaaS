@@ -1,7 +1,7 @@
 -- Fixed tenant SQL seed for HrPayroll
 -- Creates/updates tenant + owner user + Owner role mapping
 -- Target credentials:
---   TenantSlug: managm_elzahb
+--   TenantSlug: managm-elzahb
 --   OwnerEmail: magdyKago@mangm.com
 --   OwnerPassword: magdy123456
 
@@ -15,7 +15,7 @@ DECLARE
   v_user_id uuid;
 
   v_tenant_name text := 'Managm Elzahb';
-  v_slug text := 'managm_elzahb';
+  v_slug text := 'managm-elzahb';
   v_company_legal_name text := 'Managm Elzahb';
   v_currency_code text := 'SAR';
   v_default_pay_day int := 25;

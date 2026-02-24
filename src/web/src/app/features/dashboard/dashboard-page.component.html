@@ -203,6 +203,201 @@
       }
     </article>
 
+    @if (canSeeGovernance()) {
+      <article
+        class="panel governance"
+        [class.risk-high]="governanceRisk() === 'high'"
+        [class.risk-medium]="governanceRisk() === 'medium'"
+        [class.risk-low]="governanceRisk() === 'low'">
+        <h3>{{ i18n.text('Approval Governance (30d)', 'حوكمة الاعتمادات (30 يوم)') }}</h3>
+        <p class="meta">
+          {{ i18n.text('Total approvals', 'إجمالي الاعتمادات') }}:
+          <strong>{{ payrollGovernance().totalApprovals }}</strong>
+        </p>
+        <p class="meta">
+          {{ i18n.text('Overrides', 'التجاوزات') }}:
+          <strong>{{ payrollGovernance().overrideApprovals }}</strong>
+          ({{ payrollGovernance().overrideRatePercent }}%)
+        </p>
+        <p class="meta">
+          {{ i18n.text('Overrides with reference', 'التجاوزات ذات المرجع') }}:
+          <strong>{{ payrollGovernance().overridesWithReference }}</strong>
+          ({{ payrollGovernance().overrideReferenceCoveragePercent }}%)
+        </p>
+        <p class="meta">
+          {{ i18n.text('Documentation quality', 'جودة التوثيق') }}:
+          <strong>{{ payrollGovernance().overrideDocumentationQualityPercent }}%</strong>
+        </p>
+        <p class="meta">
+          {{ i18n.text('Risk Threshold', 'حد المخاطر') }}:
+          @if (governanceRisk() === 'high') {
+            <strong>{{ i18n.text('High (> 15%)', 'مرتفع (> 15%)') }}</strong>
+          } @else if (governanceRisk() === 'medium') {
+            <strong>{{ i18n.text('Medium (5% - 15%)', 'متوسط (5% - 15%)') }}</strong>
+          } @else {
+            <strong>{{ i18n.text('Low (< 5%)', 'منخفض (< 5%)') }}</strong>
+          }
+        </p>
+        <p class="meta">
+          {{ i18n.text('Standard approvals', 'الاعتمادات القياسية') }}:
+          <strong>{{ payrollGovernance().standardApprovals }}</strong>
+        </p>
+        <p class="meta">
+          {{ i18n.text('Decisions with critical findings', 'قرارات بها ملاحظات حرجة') }}:
+          <strong>{{ payrollGovernance().criticalDecisionCount }}</strong>
+        </p>
+        <h4>{{ i18n.text('Top Critical Anomalies', 'أكثر الانحرافات الحرجة') }}</h4>
+        @if (payrollGovernance().topCriticalCodes.length === 0) {
+          <p class="meta">{{ i18n.text('No critical override history in this window.', 'لا يوجد سجل تجاوزات حرجة في هذه الفترة.') }}</p>
+        } @else {
+          <ul>
+            @for (item of payrollGovernance().topCriticalCodes; track item.code) {
+              <li>
+                <button type="button" class="code-link" (click)="loadGovernanceDecisionsByCode(item.code)">
+                  <code>{{ item.code }}</code>: {{ item.count }}
+                </button>
+              </li>
+            }
+          </ul>
+        }
+
+        <h4>{{ i18n.text('Top Override Categories', 'أكثر فئات التجاوز') }}</h4>
+        @if (payrollGovernance().topOverrideCategories.length === 0) {
+          <p class="meta">{{ i18n.text('No override categories recorded.', 'لا توجد فئات تجاوز مسجلة.') }}</p>
+        } @else {
+          <ul>
+            @for (item of payrollGovernance().topOverrideCategories; track item.category) {
+              <li><code>{{ item.category }}</code>: {{ item.count }}</li>
+            }
+          </ul>
+        }
+
+        @if (governanceDecisionDrilldown().selectedCode) {
+          <div class="drilldown-head">
+            <h4>
+              {{ i18n.text('Decisions For Code', 'القرارات الخاصة بالرمز') }}:
+              <code>{{ governanceDecisionDrilldown().selectedCode }}</code>
+            </h4>
+            <button type="button" (click)="clearGovernanceDrilldown()">
+              {{ i18n.text('Clear', 'مسح') }}
+            </button>
+          </div>
+
+          @if (governanceDecisionDrilldown().loading) {
+            <p class="meta">{{ i18n.text('Loading decisions...', 'جاري تحميل القرارات...') }}</p>
+          } @else if (governanceDecisionDrilldown().items.length === 0) {
+            <p class="meta">{{ i18n.text('No decisions found for this code in 30 days.', 'لا توجد قرارات لهذا الرمز خلال 30 يوماً.') }}</p>
+          } @else {
+            <div class="table-wrap">
+              <table class="mini-table">
+                <thead>
+                  <tr>
+                    <th>{{ i18n.text('When', 'الوقت') }}</th>
+                    <th>{{ i18n.text('Type', 'النوع') }}</th>
+                    <th>{{ i18n.text('Category', 'الفئة') }}</th>
+                    <th>{{ i18n.text('Reference', 'المرجع') }}</th>
+                    <th>{{ i18n.text('Run', 'التشغيل') }}</th>
+                    <th>{{ i18n.text('Reason', 'السبب') }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (decision of governanceDecisionDrilldown().items; track decision.id) {
+                    <tr>
+                      <td>{{ decision.createdAtUtc | date: 'short' }}</td>
+                      <td>{{ decision.decisionType }}</td>
+                      <td>{{ decision.category || '-' }}</td>
+                      <td>{{ decision.referenceId || '-' }}</td>
+                      <td>
+                        @if (decision.runId) {
+                          <a [routerLink]="['/payroll']" [queryParams]="{ runId: decision.runId }">
+                            {{ decision.runId }}
+                          </a>
+                        } @else {
+                          -
+                        }
+                      </td>
+                      <td>{{ decision.reason || '-' }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        }
+
+        <h4>{{ i18n.text('Override Rate Trend (6m)', 'اتجاه معدل التجاوز (6 أشهر)') }}</h4>
+        @if (payrollGovernanceTrend().length === 0) {
+          <p class="meta">{{ i18n.text('No trend data yet.', 'لا توجد بيانات اتجاه حتى الآن.') }}</p>
+        } @else {
+          <div class="trend">
+            @for (point of payrollGovernanceTrend(); track point.month) {
+              <div class="bar" [style.height]="governanceBarHeight(point.overrideRatePercent)" [title]="point.month + ': ' + point.overrideRatePercent + '%'">
+                <span>{{ point.overrideRatePercent }}%</span>
+                <small>{{ point.month }}</small>
+              </div>
+            }
+          </div>
+        }
+      </article>
+    }
+
+    @if (canSeePayrollIntelligence()) {
+      <article class="panel intelligence" [class.risk-high]="payrollIntelligence().runsWithBlocking > 0">
+        <h3>{{ i18n.text('Payroll Intelligence', 'Payroll Intelligence') }}</h3>
+        <p class="meta">
+          {{ i18n.text('Recent runs scanned', 'Recent runs scanned') }}:
+          <strong>{{ payrollIntelligence().runsScanned }}</strong>
+        </p>
+        <p class="meta">
+          {{ i18n.text('Blocking runs', 'Blocking runs') }}:
+          <strong>{{ payrollIntelligence().runsWithBlocking }}</strong>
+        </p>
+        <p class="meta">
+          {{ i18n.text('Findings', 'Findings') }}:
+          {{ i18n.text('Critical', 'Critical') }} {{ payrollIntelligence().criticalFindings }},
+          {{ i18n.text('Warning', 'Warning') }} {{ payrollIntelligence().warningFindings }},
+          {{ i18n.text('Notice', 'Notice') }} {{ payrollIntelligence().noticeFindings }}
+        </p>
+
+        @if (payrollIntelligenceLoading()) {
+          <p class="meta">{{ i18n.text('Analyzing payroll runs...', 'Analyzing payroll runs...') }}</p>
+        } @else if (payrollIntelligenceError()) {
+          <p class="error">{{ payrollIntelligenceError() }}</p>
+        } @else if (payrollIntelligence().items.length === 0) {
+          <p class="meta">{{ i18n.text('No recent payroll runs found for intelligence checks.', 'No recent payroll runs found for intelligence checks.') }}</p>
+        } @else {
+          <div class="table-wrap">
+            <table class="mini-table">
+              <thead>
+                <tr>
+                  <th>{{ i18n.text('Run', 'Run') }}</th>
+                  <th>{{ i18n.text('Block', 'Block') }}</th>
+                  <th>{{ i18n.text('Critical', 'Critical') }}</th>
+                  <th>{{ i18n.text('Warning', 'Warning') }}</th>
+                  <th>{{ i18n.text('Notice', 'Notice') }}</th>
+                  <th>{{ i18n.text('Top Finding', 'Top Finding') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of payrollIntelligence().items; track row.runId) {
+                  <tr>
+                    <td>
+                      <a [routerLink]="['/payroll']" [queryParams]="{ runId: row.runId }">{{ row.runId }}</a>
+                    </td>
+                    <td>{{ row.hasBlockingFindings ? i18n.text('Yes', 'Yes') : i18n.text('No', 'No') }}</td>
+                    <td>{{ row.critical }}</td>
+                    <td>{{ row.warning }}</td>
+                    <td>{{ row.notice }}</td>
+                    <td>{{ row.topFinding || '-' }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </article>
+    }
+
     <article class="panel status">
       <h3>{{ i18n.text('System Status', 'حالة النظام') }}</h3>
       @if (loading()) {

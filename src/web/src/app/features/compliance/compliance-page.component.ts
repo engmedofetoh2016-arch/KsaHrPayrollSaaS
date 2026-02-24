@@ -57,6 +57,11 @@ export class CompliancePageComponent implements OnInit {
     score: 0,
     grade: 'D',
     saudizationPercent: 0,
+    saudizationTargetPercent: 30,
+    saudizationGapPercent: 0,
+    saudiEmployees: 0,
+    totalEmployees: 0,
+    additionalSaudiEmployeesNeeded: 0,
     wpsCompanyReady: false,
     employeesMissingPaymentData: 0,
     criticalAlerts: 0,
@@ -111,6 +116,11 @@ export class CompliancePageComponent implements OnInit {
             score: Number(score.score ?? 0),
             grade: String(score.grade ?? 'D'),
             saudizationPercent: Number(score.saudizationPercent ?? 0),
+            saudizationTargetPercent: Number(score.saudizationTargetPercent ?? 30),
+            saudizationGapPercent: Number(score.saudizationGapPercent ?? 0),
+            saudiEmployees: Number(score.saudiEmployees ?? 0),
+            totalEmployees: Number(score.totalEmployees ?? 0),
+            additionalSaudiEmployeesNeeded: Number(score.additionalSaudiEmployeesNeeded ?? 0),
             wpsCompanyReady: !!score.wpsCompanyReady,
             employeesMissingPaymentData: Number(score.employeesMissingPaymentData ?? 0),
             criticalAlerts: Number(score.criticalAlerts ?? 0),
@@ -232,6 +242,11 @@ export class CompliancePageComponent implements OnInit {
     lines.push(`Score,Compliance Score,${score.score}`);
     lines.push(`Score,Grade,${this.escapeCsv(score.grade)}`);
     lines.push(`Score,Saudization Percent,${score.saudizationPercent}`);
+    lines.push(`Score,Saudization Target Percent,${score.saudizationTargetPercent}`);
+    lines.push(`Score,Saudization Gap Percent,${score.saudizationGapPercent}`);
+    lines.push(`Score,Saudi Employees,${score.saudiEmployees}`);
+    lines.push(`Score,Total Employees,${score.totalEmployees}`);
+    lines.push(`Score,Additional Saudi Employees Needed,${score.additionalSaudiEmployeesNeeded}`);
     lines.push(`Score,WPS Company Ready,${score.wpsCompanyReady}`);
     lines.push(`Score,Employees Missing Payment Data,${score.employeesMissingPaymentData}`);
     lines.push(`Score,Critical Alerts,${score.criticalAlerts}`);

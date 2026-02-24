@@ -1,36 +1,42 @@
 <div class="shell">
   <aside [class.open]="isMobileNavOpen">
-    <div class="brand">{{ i18n.text('KSA HR Payroll', 'كشوف رواتب الموارد') }}</div>
+    <div class="brand">{{ i18n.text('KSA HR Payroll', 'ÙƒØ´ÙˆÙ Ø±ÙˆØ§ØªØ¨ Ø§Ù„Ù…ÙˆØ§Ø±Ø¯') }}</div>
     <nav>
-      <a routerLink="/dashboard" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Dashboard', 'لوحة التحكم') }}</a>
+      <a routerLink="/dashboard" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Dashboard', 'Ù„ÙˆØ­Ø© Ø§Ù„ØªØ­ÙƒÙ…') }}</a>
       @if (canAccessCompliance()) {
-        <a routerLink="/compliance" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Compliance Center', 'مركز الالتزام') }}</a>
+        <a routerLink="/compliance" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Compliance Center', 'Ù…Ø±ÙƒØ² Ø§Ù„Ø§Ù„ØªØ²Ø§Ù…') }}</a>
+      }
+      @if (canAccessSmartAlerts()) {
+        <a routerLink="/smart-alerts" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Smart Alerts', 'Smart Alerts') }}</a>
       }
       @if (canAccessCompany()) {
-        <a routerLink="/company" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Company', 'الشركة') }}</a>
+        <a routerLink="/company" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Company', 'Ø§Ù„Ø´Ø±ÙƒØ©') }}</a>
       }
       @if (canAccessEmployees()) {
-        <a routerLink="/employees" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Employees', 'الموظفون') }}</a>
+        <a routerLink="/employees" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Employees', 'Ø§Ù„Ù…ÙˆØ¸ÙÙˆÙ†') }}</a>
       }
       @if (canAccessFinalSettlement()) {
-        <a routerLink="/final-settlement" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Final Settlement', 'التسوية النهائية') }}</a>
+        <a routerLink="/final-settlement" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Final Settlement', 'Ø§Ù„ØªØ³ÙˆÙŠØ© Ø§Ù„Ù†Ù‡Ø§Ø¦ÙŠØ©') }}</a>
       }
-      <a routerLink="/leave/my" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('My Leave', 'إجازاتي') }}</a>
+      <a routerLink="/leave/my" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('My Leave', 'Ø¥Ø¬Ø§Ø²Ø§ØªÙŠ') }}</a>
       @if (isEmployee()) {
-        <a routerLink="/employee/profile" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('My Profile', 'ملفي الشخصي') }}</a>
-        <a routerLink="/employee/payslips" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('My Payslips', 'قسائم راتبي') }}</a>
+        <a routerLink="/employee/profile" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('My Profile', 'Ù…Ù„ÙÙŠ Ø§Ù„Ø´Ø®ØµÙŠ') }}</a>
+        <a routerLink="/employee/payslips" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('My Payslips', 'Ù‚Ø³Ø§Ø¦Ù… Ø±Ø§ØªØ¨ÙŠ') }}</a>
       }
       @if (canApproveLeave()) {
-        <a routerLink="/leave/approvals" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Leave Approvals', 'موافقات الإجازات') }}</a>
+        <a routerLink="/leave/approvals" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Leave Approvals', 'Ù…ÙˆØ§ÙÙ‚Ø§Øª Ø§Ù„Ø¥Ø¬Ø§Ø²Ø§Øª') }}</a>
       }
       @if (canAccessAttendance()) {
-        <a routerLink="/attendance" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Attendance', 'الحضور') }}</a>
+        <a routerLink="/attendance" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Attendance', 'Ø§Ù„Ø­Ø¶ÙˆØ±') }}</a>
       }
       @if (canAccessPayroll()) {
-        <a routerLink="/payroll" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Payroll', 'الرواتب') }}</a>
+        <a routerLink="/payroll" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Payroll', 'Ø§Ù„Ø±ÙˆØ§ØªØ¨') }}</a>
+      }
+      @if (canAccessGovernanceRegistry()) {
+        <a routerLink="/governance/references" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Reference Registry', 'سجل المراجع') }}</a>
       }
       @if (canManageUsers()) {
-        <a routerLink="/users" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Users', 'المستخدمون') }}</a>
+        <a routerLink="/users" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Users', 'Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù…ÙˆÙ†') }}</a>
       }
     </nav>
   </aside>
@@ -41,7 +47,7 @@
 
   <main>
     <header>
-      <button class="menu-toggle" type="button" (click)="toggleMobileNav()" aria-label="Open menu">{{ i18n.text('Menu', 'القائمة') }}</button>
+      <button class="menu-toggle" type="button" (click)="toggleMobileNav()" aria-label="Open menu">{{ i18n.text('Menu', 'Ø§Ù„Ù‚Ø§Ø¦Ù…Ø©') }}</button>
       <div>
         <strong>{{ session()?.firstName }} {{ session()?.lastName }}</strong>
         <span>{{ session()?.email }}</span>
@@ -51,7 +57,7 @@
         <button type="button" class="lang" (click)="i18n.toggleLanguage()">
           {{ i18n.isArabic() ? 'EN' : 'AR' }}
         </button>
-        <button (click)="logout()">{{ i18n.text('Logout', 'تسجيل الخروج') }}</button>
+        <button (click)="logout()">{{ i18n.text('Logout', 'ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø®Ø±ÙˆØ¬') }}</button>
       </div>
     </header>
 
@@ -60,3 +66,4 @@
     </section>
   </main>
 </div>
+

@@ -7,6 +7,8 @@ import {
   EnqueueExportResponse,
   ExportJob,
   PayrollAdjustment,
+  PayrollApprovalDecision,
+  PayrollPreApprovalChecksResult,
   PayrollPeriod,
   PayrollRunDetails
 } from '../models/payroll.models';
@@ -43,6 +45,24 @@ export class PayrollService {
 
   approveRun(runId: string) {
     return this.http.post(`${this.base}/runs/${runId}/approve`, {});
+  }
+
+  approveRunWithOverride(runId: string, category: string, reason: string, referenceId: string) {
+    return this.http.post(`${this.base}/runs/${runId}/approve-override`, { category, reason, referenceId });
+  }
+
+  getPreApprovalChecks(runId: string) {
+    return this.http.get<PayrollPreApprovalChecksResult>(`${this.base}/runs/${runId}/pre-approval-checks`);
+  }
+
+  getApprovalDecisions(runId: string) {
+    return this.http.get<{ items: PayrollApprovalDecision[] }>(`${this.base}/runs/${runId}/approval-decisions`);
+  }
+
+  getNextOverrideReferenceId() {
+    return this.http.get<{ monthKey: string; nextSequence: number; referenceId: string; isSequenceExhausted: boolean }>(
+      `${this.base}/governance/next-reference-id`
+    );
   }
 
   lockRun(runId: string) {

@@ -3432,8 +3432,33 @@ api.MapGet("/payroll/runs/{runId:guid}", [Authorize(Roles = RoleNames.Owner + ",
     });
 });
 
+api.MapGet("/payroll/runs/{runId:guid}/pre-approval-checks", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    Guid runId,
+    IApplicationDbContext dbContext,
+    IDateTimeProvider dateTimeProvider,
+    CancellationToken cancellationToken) =>
+{
+    var run = await dbContext.PayrollRuns.FirstOrDefaultAsync(x => x.Id == runId, cancellationToken);
+    if (run is null)
+    {
+        return Results.NotFound();
+    }
+
+    var findings = await BuildPayrollPreApprovalFindingsAsync(dbContext, run, cancellationToken);
+    var hasBlockingFindings = findings.Any(x => string.Equals(x.Severity, "Critical", StringComparison.OrdinalIgnoreCase));
+
+    return Results.Ok(new
+    {
+        runId = run.Id,
+        hasBlockingFindings,
+        generatedAtUtc = dateTimeProvider.UtcNow,
+        findings
+    });
+});
+
 api.MapPost("/payroll/runs/{runId:guid}/approve", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin)] async (
     Guid runId,
+    HttpContext httpContext,
     IApplicationDbContext dbContext,
     IDateTimeProvider dateTimeProvider,
     CancellationToken cancellationToken) =>
@@ -3449,14 +3474,708 @@ api.MapPost("/payroll/runs/{runId:guid}/approve", [Authorize(Roles = RoleNames.O
         return Results.BadRequest(new { error = "Only calculated runs can be approved." });
     }
 
+    var findings = await BuildPayrollPreApprovalFindingsAsync(dbContext, run, cancellationToken);
+    var blockingFindings = findings.Where(x => string.Equals(x.Severity, "Critical", StringComparison.OrdinalIgnoreCase)).ToList();
+    if (blockingFindings.Count > 0)
+    {
+        return Results.BadRequest(new
+        {
+            error = "Approval blocked by critical payroll findings.",
+            findings = blockingFindings
+        });
+    }
+
+    Guid? userId = null;
+    var userIdClaim = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (Guid.TryParse(userIdClaim, out var parsedUserId))
+    {
+        userId = parsedUserId;
+    }
+
+    var warningCount = findings.Count(x => string.Equals(x.Severity, "Warning", StringComparison.OrdinalIgnoreCase));
+    var findingsSnapshot = EncodeApprovalFindingsSnapshot(findings);
+    dbContext.AddEntity(new AuditLog
+    {
+        TenantId = run.TenantId,
+        UserId = userId,
+        Method = "PAYROLL_APPROVE_STANDARD",
+        Path = $"/api/payroll/runs/{runId}/approve?critical=0&warning={warningCount}&snapshot={findingsSnapshot}",
+        StatusCode = StatusCodes.Status200OK,
+        IpAddress = httpContext.Connection.RemoteIpAddress?.ToString(),
+        DurationMs = 0
+    });
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { run.Id, run.Status });
+});
+
+api.MapPost("/payroll/runs/{runId:guid}/approve-override", [Authorize(Roles = RoleNames.Owner)] async (
+    Guid runId,
+    ApprovePayrollRunOverrideRequest request,
+    HttpContext httpContext,
+    IApplicationDbContext dbContext,
+    IDateTimeProvider dateTimeProvider,
+    CancellationToken cancellationToken) =>
+{
+    var run = await dbContext.PayrollRuns.FirstOrDefaultAsync(x => x.Id == runId, cancellationToken);
+    if (run is null)
+    {
+        return Results.NotFound();
+    }
+
+    if (run.Status != PayrollRunStatus.Calculated)
+    {
+        return Results.BadRequest(new { error = "Only calculated runs can be approved." });
+    }
+
+    var findings = await BuildPayrollPreApprovalFindingsAsync(dbContext, run, cancellationToken);
+    var blockingFindings = findings.Where(x => string.Equals(x.Severity, "Critical", StringComparison.OrdinalIgnoreCase)).ToList();
+    if (blockingFindings.Count == 0)
+    {
+        return Results.BadRequest(new { error = "No critical findings found. Use standard approve endpoint." });
+    }
+
+    Guid? userId = null;
+    var userIdClaim = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (Guid.TryParse(userIdClaim, out var parsedUserId))
+    {
+        userId = parsedUserId;
+    }
+
+    var reason = request.Reason.Trim();
+    var compactReason = reason.Length <= 220 ? reason : reason[..220];
+    var encodedReason = Uri.EscapeDataString(compactReason);
+    var category = request.Category.Trim();
+    var encodedCategory = Uri.EscapeDataString(category);
+    var referenceId = request.ReferenceId.Trim();
+    var compactReferenceId = referenceId.Length <= 80 ? referenceId : referenceId[..80];
+    var encodedReferenceId = Uri.EscapeDataString(compactReferenceId);
+    var nowUtc = dateTimeProvider.UtcNow;
+    var monthKey = $"{nowUtc:yyyyMM}";
+    var monthStartUtc = new DateTime(nowUtc.Year, nowUtc.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+    var monthEndUtc = monthStartUtc.AddMonths(1);
+
+    var existingReferencePaths = await dbContext.AuditLogs
+        .Where(x =>
+            x.Method == "PAYROLL_APPROVE_OVERRIDE" &&
+            x.CreatedAtUtc >= monthStartUtc &&
+            x.CreatedAtUtc < monthEndUtc)
+        .Select(x => x.Path)
+        .ToListAsync(cancellationToken);
+
+    if (!TryParseOverrideReferenceId(compactReferenceId, out var referenceMonthKey, out _))
+    {
+        var suggestedReferenceId = BuildNextOverrideReferenceId(monthKey, existingReferencePaths);
+        return Results.BadRequest(new
+        {
+            error = "Reference id format is invalid. Expected OVR-YYYYMM-####.",
+            suggestedReferenceId
+        });
+    }
+
+    if (!string.Equals(referenceMonthKey, monthKey, StringComparison.Ordinal))
+    {
+        var suggestedReferenceId = BuildNextOverrideReferenceId(monthKey, existingReferencePaths);
+        return Results.BadRequest(new
+        {
+            error = $"Reference id month must match current month ({monthKey}).",
+            suggestedReferenceId
+        });
+    }
+
+    var duplicateReferenceExists = existingReferencePaths.Any(path =>
+        string.Equals(ReadAuditQueryValue(path, "referenceId"), compactReferenceId, StringComparison.OrdinalIgnoreCase));
+
+    if (duplicateReferenceExists)
+    {
+        var suggestedReferenceId = BuildNextOverrideReferenceId(monthKey, existingReferencePaths);
+        return Results.BadRequest(new
+        {
+            error = $"Reference id '{compactReferenceId}' already used in {nowUtc:yyyy-MM}. Use a unique reference id.",
+            suggestedReferenceId
+        });
+    }
+
     run.Status = PayrollRunStatus.Approved;
-    run.ApprovedAtUtc = dateTimeProvider.UtcNow;
+    run.ApprovedAtUtc = nowUtc;
 
     var period = await dbContext.PayrollPeriods.FirstAsync(x => x.Id == run.PayrollPeriodId, cancellationToken);
     period.Status = PayrollRunStatus.Approved;
 
+    var criticalCodes = string.Join(",", blockingFindings.Select(x => x.Code).Distinct(StringComparer.OrdinalIgnoreCase));
+    var findingsSnapshot = EncodeApprovalFindingsSnapshot(findings);
+    dbContext.AddEntity(new AuditLog
+    {
+        TenantId = run.TenantId,
+        UserId = userId,
+        Method = "PAYROLL_APPROVE_OVERRIDE",
+        Path = $"/api/payroll/runs/{runId}/approve-override?critical={criticalCodes}&category={encodedCategory}&referenceId={encodedReferenceId}&reason={encodedReason}&snapshot={findingsSnapshot}",
+        StatusCode = StatusCodes.Status200OK,
+        IpAddress = httpContext.Connection.RemoteIpAddress?.ToString(),
+        DurationMs = 0
+    });
+
     await dbContext.SaveChangesAsync(cancellationToken);
-    return Results.Ok(new { run.Id, run.Status });
+    return Results.Ok(new
+    {
+        run.Id,
+        run.Status,
+        overrideApproved = true,
+        criticalFindingsCount = blockingFindings.Count
+    });
+})
+    .AddEndpointFilter<ValidationFilter<ApprovePayrollRunOverrideRequest>>();
+
+api.MapGet("/payroll/runs/{runId:guid}/approval-decisions", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    Guid runId,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var run = await dbContext.PayrollRuns.FirstOrDefaultAsync(x => x.Id == runId, cancellationToken);
+    if (run is null)
+    {
+        return Results.NotFound();
+    }
+
+    var decisions = await dbContext.AuditLogs
+        .Where(x =>
+            (x.Method == "PAYROLL_APPROVE_STANDARD" || x.Method == "PAYROLL_APPROVE_OVERRIDE") &&
+            x.Path.Contains($"/api/payroll/runs/{runId}/", StringComparison.OrdinalIgnoreCase))
+        .OrderByDescending(x => x.CreatedAtUtc)
+        .Select(x => new
+        {
+            x.Id,
+            x.CreatedAtUtc,
+            x.Method,
+            x.UserId,
+            x.Path
+        })
+        .ToListAsync(cancellationToken);
+
+    static string ReadQueryValue(string path, string key)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return string.Empty;
+        }
+
+        var questionMarkIndex = path.IndexOf('?');
+        if (questionMarkIndex < 0 || questionMarkIndex + 1 >= path.Length)
+        {
+            return string.Empty;
+        }
+
+        var query = path[(questionMarkIndex + 1)..];
+        var parts = query.Split('&', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (var part in parts)
+        {
+            var keyValue = part.Split('=', 2);
+            if (keyValue.Length != 2)
+            {
+                continue;
+            }
+
+            if (string.Equals(keyValue[0], key, StringComparison.OrdinalIgnoreCase))
+            {
+                return Uri.UnescapeDataString(keyValue[1]);
+            }
+        }
+
+        return string.Empty;
+    }
+
+    var items = decisions.Select(x =>
+    {
+        var snapshotJson = ReadQueryValue(x.Path, "snapshot");
+        var findingsCount = 0;
+        if (!string.IsNullOrWhiteSpace(snapshotJson))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(snapshotJson);
+                if (doc.RootElement.ValueKind == JsonValueKind.Array)
+                {
+                    findingsCount = doc.RootElement.GetArrayLength();
+                }
+            }
+            catch
+            {
+                findingsCount = 0;
+            }
+        }
+
+        return new
+        {
+            x.Id,
+            x.CreatedAtUtc,
+            DecisionType = x.Method == "PAYROLL_APPROVE_OVERRIDE" ? "Override" : "Standard",
+            x.UserId,
+            Category = ReadQueryValue(x.Path, "category"),
+            ReferenceId = ReadQueryValue(x.Path, "referenceId"),
+            Reason = ReadQueryValue(x.Path, "reason"),
+            CriticalCodes = ReadQueryValue(x.Path, "critical"),
+            WarningCount = ReadQueryValue(x.Path, "warning"),
+            FindingsSnapshotJson = snapshotJson,
+            FindingsCount = findingsCount
+        };
+    });
+
+    return Results.Ok(new { items });
+});
+
+api.MapGet("/payroll/governance/overview", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    int? days,
+    IApplicationDbContext dbContext,
+    IDateTimeProvider dateTimeProvider,
+    CancellationToken cancellationToken) =>
+{
+    var windowDays = Math.Clamp(days ?? 30, 1, 180);
+    var fromUtc = dateTimeProvider.UtcNow.AddDays(-windowDays);
+
+    var decisions = await dbContext.AuditLogs
+        .Where(x =>
+            x.CreatedAtUtc >= fromUtc &&
+            (x.Method == "PAYROLL_APPROVE_STANDARD" || x.Method == "PAYROLL_APPROVE_OVERRIDE"))
+        .Select(x => new
+        {
+            x.Method,
+            x.Path
+        })
+        .ToListAsync(cancellationToken);
+
+    var totalApprovals = decisions.Count;
+    var overrideApprovals = decisions.Count(x => x.Method == "PAYROLL_APPROVE_OVERRIDE");
+    var standardApprovals = totalApprovals - overrideApprovals;
+    var overrideRatePercent = totalApprovals == 0 ? 0m : Math.Round(overrideApprovals * 100m / totalApprovals, 1);
+
+    var criticalCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+    var overrideCategoryCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+    var criticalDecisionCount = 0;
+    var overridesWithReference = 0;
+    var overridesWithLongReason = 0;
+
+    foreach (var decision in decisions)
+    {
+        if (decision.Method == "PAYROLL_APPROVE_OVERRIDE")
+        {
+            var categoryRaw = string.IsNullOrWhiteSpace(decision.Path)
+                ? string.Empty
+                : ReadAuditQueryValue(decision.Path, "category");
+            var category = string.IsNullOrWhiteSpace(categoryRaw) ? "Unspecified" : categoryRaw.Trim();
+            overrideCategoryCounts.TryGetValue(category, out var categoryCount);
+            overrideCategoryCounts[category] = categoryCount + 1;
+
+            var referenceId = string.IsNullOrWhiteSpace(decision.Path)
+                ? string.Empty
+                : ReadAuditQueryValue(decision.Path, "referenceId");
+            if (!string.IsNullOrWhiteSpace(referenceId))
+            {
+                overridesWithReference++;
+            }
+
+            var reason = string.IsNullOrWhiteSpace(decision.Path)
+                ? string.Empty
+                : ReadAuditQueryValue(decision.Path, "reason");
+            if (!string.IsNullOrWhiteSpace(reason) && reason.Trim().Length >= 30)
+            {
+                overridesWithLongReason++;
+            }
+        }
+
+        var criticalCodesRaw = string.IsNullOrWhiteSpace(decision.Path)
+            ? string.Empty
+            : ReadAuditQueryValue(decision.Path, "critical");
+
+        if (string.IsNullOrWhiteSpace(criticalCodesRaw) || criticalCodesRaw == "0")
+        {
+            continue;
+        }
+
+        criticalDecisionCount++;
+        var parts = criticalCodesRaw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (var part in parts)
+        {
+            var code = part.Trim();
+            if (string.IsNullOrWhiteSpace(code) || code == "0")
+            {
+                continue;
+            }
+
+            criticalCounts.TryGetValue(code, out var count);
+            criticalCounts[code] = count + 1;
+        }
+    }
+
+    var topCriticalCodes = criticalCounts
+        .OrderByDescending(x => x.Value)
+        .ThenBy(x => x.Key)
+        .Take(5)
+        .Select(x => new
+        {
+            code = x.Key,
+            count = x.Value
+        })
+        .ToList();
+
+    var topOverrideCategories = overrideCategoryCounts
+        .OrderByDescending(x => x.Value)
+        .ThenBy(x => x.Key)
+        .Take(5)
+        .Select(x => new
+        {
+            category = x.Key,
+            count = x.Value
+        })
+        .ToList();
+
+    var overrideReferenceCoveragePercent = overrideApprovals == 0
+        ? 0m
+        : Math.Round(overridesWithReference * 100m / overrideApprovals, 1);
+    var overrideDocumentationQualityPercent = overrideApprovals == 0
+        ? 0m
+        : Math.Round(((overridesWithReference + overridesWithLongReason) / (2m * overrideApprovals)) * 100m, 1);
+
+    return Results.Ok(new
+    {
+        windowDays,
+        totalApprovals,
+        standardApprovals,
+        overrideApprovals,
+        overrideRatePercent,
+        overridesWithReference,
+        overrideReferenceCoveragePercent,
+        overrideDocumentationQualityPercent,
+        criticalDecisionCount,
+        topCriticalCodes,
+        topOverrideCategories
+    });
+});
+
+api.MapGet("/payroll/governance/trend", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    int? months,
+    IApplicationDbContext dbContext,
+    IDateTimeProvider dateTimeProvider,
+    CancellationToken cancellationToken) =>
+{
+    var monthsWindow = Math.Clamp(months ?? 6, 3, 12);
+    var now = dateTimeProvider.UtcNow;
+    var firstMonth = new DateTime(now.Year, now.Month, 1).AddMonths(-(monthsWindow - 1));
+
+    var decisions = await dbContext.AuditLogs
+        .Where(x =>
+            x.CreatedAtUtc >= firstMonth &&
+            (x.Method == "PAYROLL_APPROVE_STANDARD" || x.Method == "PAYROLL_APPROVE_OVERRIDE"))
+        .Select(x => new
+        {
+            x.CreatedAtUtc,
+            x.Method
+        })
+        .ToListAsync(cancellationToken);
+
+    var byMonth = decisions
+        .GroupBy(x => $"{x.CreatedAtUtc.Year:D4}-{x.CreatedAtUtc.Month:D2}")
+        .ToDictionary(g => g.Key, g => new
+        {
+            total = g.Count(),
+            overrides = g.Count(x => x.Method == "PAYROLL_APPROVE_OVERRIDE")
+        });
+
+    var items = new List<object>(monthsWindow);
+    for (var i = 0; i < monthsWindow; i++)
+    {
+        var monthDate = firstMonth.AddMonths(i);
+        var key = $"{monthDate.Year:D4}-{monthDate.Month:D2}";
+
+        var total = byMonth.TryGetValue(key, out var row) ? row.total : 0;
+        var overrides = byMonth.TryGetValue(key, out row) ? row.overrides : 0;
+        var rate = total == 0 ? 0m : Math.Round(overrides * 100m / total, 1);
+
+        items.Add(new
+        {
+            month = key,
+            totalApprovals = total,
+            overrideApprovals = overrides,
+            overrideRatePercent = rate
+        });
+    }
+
+    return Results.Ok(new
+    {
+        monthsWindow,
+        items
+    });
+});
+
+api.MapGet("/payroll/governance/decisions", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    int? days,
+    string? criticalCode,
+    string? referenceId,
+    string? category,
+    Guid? runId,
+    int? skip,
+    int? take,
+    IApplicationDbContext dbContext,
+    IDateTimeProvider dateTimeProvider,
+    CancellationToken cancellationToken) =>
+{
+    var windowDays = Math.Clamp(days ?? 30, 1, 180);
+    var safeSkip = Math.Max(0, skip ?? 0);
+    var maxRows = Math.Clamp(take ?? 100, 1, 200);
+    var fromUtc = dateTimeProvider.UtcNow.AddDays(-windowDays);
+    var normalizedCriticalCode = string.IsNullOrWhiteSpace(criticalCode) ? null : criticalCode.Trim();
+    var normalizedReferenceId = string.IsNullOrWhiteSpace(referenceId) ? null : referenceId.Trim();
+    var normalizedCategory = string.IsNullOrWhiteSpace(category) ? null : category.Trim();
+
+    var decisions = await dbContext.AuditLogs
+        .Where(x =>
+            x.CreatedAtUtc >= fromUtc &&
+            (x.Method == "PAYROLL_APPROVE_STANDARD" || x.Method == "PAYROLL_APPROVE_OVERRIDE"))
+        .OrderByDescending(x => x.CreatedAtUtc)
+        .Select(x => new
+        {
+            x.Id,
+            x.CreatedAtUtc,
+            x.Method,
+            x.UserId,
+            x.Path
+        })
+        .ToListAsync(cancellationToken);
+
+    var filtered = decisions
+        .Select(x =>
+        {
+            var criticalCodes = ReadAuditQueryValue(x.Path, "critical");
+            var category = ReadAuditQueryValue(x.Path, "category");
+            var referenceId = ReadAuditQueryValue(x.Path, "referenceId");
+            var reason = ReadAuditQueryValue(x.Path, "reason");
+            var warningCount = ReadAuditQueryValue(x.Path, "warning");
+            var runId = TryReadRunIdFromAuditPath(x.Path);
+            return new
+            {
+                x.Id,
+                x.CreatedAtUtc,
+                x.Method,
+                x.UserId,
+                CriticalCodes = criticalCodes,
+                Category = category,
+                ReferenceId = referenceId,
+                Reason = reason,
+                WarningCount = warningCount,
+                RunId = runId
+            };
+        })
+        .Where(x =>
+        {
+            if (normalizedCriticalCode is null)
+            {
+                return true;
+            }
+
+            var codes = x.CriticalCodes
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (!codes.Any(code => string.Equals(code, normalizedCriticalCode, StringComparison.OrdinalIgnoreCase)))
+            {
+                return false;
+            }
+
+            return true;
+        })
+        .Where(x =>
+        {
+            if (normalizedReferenceId is null)
+            {
+                return true;
+            }
+
+            return string.Equals(x.ReferenceId, normalizedReferenceId, StringComparison.OrdinalIgnoreCase);
+        })
+        .Where(x =>
+        {
+            if (normalizedCategory is null)
+            {
+                return true;
+            }
+
+            return string.Equals(x.Category, normalizedCategory, StringComparison.OrdinalIgnoreCase);
+        })
+        .Where(x =>
+        {
+            if (!runId.HasValue || runId.Value == Guid.Empty)
+            {
+                return true;
+            }
+
+            return x.RunId.HasValue && x.RunId.Value == runId.Value;
+        })
+        .ToList();
+
+    var total = filtered.Count;
+    var paged = filtered
+        .Skip(safeSkip)
+        .Take(maxRows)
+        .Select(x => new
+        {
+            x.Id,
+            x.CreatedAtUtc,
+            DecisionType = x.Method == "PAYROLL_APPROVE_OVERRIDE" ? "Override" : "Standard",
+            x.UserId,
+            x.RunId,
+            x.CriticalCodes,
+            x.Category,
+            x.ReferenceId,
+            x.WarningCount,
+            x.Reason
+        })
+        .ToList();
+
+    return Results.Ok(new
+    {
+        windowDays,
+        criticalCode = normalizedCriticalCode ?? string.Empty,
+        referenceId = normalizedReferenceId ?? string.Empty,
+        category = normalizedCategory ?? string.Empty,
+        runId = runId?.ToString() ?? string.Empty,
+        total,
+        skip = safeSkip,
+        take = maxRows,
+        hasMore = safeSkip + paged.Count < total,
+        items = paged
+    });
+});
+
+api.MapGet("/payroll/governance/decisions/export-csv", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    int? days,
+    string? criticalCode,
+    string? referenceId,
+    string? category,
+    Guid? runId,
+    IApplicationDbContext dbContext,
+    IDateTimeProvider dateTimeProvider,
+    CancellationToken cancellationToken) =>
+{
+    var windowDays = Math.Clamp(days ?? 30, 1, 180);
+    var fromUtc = dateTimeProvider.UtcNow.AddDays(-windowDays);
+    var normalizedCriticalCode = string.IsNullOrWhiteSpace(criticalCode) ? null : criticalCode.Trim();
+    var normalizedReferenceId = string.IsNullOrWhiteSpace(referenceId) ? null : referenceId.Trim();
+    var normalizedCategory = string.IsNullOrWhiteSpace(category) ? null : category.Trim();
+
+    var decisions = await dbContext.AuditLogs
+        .Where(x =>
+            x.CreatedAtUtc >= fromUtc &&
+            (x.Method == "PAYROLL_APPROVE_STANDARD" || x.Method == "PAYROLL_APPROVE_OVERRIDE"))
+        .OrderByDescending(x => x.CreatedAtUtc)
+        .Select(x => new
+        {
+            x.Id,
+            x.CreatedAtUtc,
+            x.Method,
+            x.UserId,
+            x.Path
+        })
+        .ToListAsync(cancellationToken);
+
+    var filtered = decisions
+        .Select(x =>
+        {
+            var parsedRunId = TryReadRunIdFromAuditPath(x.Path);
+            return new
+            {
+                x.Id,
+                x.CreatedAtUtc,
+                DecisionType = x.Method == "PAYROLL_APPROVE_OVERRIDE" ? "Override" : "Standard",
+                x.UserId,
+                RunId = parsedRunId,
+                CriticalCodes = ReadAuditQueryValue(x.Path, "critical"),
+                Category = ReadAuditQueryValue(x.Path, "category"),
+                ReferenceId = ReadAuditQueryValue(x.Path, "referenceId"),
+                WarningCount = ReadAuditQueryValue(x.Path, "warning"),
+                Reason = ReadAuditQueryValue(x.Path, "reason")
+            };
+        })
+        .Where(x =>
+        {
+            if (normalizedCriticalCode is null)
+            {
+                return true;
+            }
+
+            var codes = x.CriticalCodes
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            return codes.Any(code => string.Equals(code, normalizedCriticalCode, StringComparison.OrdinalIgnoreCase));
+        })
+        .Where(x => normalizedReferenceId is null || string.Equals(x.ReferenceId, normalizedReferenceId, StringComparison.OrdinalIgnoreCase))
+        .Where(x => normalizedCategory is null || string.Equals(x.Category, normalizedCategory, StringComparison.OrdinalIgnoreCase))
+        .Where(x => !runId.HasValue || runId.Value == Guid.Empty || (x.RunId.HasValue && x.RunId.Value == runId.Value))
+        .ToList();
+
+    static string EscapeCsv(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return "";
+        }
+
+        if (value.Contains(',') || value.Contains('"') || value.Contains('\n') || value.Contains('\r'))
+        {
+            return "\"" + value.Replace("\"", "\"\"") + "\"";
+        }
+
+        return value;
+    }
+
+    var csv = new StringBuilder();
+    csv.AppendLine("Report,ReferenceRegistry");
+    csv.AppendLine($"GeneratedAtUtc,{dateTimeProvider.UtcNow:yyyy-MM-dd HH:mm:ss}");
+    csv.AppendLine($"WindowDays,{windowDays}");
+    csv.AppendLine($"FilterCriticalCode,{EscapeCsv(normalizedCriticalCode ?? "")}");
+    csv.AppendLine($"FilterReferenceId,{EscapeCsv(normalizedReferenceId ?? "")}");
+    csv.AppendLine($"FilterCategory,{EscapeCsv(normalizedCategory ?? "")}");
+    csv.AppendLine($"FilterRunId,{EscapeCsv(runId?.ToString() ?? "")}");
+    csv.AppendLine($"TotalRows,{filtered.Count}");
+    csv.AppendLine();
+    csv.AppendLine("CreatedAtUtc,DecisionType,Category,ReferenceId,RunId,CriticalCodes,WarningCount,Reason,UserId");
+
+    foreach (var row in filtered)
+    {
+        csv.AppendLine(
+            $"{row.CreatedAtUtc:yyyy-MM-dd HH:mm:ss},{EscapeCsv(row.DecisionType)},{EscapeCsv(row.Category ?? "")},{EscapeCsv(row.ReferenceId ?? "")},{EscapeCsv(row.RunId?.ToString() ?? "")},{EscapeCsv(row.CriticalCodes ?? "")},{EscapeCsv(row.WarningCount ?? "")},{EscapeCsv(row.Reason ?? "")},{EscapeCsv(row.UserId?.ToString() ?? "")}");
+    }
+
+    var fileName = $"reference-registry-{dateTimeProvider.UtcNow:yyyyMMdd-HHmmss}.csv";
+    var fileBytes = Encoding.UTF8.GetBytes(csv.ToString());
+    return Results.File(fileBytes, "text/csv", fileName);
+});
+
+api.MapGet("/payroll/governance/next-reference-id", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    IApplicationDbContext dbContext,
+    IDateTimeProvider dateTimeProvider,
+    CancellationToken cancellationToken) =>
+{
+    var nowUtc = dateTimeProvider.UtcNow;
+    var monthStartUtc = new DateTime(nowUtc.Year, nowUtc.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+    var monthEndUtc = monthStartUtc.AddMonths(1);
+    var monthKey = $"{nowUtc:yyyyMM}";
+    var prefix = $"OVR-{monthKey}-";
+
+    var referenceIds = await dbContext.AuditLogs
+        .Where(x =>
+            x.Method == "PAYROLL_APPROVE_OVERRIDE" &&
+            x.CreatedAtUtc >= monthStartUtc &&
+            x.CreatedAtUtc < monthEndUtc)
+        .Select(x => x.Path)
+        .ToListAsync(cancellationToken);
+
+    var nextReferenceId = BuildNextOverrideReferenceId(monthKey, referenceIds);
+    var isSequenceExhausted = nextReferenceId.EndsWith("-9999", StringComparison.Ordinal);
+    _ = TryParseOverrideReferenceId(nextReferenceId, out _, out var nextSequence);
+
+    return Results.Ok(new
+    {
+        monthKey,
+        nextSequence,
+        referenceId = nextReferenceId,
+        isSequenceExhausted
+    });
 });
 
 api.MapPost("/payroll/runs/{runId:guid}/lock", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin)] async (
@@ -3817,6 +4536,292 @@ api.MapGet("/payroll/exports/{exportId:guid}/download", [Authorize(Roles = RoleN
     return Results.File(export.FileData, export.ContentType, export.FileName);
 });
 
+api.MapGet("/smart-alerts", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    int? daysAhead,
+    IApplicationDbContext dbContext,
+    IDateTimeProvider dateTimeProvider,
+    CancellationToken cancellationToken) =>
+{
+    var safeDaysAhead = Math.Clamp(daysAhead ?? 30, 1, 120);
+    var today = DateOnly.FromDateTime(dateTimeProvider.UtcNow.Date);
+    var alerts = new List<SmartAlertResponse>();
+
+    var company = await dbContext.CompanyProfiles.FirstOrDefaultAsync(cancellationToken);
+    var defaultPayDay = company?.DefaultPayDay is >= 1 and <= 31 ? company.DefaultPayDay : 25;
+
+    var employees = await dbContext.Employees
+        .Select(x => new
+        {
+            x.Id,
+            x.FirstName,
+            x.LastName,
+            x.StartDate,
+            x.EmployeeNumber,
+            x.BankIban,
+            x.IsGosiEligible,
+            x.GosiBasicWage
+        })
+        .ToListAsync(cancellationToken);
+
+    foreach (var employee in employees)
+    {
+        var probationEnd = employee.StartDate.AddDays(89);
+        var daysLeft = probationEnd.DayNumber - today.DayNumber;
+        if (daysLeft < 0 || daysLeft > safeDaysAhead)
+        {
+            continue;
+        }
+
+        var severity = daysLeft <= 7 ? "Critical" : daysLeft <= 30 ? "Warning" : "Notice";
+        alerts.Add(new SmartAlertResponse(
+            $"PROBATION:{employee.Id:N}:{probationEnd:yyyyMMdd}",
+            "ProbationEndingSoon",
+            severity,
+            $"{employee.FirstName} {employee.LastName}",
+            $"Probation ends on {probationEnd:yyyy-MM-dd} ({daysLeft} day(s) left).",
+            daysLeft,
+            probationEnd.ToString("yyyy-MM-dd")));
+    }
+
+    foreach (var employee in employees)
+    {
+        var fullName = $"{employee.FirstName} {employee.LastName}".Trim();
+        var employeeRef = string.IsNullOrWhiteSpace(employee.EmployeeNumber)
+            ? employee.Id.ToString("N")
+            : employee.EmployeeNumber.Trim();
+
+        if (string.IsNullOrWhiteSpace(employee.BankIban))
+        {
+            alerts.Add(new SmartAlertResponse(
+                $"MISSING_IBAN:{employeeRef}",
+                "MissingIban",
+                "Warning",
+                fullName,
+                "Employee bank IBAN is missing. Complete payment profile before payroll/WPS export.",
+                null,
+                null));
+        }
+
+        if (employee.IsGosiEligible && employee.GosiBasicWage <= 0m)
+        {
+            alerts.Add(new SmartAlertResponse(
+                $"MISSING_GOSI_SETUP:{employeeRef}",
+                "MissingGosiSetup",
+                "Critical",
+                fullName,
+                "Employee is marked GOSI eligible but GOSI basic wage is zero. Fix before payroll approval.",
+                null,
+                null));
+        }
+    }
+
+    var complianceAlerts = await dbContext.ComplianceAlerts
+        .Where(x => !x.IsResolved && x.DaysLeft >= 0 && x.DaysLeft <= safeDaysAhead)
+        .OrderBy(x => x.DaysLeft)
+        .Select(x => new
+        {
+            x.Id,
+            x.EmployeeName,
+            x.DocumentType,
+            x.Severity,
+            x.DaysLeft,
+            x.ExpiryDate
+        })
+        .ToListAsync(cancellationToken);
+
+    foreach (var alert in complianceAlerts)
+    {
+        alerts.Add(new SmartAlertResponse(
+            $"DOC:{alert.Id:N}",
+            "DocumentExpiry",
+            string.IsNullOrWhiteSpace(alert.Severity) ? "Warning" : alert.Severity,
+            alert.EmployeeName,
+            $"{alert.DocumentType} expires on {alert.ExpiryDate:yyyy-MM-dd} ({alert.DaysLeft} day(s) left).",
+            alert.DaysLeft,
+            alert.ExpiryDate.ToString("yyyy-MM-dd")));
+    }
+
+    var now = dateTimeProvider.UtcNow;
+    var currentYear = now.Year;
+    var currentMonth = now.Month;
+    var period = await dbContext.PayrollPeriods
+        .FirstOrDefaultAsync(x => x.Year == currentYear && x.Month == currentMonth, cancellationToken);
+
+    var payrollAlertLeadDays = 5;
+    var dayToStartAlert = Math.Max(1, defaultPayDay - payrollAlertLeadDays);
+    if (now.Day >= dayToStartAlert)
+    {
+        var payrollAlertKey = $"PAYROLL_PENDING:{currentYear}{currentMonth:00}";
+        if (period is null)
+        {
+            var daysLeft = Math.Max(0, defaultPayDay - now.Day);
+            var severity = now.Day >= defaultPayDay ? "Critical" : "Warning";
+            alerts.Add(new SmartAlertResponse(
+                payrollAlertKey,
+                "PayrollApprovalPending",
+                severity,
+                null,
+                $"Payroll period for {currentYear}-{currentMonth:00} is not created yet. Default pay day is {defaultPayDay}.",
+                daysLeft,
+                new DateOnly(currentYear, currentMonth, Math.Min(defaultPayDay, DateTime.DaysInMonth(currentYear, currentMonth))).ToString("yyyy-MM-dd")));
+        }
+        else
+        {
+            var run = await dbContext.PayrollRuns
+                .Where(x => x.PayrollPeriodId == period.Id)
+                .OrderByDescending(x => x.CreatedAtUtc)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            var isApprovedOrLocked = run is not null && (run.Status == PayrollRunStatus.Approved || run.Status == PayrollRunStatus.Locked);
+            if (!isApprovedOrLocked)
+            {
+                var daysLeft = Math.Max(0, defaultPayDay - now.Day);
+                var severity = now.Day >= defaultPayDay ? "Critical" : "Warning";
+                alerts.Add(new SmartAlertResponse(
+                    payrollAlertKey,
+                    "PayrollApprovalPending",
+                    severity,
+                    null,
+                    $"Payroll for {currentYear}-{currentMonth:00} is not approved yet. Default pay day is {defaultPayDay}.",
+                    daysLeft,
+                    new DateOnly(currentYear, currentMonth, Math.Min(defaultPayDay, DateTime.DaysInMonth(currentYear, currentMonth))).ToString("yyyy-MM-dd")));
+            }
+        }
+    }
+
+    var actionPaths = await dbContext.AuditLogs
+        .Where(x => x.Method == "SMART_ALERT_ACK" || x.Method == "SMART_ALERT_SNOOZE")
+        .OrderByDescending(x => x.CreatedAtUtc)
+        .Select(x => new { x.Method, x.Path, x.CreatedAtUtc })
+        .Take(3000)
+        .ToListAsync(cancellationToken);
+
+    var latestActionByKey = new Dictionary<string, (string Method, DateTime CreatedAtUtc, string Until)>(StringComparer.OrdinalIgnoreCase);
+    foreach (var action in actionPaths)
+    {
+        var key = ExtractSmartAlertKeyFromPath(action.Path);
+        if (string.IsNullOrWhiteSpace(key) || latestActionByKey.ContainsKey(key))
+        {
+            continue;
+        }
+
+        latestActionByKey[key] = (action.Method, action.CreatedAtUtc, ReadAuditQueryValue(action.Path, "until"));
+    }
+
+    var visibleAlerts = alerts
+        .Where(alert =>
+        {
+            if (!latestActionByKey.TryGetValue(alert.Key, out var state))
+            {
+                return true;
+            }
+
+            if (state.Method == "SMART_ALERT_ACK")
+            {
+                return false;
+            }
+
+            if (state.Method == "SMART_ALERT_SNOOZE")
+            {
+                if (DateOnly.TryParse(state.Until, out var untilDate))
+                {
+                    return untilDate < today;
+                }
+                return true;
+            }
+
+            return true;
+        })
+        .OrderByDescending(x => ResolveSmartAlertSeverityWeight(x.Severity))
+        .ThenBy(x => x.DaysLeft ?? int.MaxValue)
+        .ToList();
+
+    return Results.Ok(new
+    {
+        daysAhead = safeDaysAhead,
+        total = visibleAlerts.Count,
+        items = visibleAlerts
+    });
+});
+
+api.MapPost("/smart-alerts/{key}/acknowledge", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    string key,
+    SmartAlertAcknowledgeRequest request,
+    HttpContext httpContext,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    if (string.IsNullOrWhiteSpace(key))
+    {
+        return Results.BadRequest(new { error = "Alert key is required." });
+    }
+
+    Guid? userId = null;
+    var userIdClaim = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (Guid.TryParse(userIdClaim, out var parsedUserId))
+    {
+        userId = parsedUserId;
+    }
+
+    var encodedKey = Uri.EscapeDataString(key.Trim());
+    var note = string.IsNullOrWhiteSpace(request.Note) ? "" : request.Note.Trim();
+    var encodedNote = Uri.EscapeDataString(note);
+
+    dbContext.AddEntity(new AuditLog
+    {
+        UserId = userId,
+        Method = "SMART_ALERT_ACK",
+        Path = $"/api/smart-alerts/{encodedKey}/acknowledge?note={encodedNote}",
+        StatusCode = StatusCodes.Status200OK,
+        IpAddress = httpContext.Connection.RemoteIpAddress?.ToString(),
+        DurationMs = 0
+    });
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { key, status = "Acknowledged" });
+})
+    .AddEndpointFilter<ValidationFilter<SmartAlertAcknowledgeRequest>>();
+
+api.MapPost("/smart-alerts/{key}/snooze", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    string key,
+    SmartAlertSnoozeRequest request,
+    HttpContext httpContext,
+    IDateTimeProvider dateTimeProvider,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    if (string.IsNullOrWhiteSpace(key))
+    {
+        return Results.BadRequest(new { error = "Alert key is required." });
+    }
+
+    Guid? userId = null;
+    var userIdClaim = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (Guid.TryParse(userIdClaim, out var parsedUserId))
+    {
+        userId = parsedUserId;
+    }
+
+    var until = DateOnly.FromDateTime(dateTimeProvider.UtcNow.Date).AddDays(request.Days);
+    var encodedKey = Uri.EscapeDataString(key.Trim());
+    var note = string.IsNullOrWhiteSpace(request.Note) ? "" : request.Note.Trim();
+    var encodedNote = Uri.EscapeDataString(note);
+
+    dbContext.AddEntity(new AuditLog
+    {
+        UserId = userId,
+        Method = "SMART_ALERT_SNOOZE",
+        Path = $"/api/smart-alerts/{encodedKey}/snooze?until={until:yyyy-MM-dd}&days={request.Days}&note={encodedNote}",
+        StatusCode = StatusCodes.Status200OK,
+        IpAddress = httpContext.Connection.RemoteIpAddress?.ToString(),
+        DurationMs = 0
+    });
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { key, status = "Snoozed", until = until.ToString("yyyy-MM-dd") });
+})
+    .AddEndpointFilter<ValidationFilter<SmartAlertSnoozeRequest>>();
+
 api.MapGet("/audit-logs", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin)] (
     int? page,
     int? pageSize,
@@ -3856,6 +4861,386 @@ api.MapGet("/audit-logs", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.A
     return Results.Ok(new { items = logs, total, page = safePage, pageSize = safePageSize });
 });
 
+static async Task<List<PayrollPreApprovalFindingResponse>> BuildPayrollPreApprovalFindingsAsync(
+    IApplicationDbContext dbContext,
+    PayrollRun run,
+    CancellationToken cancellationToken)
+{
+    var period = await dbContext.PayrollPeriods.FirstOrDefaultAsync(x => x.Id == run.PayrollPeriodId, cancellationToken);
+    if (period is null)
+    {
+        return new List<PayrollPreApprovalFindingResponse>();
+    }
+
+    var findings = new List<PayrollPreApprovalFindingResponse>();
+
+    var currentLines = await (from line in dbContext.PayrollLines
+                              join employee in dbContext.Employees on line.EmployeeId equals employee.Id
+                              where line.PayrollRunId == run.Id
+                              select new
+                              {
+                                  line.EmployeeId,
+                                  EmployeeName = employee.FirstName + " " + employee.LastName,
+                                  line.BaseSalary,
+                                  line.Allowances,
+                                  line.Deductions,
+                                  line.OvertimeHours,
+                                  line.OvertimeAmount,
+                                  line.NetAmount
+                              }).ToListAsync(cancellationToken);
+
+    var previousMonthDate = new DateTime(period.Year, period.Month, 1).AddMonths(-1);
+    var previousPeriod = await dbContext.PayrollPeriods
+        .Where(x => x.Year == previousMonthDate.Year && x.Month == previousMonthDate.Month)
+        .OrderByDescending(x => x.CreatedAtUtc)
+        .FirstOrDefaultAsync(cancellationToken);
+
+    Dictionary<Guid, (decimal NetAmount, decimal OvertimeHours)> previousByEmployeeId = new();
+    if (previousPeriod is not null)
+    {
+        var previousRun = await dbContext.PayrollRuns
+            .Where(x =>
+                x.PayrollPeriodId == previousPeriod.Id &&
+                (x.Status == PayrollRunStatus.Approved || x.Status == PayrollRunStatus.Locked))
+            .OrderByDescending(x => x.CreatedAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (previousRun is not null)
+        {
+            var previousLines = await dbContext.PayrollLines
+                .Where(x => x.PayrollRunId == previousRun.Id)
+                .Select(x => new { x.EmployeeId, x.NetAmount, x.OvertimeHours })
+                .ToListAsync(cancellationToken);
+
+            previousByEmployeeId = previousLines.ToDictionary(
+                x => x.EmployeeId,
+                x => (x.NetAmount, x.OvertimeHours));
+        }
+    }
+
+    foreach (var line in currentLines)
+    {
+        if (line.NetAmount < 0)
+        {
+            findings.Add(new PayrollPreApprovalFindingResponse(
+                "NegativeNetAmount",
+                "Critical",
+                line.EmployeeId,
+                line.EmployeeName,
+                "Net salary is negative. Review deductions and allowances.",
+                "NetAmount",
+                line.NetAmount));
+        }
+
+        var gross = line.BaseSalary + line.Allowances + line.OvertimeAmount;
+        if (gross > 0)
+        {
+            var deductionPercent = Math.Round((line.Deductions / gross) * 100m, 2);
+            if (deductionPercent >= 60m)
+            {
+                findings.Add(new PayrollPreApprovalFindingResponse(
+                    "VeryHighDeductionRatio",
+                    "Critical",
+                    line.EmployeeId,
+                    line.EmployeeName,
+                    $"Deductions are {deductionPercent:F2}% of gross salary.",
+                    "DeductionPercent",
+                    deductionPercent));
+            }
+            else if (deductionPercent >= 35m)
+            {
+                findings.Add(new PayrollPreApprovalFindingResponse(
+                    "HighDeductionRatio",
+                    "Warning",
+                    line.EmployeeId,
+                    line.EmployeeName,
+                    $"Deductions are {deductionPercent:F2}% of gross salary.",
+                    "DeductionPercent",
+                    deductionPercent));
+            }
+        }
+
+        if (line.OvertimeHours >= 60m)
+        {
+            findings.Add(new PayrollPreApprovalFindingResponse(
+                "ExtremeOvertime",
+                "Critical",
+                line.EmployeeId,
+                line.EmployeeName,
+                $"Overtime hours reached {line.OvertimeHours:F2} this period.",
+                "OvertimeHours",
+                line.OvertimeHours));
+        }
+        else if (line.OvertimeHours >= 35m)
+        {
+            findings.Add(new PayrollPreApprovalFindingResponse(
+                "HighOvertime",
+                "Warning",
+                line.EmployeeId,
+                line.EmployeeName,
+                $"Overtime hours reached {line.OvertimeHours:F2} this period.",
+                "OvertimeHours",
+                line.OvertimeHours));
+        }
+
+        if (previousByEmployeeId.TryGetValue(line.EmployeeId, out var previous))
+        {
+            if (previous.NetAmount > 0)
+            {
+                var deviationPercent = Math.Round(((line.NetAmount - previous.NetAmount) / previous.NetAmount) * 100m, 2);
+                var absDeviation = Math.Abs(deviationPercent);
+
+                if (absDeviation >= 35m)
+                {
+                    findings.Add(new PayrollPreApprovalFindingResponse(
+                        "NetDeviationCritical",
+                        "Critical",
+                        line.EmployeeId,
+                        line.EmployeeName,
+                        $"Net salary deviated by {deviationPercent:F2}% compared to previous month.",
+                        "NetDeviationPercent",
+                        deviationPercent));
+                }
+                else if (absDeviation >= 20m)
+                {
+                    findings.Add(new PayrollPreApprovalFindingResponse(
+                        "NetDeviationWarning",
+                        "Warning",
+                        line.EmployeeId,
+                        line.EmployeeName,
+                        $"Net salary deviated by {deviationPercent:F2}% compared to previous month.",
+                        "NetDeviationPercent",
+                        deviationPercent));
+                }
+            }
+
+            if (previous.OvertimeHours > 0)
+            {
+                var overtimeSpikePercent = Math.Round(((line.OvertimeHours - previous.OvertimeHours) / previous.OvertimeHours) * 100m, 2);
+                if (overtimeSpikePercent >= 100m && line.OvertimeHours - previous.OvertimeHours >= 8m)
+                {
+                    findings.Add(new PayrollPreApprovalFindingResponse(
+                        "OvertimeSpike",
+                        "Warning",
+                        line.EmployeeId,
+                        line.EmployeeName,
+                        $"Overtime increased by {overtimeSpikePercent:F2}% compared to previous month.",
+                        "OvertimeSpikePercent",
+                        overtimeSpikePercent));
+                }
+            }
+            else if (line.OvertimeHours >= 20m)
+            {
+                findings.Add(new PayrollPreApprovalFindingResponse(
+                    "NewHighOvertime",
+                    "Warning",
+                    line.EmployeeId,
+                    line.EmployeeName,
+                    $"Overtime is {line.OvertimeHours:F2} hours while previous month had no overtime.",
+                    "OvertimeHours",
+                    line.OvertimeHours));
+            }
+        }
+    }
+
+    return findings;
+}
+
+static string ReadAuditQueryValue(string path, string key)
+{
+    if (string.IsNullOrWhiteSpace(path))
+    {
+        return string.Empty;
+    }
+
+    var questionMarkIndex = path.IndexOf('?');
+    if (questionMarkIndex < 0 || questionMarkIndex + 1 >= path.Length)
+    {
+        return string.Empty;
+    }
+
+    var query = path[(questionMarkIndex + 1)..];
+    var parts = query.Split('&', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    foreach (var part in parts)
+    {
+        var keyValue = part.Split('=', 2);
+        if (keyValue.Length != 2)
+        {
+            continue;
+        }
+
+        if (string.Equals(keyValue[0], key, StringComparison.OrdinalIgnoreCase))
+        {
+            return Uri.UnescapeDataString(keyValue[1]);
+        }
+    }
+
+    return string.Empty;
+}
+
+static Guid? TryReadRunIdFromAuditPath(string path)
+{
+    if (string.IsNullOrWhiteSpace(path))
+    {
+        return null;
+    }
+
+    var marker = "/api/payroll/runs/";
+    var start = path.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+    if (start < 0)
+    {
+        return null;
+    }
+
+    start += marker.Length;
+    if (start >= path.Length)
+    {
+        return null;
+    }
+
+    var endSlash = path.IndexOf('/', start);
+    var endQuestion = path.IndexOf('?', start);
+
+    var end = endSlash < 0 ? path.Length : endSlash;
+    if (endQuestion >= 0 && endQuestion < end)
+    {
+        end = endQuestion;
+    }
+
+    if (end <= start)
+    {
+        return null;
+    }
+
+    var runIdSegment = path[start..end];
+    return Guid.TryParse(runIdSegment, out var runId) ? runId : null;
+}
+
+static string ExtractSmartAlertKeyFromPath(string path)
+{
+    if (string.IsNullOrWhiteSpace(path))
+    {
+        return string.Empty;
+    }
+
+    var marker = "/api/smart-alerts/";
+    var start = path.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+    if (start < 0)
+    {
+        return string.Empty;
+    }
+
+    start += marker.Length;
+    if (start >= path.Length)
+    {
+        return string.Empty;
+    }
+
+    var endSlash = path.IndexOf('/', start);
+    var endQuestion = path.IndexOf('?', start);
+    var end = endSlash < 0 ? path.Length : endSlash;
+    if (endQuestion >= 0 && endQuestion < end)
+    {
+        end = endQuestion;
+    }
+
+    if (end <= start)
+    {
+        return string.Empty;
+    }
+
+    var encodedKey = path[start..end];
+    return Uri.UnescapeDataString(encodedKey);
+}
+
+static int ResolveSmartAlertSeverityWeight(string severity)
+{
+    return severity switch
+    {
+        "Critical" => 3,
+        "Warning" => 2,
+        _ => 1
+    };
+}
+
+static bool TryParseOverrideReferenceId(string referenceId, out string monthKey, out int sequence)
+{
+    monthKey = string.Empty;
+    sequence = 0;
+
+    if (string.IsNullOrWhiteSpace(referenceId))
+    {
+        return false;
+    }
+
+    var parts = referenceId.Split('-', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    if (parts.Length != 3)
+    {
+        return false;
+    }
+
+    if (!string.Equals(parts[0], "OVR", StringComparison.OrdinalIgnoreCase))
+    {
+        return false;
+    }
+
+    if (parts[1].Length != 6 || !parts[1].All(char.IsDigit))
+    {
+        return false;
+    }
+
+    if (parts[2].Length != 4 || !int.TryParse(parts[2], out sequence) || sequence <= 0)
+    {
+        return false;
+    }
+
+    monthKey = parts[1];
+    return true;
+}
+
+static string BuildNextOverrideReferenceId(string monthKey, IEnumerable<string> auditPaths)
+{
+    var maxSequence = 0;
+    foreach (var path in auditPaths)
+    {
+        var referenceId = ReadAuditQueryValue(path, "referenceId");
+        if (!TryParseOverrideReferenceId(referenceId, out var refMonthKey, out var sequence))
+        {
+            continue;
+        }
+
+        if (!string.Equals(refMonthKey, monthKey, StringComparison.Ordinal))
+        {
+            continue;
+        }
+
+        maxSequence = Math.Max(maxSequence, sequence);
+    }
+
+    var nextSequence = Math.Min(maxSequence + 1, 9999);
+    return $"OVR-{monthKey}-{nextSequence:D4}";
+}
+
+static string EncodeApprovalFindingsSnapshot(IEnumerable<PayrollPreApprovalFindingResponse> findings)
+{
+    var snapshot = findings
+        .Take(200)
+        .Select(x => new
+        {
+            x.Code,
+            x.Severity,
+            x.EmployeeId,
+            x.EmployeeName,
+            x.Message,
+            x.MetricName,
+            x.MetricValue
+        })
+        .ToList();
+
+    var json = JsonSerializer.Serialize(snapshot);
+    return Uri.EscapeDataString(json);
+}
+
 static async Task<ComplianceScoreResponse> BuildComplianceScoreAsync(IApplicationDbContext dbContext, CancellationToken cancellationToken)
 {
     var company = await dbContext.CompanyProfiles.FirstOrDefaultAsync(cancellationToken);
@@ -3872,6 +5257,12 @@ static async Task<ComplianceScoreResponse> BuildComplianceScoreAsync(IApplicatio
     var totalEmployees = employeeItems.Count;
     var saudiEmployees = employeeItems.Count(x => x.IsSaudiNational);
     var saudizationPercent = totalEmployees == 0 ? 0m : Math.Round(saudiEmployees * 100m / totalEmployees, 1);
+    const decimal saudizationTargetPercent = 30m;
+    var saudizationGapPercent = Math.Max(0m, saudizationTargetPercent - saudizationPercent);
+    var requiredSaudiEmployees = totalEmployees == 0
+        ? 1
+        : (int)Math.Ceiling((saudizationTargetPercent / 100m) * totalEmployees);
+    var additionalSaudiEmployeesNeeded = Math.Max(0, requiredSaudiEmployees - saudiEmployees);
 
     var wpsCompanyReady = company is not null &&
                           !string.IsNullOrWhiteSpace(company.WpsCompanyBankName) &&
@@ -3904,9 +5295,9 @@ static async Task<ComplianceScoreResponse> BuildComplianceScoreAsync(IApplicatio
     score -= Math.Min(10m, warningAlerts * 2m);
     score -= Math.Min(5m, noticeAlerts);
 
-    if (saudizationPercent < 30m)
+    if (saudizationPercent < saudizationTargetPercent)
     {
-        score -= Math.Min(20m, (30m - saudizationPercent) * 1.2m);
+        score -= Math.Min(20m, (saudizationTargetPercent - saudizationPercent) * 1.2m);
     }
 
     var finalScore = (int)Math.Clamp(Math.Round(score), 0m, 100m);
@@ -3935,9 +5326,9 @@ static async Task<ComplianceScoreResponse> BuildComplianceScoreAsync(IApplicatio
         recommendations.Add($"Plan remediation for {warningAlerts} warning alerts within 30 days.");
     }
 
-    if (saudizationPercent < 30m)
+    if (saudizationPercent < saudizationTargetPercent)
     {
-        recommendations.Add("Raise Saudization ratio to at least 30% target.");
+        recommendations.Add($"Raise Saudization ratio to at least {saudizationTargetPercent:F0}% target (need {additionalSaudiEmployeesNeeded} additional Saudi employee(s) at current headcount).");
     }
 
     if (recommendations.Count == 0)
@@ -3949,6 +5340,11 @@ static async Task<ComplianceScoreResponse> BuildComplianceScoreAsync(IApplicatio
         finalScore,
         grade,
         saudizationPercent,
+        saudizationTargetPercent,
+        saudizationGapPercent,
+        saudiEmployees,
+        totalEmployees,
+        additionalSaudiEmployeesNeeded,
         wpsCompanyReady,
         employeesMissingPaymentData,
         criticalAlerts,
@@ -4047,8 +5443,8 @@ static async Task<EmailSendResult> TrySendComplianceDigestEmailAsync(
     var port = int.TryParse(configuration["Smtp:Port"], out var parsedPort) ? parsedPort : 587;
     var username = configuration["Smtp:Username"];
     var password = configuration["Smtp:Password"];
-    var fromEmail = configuration["Smtp:FromEmail"];
-    var fromName = configuration["Smtp:FromName"];
+    var fromEmail = configuration["Smtp:FromEmail"] ?? configuration["Smtp:From"];
+    var fromName = configuration["Smtp:FromName"] ?? "HR Payroll Compliance";
     var enableSsl = !string.Equals(configuration["Smtp:EnableSsl"], "false", StringComparison.OrdinalIgnoreCase);
 
     if (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(fromEmail))
@@ -4103,6 +5499,15 @@ public sealed record CreateTenantRequest(
     string OwnerLastName,
     string OwnerEmail,
     string OwnerPassword);
+
+public sealed record PayrollPreApprovalFindingResponse(
+    string Code,
+    string Severity,
+    Guid? EmployeeId,
+    string? EmployeeName,
+    string Message,
+    string? MetricName,
+    decimal? MetricValue);
 
 public sealed record LoginRequest(Guid? TenantId, string? TenantSlug, string Email, string Password);
 public sealed record ForgotPasswordRequest(string TenantSlug, string Email);
@@ -4196,6 +5601,11 @@ public sealed record ComplianceScoreResponse(
     int Score,
     string Grade,
     decimal SaudizationPercent,
+    decimal SaudizationTargetPercent,
+    decimal SaudizationGapPercent,
+    int SaudiEmployees,
+    int TotalEmployees,
+    int AdditionalSaudiEmployeesNeeded,
     bool WpsCompanyReady,
     int EmployeesMissingPaymentData,
     int CriticalAlerts,
@@ -4243,3 +5653,14 @@ public sealed record CreatePayrollAdjustmentRequest(
     string Notes);
 
 public sealed record CalculatePayrollRunRequest(Guid PayrollPeriodId);
+public sealed record ApprovePayrollRunOverrideRequest(string Category, string Reason, string ReferenceId);
+public sealed record SmartAlertAcknowledgeRequest(string? Note);
+public sealed record SmartAlertSnoozeRequest(int Days, string? Note);
+public sealed record SmartAlertResponse(
+    string Key,
+    string Type,
+    string Severity,
+    string? EmployeeName,
+    string Message,
+    int? DaysLeft,
+    string? DueDate);

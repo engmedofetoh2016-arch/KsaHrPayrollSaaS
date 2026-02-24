@@ -52,7 +52,12 @@
       </label>
       <button type="submit" [disabled]="busy()">{{ i18n.text('Calculate', 'احتساب') }}</button>
       <div class="row-actions">
-        <button type="button" (click)="approveRun()" [disabled]="busy() || !activeRunId()">{{ i18n.text('Approve', 'اعتماد') }}</button>
+        <button
+          type="button"
+          (click)="approveRun()"
+          [disabled]="busy() || !activeRunId() || !!preApprovalChecks()?.hasBlockingFindings">
+          {{ i18n.text('Approve', 'اعتماد') }}
+        </button>
         <button type="button" (click)="lockRun()" [disabled]="busy() || !activeRunId()">{{ i18n.text('Lock', 'إقفال') }}</button>
       </div>
     </form>
@@ -64,6 +69,83 @@
   <h3>{{ i18n.text('Run Details', 'تفاصيل التشغيل') }}</h3>
   @if (run()) {
     <p>Status: {{ run()?.status }} | Total Net: {{ totalNet() | number: '1.2-2' }}</p>
+    <h4>{{ i18n.text('Pre-Approval Checks', 'فحوصات ما قبل الاعتماد') }}</h4>
+    @if (loadingChecks()) {
+      <p>{{ i18n.text('Checking payroll anomalies...', 'جاري فحص انحرافات الرواتب...') }}</p>
+    } @else if (preApprovalChecks(); as checks) {
+      <p>
+        {{ i18n.text('Critical', 'حرج') }}: {{ criticalChecksCount() }} |
+        {{ i18n.text('Warning', 'تحذير') }}: {{ warningChecksCount() }}
+      </p>
+      @if (checks.hasBlockingFindings) {
+        <p class="error">
+          {{ i18n.text('Approval is blocked until critical findings are fixed.', 'تم حظر الاعتماد حتى يتم تصحيح الملاحظات الحرجة.') }}
+        </p>
+        @if (canOverrideApprove()) {
+          <form class="override-form" [formGroup]="overrideApproveForm" (ngSubmit)="approveRunWithOverride()">
+            <label>
+              {{ i18n.text('Override Category', 'فئة التجاوز') }}
+              <select formControlName="category">
+                @for (template of overrideReasonTemplates; track template.value) {
+                  <option [value]="template.value">{{ template.label }}</option>
+                }
+              </select>
+            </label>
+            <label>
+              {{ i18n.text('Owner Override Reason', 'سبب تجاوز المالك') }}
+              <textarea
+                rows="2"
+                formControlName="reason"
+                [placeholder]="i18n.text('Explain why approval is still valid', 'اشرح سبب صحة الاعتماد رغم الملاحظات الحرجة')"></textarea>
+            </label>
+            <label>
+              {{ i18n.text('Reference ID (Ticket/Doc)', 'معرّف المرجع (تذكرة/مستند)') }}
+              <input
+                formControlName="referenceId"
+                [placeholder]="i18n.text('Example: OVR-202602-0001', 'مثال: OVR-202602-0001')" />
+            </label>
+            <div class="row-actions">
+              <button type="button" (click)="applyOverrideReasonTemplate()">
+                {{ i18n.text('Use Template', 'استخدام نموذج') }}
+              </button>
+              <button type="button" (click)="generateNextReferenceId()" [disabled]="loadingReferenceId()">
+                {{
+                  loadingReferenceId()
+                    ? i18n.text('Generating Ref...', 'جاري توليد المرجع...')
+                    : i18n.text('Generate Ref', 'توليد مرجع')
+                }}
+              </button>
+            </div>
+            <button type="submit" [disabled]="busy()">
+              {{ i18n.text('Approve with Override (Owner)', 'اعتماد مع تجاوز (مالك)') }}
+            </button>
+          </form>
+        }
+      }
+      @if (checks.findings.length === 0) {
+        <p class="ok">{{ i18n.text('No anomalies detected.', 'لم يتم اكتشاف انحرافات.') }}</p>
+      } @else {
+        <table>
+          <thead>
+            <tr>
+              <th>{{ i18n.text('Severity', 'الخطورة') }}</th>
+              <th>{{ i18n.text('Employee', 'الموظف') }}</th>
+              <th>{{ i18n.text('Issue', 'الملاحظة') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (finding of checks.findings; track finding.code + '-' + (finding.employeeId ?? '') + '-' + (finding.metricValue ?? 0)) {
+              <tr>
+                <td><span [class]="checkSeverityClass(finding.severity)">{{ finding.severity }}</span></td>
+                <td>{{ finding.employeeName || '-' }}</td>
+                <td>{{ finding.message }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+    }
+
     <button type="button" (click)="downloadRegisterCsv()" [disabled]="busy() || exportBusy() || !activeRunId()">
       {{ i18n.text('Export Register CSV', 'تصدير سجل الرواتب CSV') }}
     </button>
@@ -135,8 +217,98 @@
         }
       </tbody>
     </table>
+
+    <h4>{{ i18n.text('Approval Decisions', 'سجل قرارات الاعتماد') }}</h4>
+    @if (loadingApprovalDecisions()) {
+      <p>{{ i18n.text('Loading approval decisions...', 'جاري تحميل سجل قرارات الاعتماد...') }}</p>
+    } @else if (approvalDecisions().length === 0) {
+      <p class="muted">{{ i18n.text('No approval decisions yet for this run.', 'لا توجد قرارات اعتماد لهذا التشغيل حتى الآن.') }}</p>
+    } @else {
+      <table>
+        <thead>
+          <tr>
+            <th>{{ i18n.text('When', 'الوقت') }}</th>
+            <th>{{ i18n.text('Type', 'النوع') }}</th>
+            <th>{{ i18n.text('Category', 'الفئة') }}</th>
+            <th>{{ i18n.text('Reference', 'المرجع') }}</th>
+            <th>{{ i18n.text('Reason', 'السبب') }}</th>
+            <th>{{ i18n.text('Critical Codes', 'الأكواد الحرجة') }}</th>
+            <th>{{ i18n.text('Warnings', 'التحذيرات') }}</th>
+            <th>{{ i18n.text('Findings Snapshot', 'لقطة الملاحظات') }}</th>
+            <th>{{ i18n.text('Action', 'إجراء') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (decision of approvalDecisions(); track decision.id) {
+            <tr>
+              <td>{{ decision.createdAtUtc | date: 'short' }}</td>
+              <td>{{ decision.decisionType }}</td>
+              <td>{{ decision.category || '-' }}</td>
+              <td>{{ decision.referenceId || '-' }}</td>
+              <td>{{ decision.reason || '-' }}</td>
+              <td>{{ decision.criticalCodes || '-' }}</td>
+              <td>{{ decision.warningCount || '-' }}</td>
+              <td [title]="decision.findingsSnapshotJson || ''">
+                {{ decision.findingsCount ?? 0 }}
+              </td>
+              <td>
+                <button type="button" (click)="openDecisionSnapshot(decision)">
+                  {{ i18n.text('View Snapshot', 'عرض اللقطة') }}
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
   } @else {
     <p>{{ i18n.text('No run loaded yet.', 'لم يتم تحميل تشغيل بعد.') }}</p>
+  }
+
+  @if (activeDecisionSnapshot(); as snapshot) {
+    <div class="modal-backdrop" (click)="closeDecisionSnapshot()"></div>
+    <section class="modal-card" role="dialog" aria-modal="true">
+      <div class="modal-head">
+        <h4>{{ i18n.text('Approval Snapshot Evidence', 'دليل لقطة الاعتماد') }}</h4>
+        <button type="button" (click)="closeDecisionSnapshot()">×</button>
+      </div>
+      <p class="muted">
+        {{ i18n.text('Decision Type', 'نوع القرار') }}: {{ snapshot.decision.decisionType }} |
+        {{ i18n.text('When', 'الوقت') }}: {{ snapshot.decision.createdAtUtc | date: 'short' }}
+      </p>
+      <p class="muted">
+        {{ i18n.text('Critical', 'حرج') }}: {{ snapshotCriticalCount() }} |
+        {{ i18n.text('Warning', 'تحذير') }}: {{ snapshotWarningCount() }} |
+        {{ i18n.text('Notice', 'تنبيه') }}: {{ snapshotNoticeCount() }}
+      </p>
+
+      @if (snapshot.findings.length === 0) {
+        <p>{{ i18n.text('No findings snapshot payload was stored.', 'لا توجد حمولة لقطة ملاحظات محفوظة.') }}</p>
+      } @else {
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>{{ i18n.text('Severity', 'الخطورة') }}</th>
+                <th>{{ i18n.text('Code', 'الرمز') }}</th>
+                <th>{{ i18n.text('Employee', 'الموظف') }}</th>
+                <th>{{ i18n.text('Message', 'الرسالة') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (finding of snapshot.findings; track finding.code + '-' + (finding.employeeId ?? '') + '-' + finding.message) {
+                <tr>
+                  <td><span [class]="checkSeverityClass(finding.severity)">{{ finding.severity }}</span></td>
+                  <td>{{ finding.code || '-' }}</td>
+                  <td>{{ finding.employeeName || '-' }}</td>
+                  <td>{{ finding.message || '-' }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
   }
 
   <h3>{{ i18n.text('Export History', 'سجل التصدير') }}</h3>

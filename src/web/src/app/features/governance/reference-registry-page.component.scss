@@ -1,0 +1,85 @@
+.registry-page {
+  background: #fff;
+  border: 1px solid #d9e3ef;
+  border-radius: 12px;
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.meta {
+  margin: 0;
+  color: #607a98;
+  font-size: 0.85rem;
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+label {
+  display: grid;
+  gap: 5px;
+  font-size: 0.88rem;
+}
+
+input,
+select {
+  border: 1px solid #c9d6e2;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+button {
+  border: 1px solid #c6d6e6;
+  color: #15456f;
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: #f9fcff;
+  cursor: pointer;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  border-bottom: 1px solid #e2eaf3;
+  text-align: left;
+  padding: 7px;
+  font-size: 0.85rem;
+}
+
+code {
+  background: #f1f5f9;
+  border: 1px solid #d9e3ef;
+  border-radius: 6px;
+  padding: 1px 6px;
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  font-size: 0.78rem;
+}
+
+.error {
+  color: #a32020;
+}
+

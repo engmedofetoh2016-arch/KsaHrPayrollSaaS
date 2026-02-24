@@ -228,6 +228,23 @@ public class ComplianceAiBriefRequestValidator : AbstractValidator<ComplianceAiB
     }
 }
 
+public class SmartAlertAcknowledgeRequestValidator : AbstractValidator<SmartAlertAcknowledgeRequest>
+{
+    public SmartAlertAcknowledgeRequestValidator()
+    {
+        RuleFor(x => x.Note).MaximumLength(300);
+    }
+}
+
+public class SmartAlertSnoozeRequestValidator : AbstractValidator<SmartAlertSnoozeRequest>
+{
+    public SmartAlertSnoozeRequestValidator()
+    {
+        RuleFor(x => x.Days).InclusiveBetween(1, 30);
+        RuleFor(x => x.Note).MaximumLength(300);
+    }
+}
+
 public class ResolveComplianceAlertsBulkRequestValidator : AbstractValidator<ResolveComplianceAlertsBulkRequest>
 {
     public ResolveComplianceAlertsBulkRequestValidator()
@@ -325,5 +342,37 @@ public class CalculatePayrollRunRequestValidator : AbstractValidator<CalculatePa
     public CalculatePayrollRunRequestValidator()
     {
         RuleFor(x => x.PayrollPeriodId).NotEmpty();
+    }
+}
+
+public class ApprovePayrollRunOverrideRequestValidator : AbstractValidator<ApprovePayrollRunOverrideRequest>
+{
+    private static readonly string[] AllowedCategories =
+    [
+        "DataCorrection",
+        "TimingAdjustment",
+        "ExceptionalPayment",
+        "PolicyException",
+        "EmergencyClosure",
+        "Other"
+    ];
+
+    public ApprovePayrollRunOverrideRequestValidator()
+    {
+        RuleFor(x => x.Category)
+            .NotEmpty()
+            .Must(x => Array.IndexOf(AllowedCategories, x) >= 0)
+            .WithMessage("Invalid override category.");
+
+        RuleFor(x => x.Reason)
+            .NotEmpty()
+            .MinimumLength(8)
+            .MaximumLength(300);
+
+        RuleFor(x => x.ReferenceId)
+            .NotEmpty()
+            .MaximumLength(80)
+            .Matches("^OVR-[0-9]{6}-[0-9]{4}$")
+            .WithMessage("Reference id must match OVR-YYYYMM-####.");
     }
 }

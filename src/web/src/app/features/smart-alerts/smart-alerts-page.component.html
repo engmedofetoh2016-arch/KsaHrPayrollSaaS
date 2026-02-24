@@ -1,0 +1,83 @@
+<section class="smart-alerts-page">
+  <div class="head">
+    <div>
+      <h2>{{ i18n.text('Smart Alerts', 'Smart Alerts') }}</h2>
+      <p class="meta">{{ i18n.text('Actionable payroll and compliance reminders.', 'Actionable payroll and compliance reminders.') }}</p>
+    </div>
+    <div class="summary">
+      <span class="pill critical">{{ i18n.text('Critical', 'Critical') }}: {{ criticalCount() }}</span>
+      <span class="pill warning">{{ i18n.text('Warning', 'Warning') }}: {{ warningCount() }}</span>
+      <span class="pill notice">{{ i18n.text('Notice', 'Notice') }}: {{ noticeCount() }}</span>
+    </div>
+  </div>
+
+  <div class="filters">
+    <label>
+      {{ i18n.text('Look Ahead (days)', 'Look Ahead (days)') }}
+      <input type="number" min="1" max="120" [(ngModel)]="daysAhead" />
+    </label>
+    <button type="button" (click)="load()" [disabled]="loading()">
+      {{ loading() ? i18n.text('Loading...', 'Loading...') : i18n.text('Refresh', 'Refresh') }}
+    </button>
+  </div>
+
+  @if (error()) {
+    <p class="error">{{ error() }}</p>
+  }
+
+  @if (message()) {
+    <p class="ok">{{ message() }}</p>
+  }
+
+  @if (!loading() && items().length === 0) {
+    <p class="meta">{{ i18n.text('No active smart alerts for this horizon.', 'No active smart alerts for this horizon.') }}</p>
+  } @else {
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>{{ i18n.text('Severity', 'Severity') }}</th>
+            <th>{{ i18n.text('Type', 'Type') }}</th>
+            <th>{{ i18n.text('Subject', 'Subject') }}</th>
+            <th>{{ i18n.text('Message', 'Message') }}</th>
+            <th>{{ i18n.text('Due', 'Due') }}</th>
+            <th>{{ i18n.text('Actions', 'Actions') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (item of items(); track item.key) {
+            <tr>
+              <td>
+                <span class="pill" [class]="severityClass(item.severity)">{{ item.severity }}</span>
+              </td>
+              <td>{{ item.type }}</td>
+              <td>{{ item.subject || '-' }}</td>
+              <td>{{ item.message }}</td>
+              <td>
+                @if (item.dueDate) {
+                  {{ item.dueDate | date: 'mediumDate' }}
+                  @if (item.daysLeft !== undefined && item.daysLeft !== null) {
+                    ({{ item.daysLeft }})
+                  }
+                } @else {
+                  -
+                }
+              </td>
+              <td class="row-actions">
+                <button type="button" (click)="acknowledge(item.key)" [disabled]="!!actionKey()">
+                  {{ i18n.text('Acknowledge', 'Acknowledge') }}
+                </button>
+                <button type="button" (click)="snooze(item.key, 7)" [disabled]="!!actionKey()">
+                  {{ i18n.text('Snooze 7d', 'Snooze 7d') }}
+                </button>
+                <button type="button" (click)="snooze(item.key, 30)" [disabled]="!!actionKey()">
+                  {{ i18n.text('Snooze 30d', 'Snooze 30d') }}
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</section>

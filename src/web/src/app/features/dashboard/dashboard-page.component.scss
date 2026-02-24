@@ -118,6 +118,12 @@ h3 {
   color: var(--ink);
 }
 
+h4 {
+  margin: 10px 0 8px;
+  color: var(--ink);
+  font-size: 0.95rem;
+}
+
 .actions {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -257,6 +263,100 @@ ul {
   font-family: "Cascadia Mono", "Consolas", monospace;
   font-size: 0.8rem;
   color: #1f3046;
+}
+
+.governance code {
+  background: #f1f5f9;
+  border: 1px solid #d9e3ef;
+  border-radius: 6px;
+  padding: 1px 6px;
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  font-size: 0.78rem;
+}
+
+.governance .code-link {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: #15456f;
+  cursor: pointer;
+  text-align: left;
+}
+
+.governance .code-link:hover {
+  text-decoration: underline;
+}
+
+.governance .drilldown-head {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.governance .drilldown-head button {
+  border: 1px solid #c6d6e6;
+  background: #f9fcff;
+  color: #15456f;
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.governance.risk-low {
+  border-color: #76b88a;
+  background: #f3fbf5;
+}
+
+.governance.risk-medium {
+  border-color: #d2b15c;
+  background: #fffaf0;
+}
+
+.governance.risk-high {
+  border-color: #d88383;
+  background: #fff4f4;
+}
+
+.governance .trend {
+  margin-top: 8px;
+  min-height: 120px;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(40px, 1fr));
+  gap: 8px;
+  align-items: end;
+}
+
+.governance .bar {
+  background: linear-gradient(180deg, #0e5f8c, #1b83ba);
+  border-radius: 8px 8px 4px 4px;
+  position: relative;
+  min-height: 6px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  padding-bottom: 4px;
+}
+
+.governance .bar span {
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.governance .bar small {
+  position: absolute;
+  bottom: -18px;
+  color: #4f6b88;
+  font-size: 0.68rem;
+}
+
+.intelligence.risk-high {
+  border-color: #d88383;
+  background: #fff4f4;
 }
 
 @media (max-width: 900px) {

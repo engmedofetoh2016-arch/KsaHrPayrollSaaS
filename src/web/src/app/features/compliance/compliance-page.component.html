@@ -32,7 +32,24 @@
     <article class="kpi">
       <p class="label">{{ i18n.text('Saudization', 'السعودة') }}</p>
       <p class="value">{{ score().saudizationPercent }}%</p>
-      <p class="meta">{{ i18n.text('Target: 30%+', 'الهدف: 30%+') }}</p>
+      <p class="meta">
+        {{ i18n.text('Target', 'الهدف') }}: {{ score().saudizationTargetPercent }}%
+        ({{ score().saudiEmployees }}/{{ score().totalEmployees }})
+      </p>
+      <p class="meta">
+        @if (score().additionalSaudiEmployeesNeeded > 0) {
+          {{
+            i18n.text(
+              'Need',
+              'المطلوب'
+            )
+          }}:
+          {{ score().additionalSaudiEmployeesNeeded }}
+          {{ i18n.text('additional Saudi employee(s) to hit target.', 'موظف/موظفين سعوديين إضافيين للوصول للهدف.') }}
+        } @else {
+          {{ i18n.text('Target achieved.', 'تم تحقيق الهدف.') }}
+        }
+      </p>
     </article>
     <article class="kpi">
       <p class="label">{{ i18n.text('WPS Company Profile', 'ملف WPS للشركة') }}</p>

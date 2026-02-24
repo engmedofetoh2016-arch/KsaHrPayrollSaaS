@@ -1,7 +1,7 @@
 param(
     [string]$ApiBaseUrl = "",
     [string]$TenantName = "Managm Elzahb",
-    [string]$TenantSlug = "managm_elzahb",
+    [string]$TenantSlug = "managm-elzahb",
     [string]$CompanyLegalName = "Managm Elzahb",
     [string]$CurrencyCode = "SAR",
     [int]$DefaultPayDay = 25,

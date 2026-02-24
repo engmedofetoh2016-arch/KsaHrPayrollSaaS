@@ -1,0 +1,97 @@
+<section class="registry-page">
+  <div class="head">
+    <div>
+      <h2>{{ i18n.text('Reference Registry', 'سجل المراجع') }}</h2>
+      <p class="meta">{{ i18n.text('Audit all payroll override references in one place.', 'تدقيق كل مراجع تجاوزات الرواتب في مكان واحد.') }}</p>
+    </div>
+    <p class="meta">{{ i18n.text('Rows', 'عدد السجلات') }}: {{ selectedCountLabel() }}</p>
+  </div>
+
+  <div class="filters">
+    <label>
+      {{ i18n.text('Days', 'الأيام') }}
+      <input type="number" min="1" max="180" [(ngModel)]="days" />
+    </label>
+    <label>
+      {{ i18n.text('Reference ID', 'معرّف المرجع') }}
+      <input [(ngModel)]="referenceId" placeholder="OVR-202602-0001" />
+    </label>
+    <label>
+      {{ i18n.text('Category', 'الفئة') }}
+      <select [(ngModel)]="category">
+        <option value="All">{{ i18n.text('All', 'الكل') }}</option>
+        <option value="DataCorrection">DataCorrection</option>
+        <option value="TimingAdjustment">TimingAdjustment</option>
+        <option value="ExceptionalPayment">ExceptionalPayment</option>
+        <option value="PolicyException">PolicyException</option>
+        <option value="EmergencyClosure">EmergencyClosure</option>
+        <option value="Other">Other</option>
+      </select>
+    </label>
+    <label>
+      {{ i18n.text('Critical Code', 'الرمز الحرج') }}
+      <input [(ngModel)]="criticalCode" placeholder="NetDeviationCritical" />
+    </label>
+    <label>
+      {{ i18n.text('Run ID', 'معرّف التشغيل') }}
+      <input [(ngModel)]="runId" placeholder="GUID" />
+    </label>
+  </div>
+
+  <div class="actions">
+    <button type="button" (click)="applyFilters()" [disabled]="loading()">{{ i18n.text('Apply Filters', 'تطبيق المرشحات') }}</button>
+    <button type="button" (click)="clearFilters()" [disabled]="loading()">{{ i18n.text('Reset', 'إعادة تعيين') }}</button>
+    <button type="button" (click)="exportCsv()" [disabled]="exporting() || loading()">
+      {{ exporting() ? i18n.text('Exporting...', 'جاري التصدير...') : i18n.text('Export CSV', 'تصدير CSV') }}
+    </button>
+  </div>
+
+  @if (error()) {
+    <p class="error">{{ error() }}</p>
+  }
+
+  @if (items().length === 0 && !loading()) {
+    <p class="meta">{{ i18n.text('No registry records found for selected filters.', 'لا توجد سجلات مطابقة للمرشحات المحددة.') }}</p>
+  } @else {
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>{{ i18n.text('When', 'الوقت') }}</th>
+            <th>{{ i18n.text('Type', 'النوع') }}</th>
+            <th>{{ i18n.text('Category', 'الفئة') }}</th>
+            <th>{{ i18n.text('Reference', 'المرجع') }}</th>
+            <th>{{ i18n.text('Run', 'التشغيل') }}</th>
+            <th>{{ i18n.text('Critical', 'الحرج') }}</th>
+            <th>{{ i18n.text('Reason', 'السبب') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (item of items(); track item.id) {
+            <tr>
+              <td>{{ item.createdAtUtc | date: 'short' }}</td>
+              <td>{{ item.decisionType }}</td>
+              <td>{{ item.category || '-' }}</td>
+              <td><code>{{ item.referenceId || '-' }}</code></td>
+              <td>
+                @if (item.runId) {
+                  <a [routerLink]="['/payroll']" [queryParams]="{ runId: item.runId }">{{ item.runId }}</a>
+                } @else {
+                  -
+                }
+              </td>
+              <td>{{ item.criticalCodes || '-' }}</td>
+              <td>{{ item.reason || '-' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+
+  @if (hasMore()) {
+    <button type="button" (click)="loadMore()" [disabled]="loading()">
+      {{ loading() ? i18n.text('Loading...', 'جاري التحميل...') : i18n.text('Load More', 'تحميل المزيد') }}
+    </button>
+  }
+</section>

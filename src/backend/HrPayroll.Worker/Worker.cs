@@ -799,8 +799,8 @@ public class Worker : BackgroundService
         var port = int.TryParse(configuration["Smtp:Port"], out var parsedPort) ? parsedPort : 587;
         var username = configuration["Smtp:Username"];
         var password = configuration["Smtp:Password"];
-        var fromEmail = configuration["Smtp:FromEmail"];
-        var fromName = configuration["Smtp:FromName"];
+        var fromEmail = configuration["Smtp:FromEmail"] ?? configuration["Smtp:From"];
+        var fromName = configuration["Smtp:FromName"] ?? "HR Payroll Compliance";
         var enableSsl = !string.Equals(configuration["Smtp:EnableSsl"], "false", StringComparison.OrdinalIgnoreCase);
 
         if (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(fromEmail))
