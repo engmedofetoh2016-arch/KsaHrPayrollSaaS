@@ -393,10 +393,50 @@ export class DashboardPageComponent implements OnInit {
       return value;
     }
 
-    return value
-      .replace(/\(fallback-disabled\)/gi, '(وضع بديل)')
-      .replace(/^- /gm, '• ')
-      .replace(/\n-\s/g, '\n• ');
+    const lines = value
+      .replace(/\r\n/g, '\n')
+      .split('\n')
+      .map((x) => x.trim())
+      .filter((x) => x.length > 0)
+      .map((line) => {
+        const normalized = line.replace(/^\u2022\s*/, '').replace(/^-\s*/, '');
+
+        const score = normalized.match(/^Current compliance score:\s*(\d+)\/100\s*\(([^)]+)\)\.?$/i);
+        if (score) {
+          return `درجة الالتزام الحالية: ${score[1]}/100 (${score[2]}).`;
+        }
+
+        const critical = normalized.match(/^Critical risks due within 7 days:\s*(\d+)\.?$/i);
+        if (critical) {
+          return `• المخاطر الحرجة خلال 7 أيام: ${critical[1]}.`;
+        }
+
+        const warning = normalized.match(/^Medium risks due within 30 days:\s*(\d+)\.?$/i);
+        if (warning) {
+          return `• المخاطر المتوسطة خلال 30 يومًا: ${warning[1]}.`;
+        }
+
+        const wps = normalized.match(/^WPS company readiness:\s*(complete|incomplete);\s*employees missing payment profile:\s*(\d+)\.?$/i);
+        if (wps) {
+          const readiness = wps[1].toLowerCase() === 'complete' ? 'مكتملة' : 'غير مكتملة';
+          return `• جاهزية WPS للشركة: ${readiness}، موظفون ينقصهم بيانات دفع: ${wps[2]}.`;
+        }
+
+        const saudization = normalized.match(/^Current Saudization ratio:\s*([0-9.]+%)\.?$/i);
+        if (saudization) {
+          return `• نسبة السعودة الحالية: ${saudization[1]}.`;
+        }
+
+        if (/^Action plan:/i.test(normalized)) {
+          return '• خطة عمل: إغلاق المخاطر الحرجة خلال 7 أيام، واستكمال بيانات الدفع خلال 30 يومًا، وخفض إشعارات انتهاء المستندات خلال 60 يومًا.';
+        }
+
+        return normalized
+          .replace(/\(fallback-disabled\)/gi, '(وضع بديل)')
+          .replace(/^-\s*/, '• ');
+      });
+
+    return lines.join('\n');
   }
 
   private extractCount(response: any): number {
