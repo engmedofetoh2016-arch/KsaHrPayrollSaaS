@@ -19,6 +19,11 @@ public interface IApplicationDbContext
     IQueryable<ComplianceAlert> ComplianceAlerts { get; }
     IQueryable<ComplianceScoreSnapshot> ComplianceScoreSnapshots { get; }
     IQueryable<ComplianceDigestDelivery> ComplianceDigestDeliveries { get; }
+    IQueryable<EmployeeLoan> EmployeeLoans { get; }
+    IQueryable<EmployeeLoanInstallment> EmployeeLoanInstallments { get; }
+    IQueryable<EmployeeOffboarding> EmployeeOffboardings { get; }
+    IQueryable<OffboardingChecklist> OffboardingChecklists { get; }
+    IQueryable<OffboardingChecklistItem> OffboardingChecklistItems { get; }
 
     void AddEntity<TEntity>(TEntity entity) where TEntity : class;
     void RemoveEntities<TEntity>(IEnumerable<TEntity> entities) where TEntity : class;

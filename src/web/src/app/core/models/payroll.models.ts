@@ -48,6 +48,7 @@ export interface PayrollRunDetails {
     baseSalary: number;
     allowances: number;
     manualDeductions: number;
+    loanDeduction: number;
     unpaidLeaveDays: number;
     unpaidLeaveDeduction: number;
     gosiWageBase: number;

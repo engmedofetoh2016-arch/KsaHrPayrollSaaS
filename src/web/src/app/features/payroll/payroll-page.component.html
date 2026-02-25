@@ -8,7 +8,7 @@
       <label>{{ i18n.text('Month', 'الشهر') }} <input type="number" formControlName="month" min="1" max="12" /></label>
       <label>{{ i18n.text('Start Date', 'تاريخ البداية') }} <input type="date" formControlName="periodStartDate" /></label>
       <label>{{ i18n.text('End Date', 'تاريخ النهاية') }} <input type="date" formControlName="periodEndDate" /></label>
-      <button type="submit" [disabled]="busy()">{{ i18n.text('Create', 'إنشاء') }}</button>
+      <button type="submit" class="btn btn-primary" [disabled]="busy()">{{ i18n.text('Create', 'إنشاء') }}</button>
     </form>
 
     <form class="card" [formGroup]="adjustmentForm" (ngSubmit)="createAdjustment()">
@@ -34,8 +34,8 @@
       <label>{{ i18n.text('Amount', 'المبلغ') }} <input type="number" formControlName="amount" min="0.01" step="0.01" /></label>
       <label>{{ i18n.text('Notes', 'ملاحظات') }} <input formControlName="notes" /></label>
       <div class="row-actions">
-        <button type="submit" [disabled]="busy()">{{ i18n.text('Save Adjustment', 'حفظ التعديل') }}</button>
-        <button type="button" (click)="loadAdjustments()">{{ i18n.text('Load Adjustments', 'تحميل التعديلات') }}</button>
+        <button type="submit" class="btn btn-primary" [disabled]="busy()">{{ i18n.text('Save Adjustment', 'حفظ التعديل') }}</button>
+        <button type="button" class="btn btn-secondary" (click)="loadAdjustments()">{{ i18n.text('Load Adjustments', 'تحميل التعديلات') }}</button>
       </div>
     </form>
 
@@ -50,15 +50,16 @@
           }
         </select>
       </label>
-      <button type="submit" [disabled]="busy()">{{ i18n.text('Calculate', 'احتساب') }}</button>
+      <button type="submit" class="btn btn-primary" [disabled]="busy()">{{ i18n.text('Calculate', 'احتساب') }}</button>
       <div class="row-actions">
         <button
+          class="btn btn-secondary"
           type="button"
           (click)="approveRun()"
           [disabled]="busy() || !activeRunId() || !!preApprovalChecks()?.hasBlockingFindings">
           {{ i18n.text('Approve', 'اعتماد') }}
         </button>
-        <button type="button" (click)="lockRun()" [disabled]="busy() || !activeRunId()">{{ i18n.text('Lock', 'إقفال') }}</button>
+        <button type="button" class="btn btn-ghost" (click)="lockRun()" [disabled]="busy() || !activeRunId()">{{ i18n.text('Lock', 'إقفال') }}</button>
       </div>
     </form>
   </div>
@@ -114,10 +115,10 @@
                 [placeholder]="i18n.text('Example: OVR-202602-0001', 'مثال: OVR-202602-0001')" />
             </label>
             <div class="row-actions">
-              <button type="button" (click)="applyOverrideReasonTemplate()">
+              <button type="button" class="btn btn-secondary" (click)="applyOverrideReasonTemplate()">
                 {{ i18n.text('Use Template', 'استخدام نموذج') }}
               </button>
-              <button type="button" (click)="generateNextReferenceId()" [disabled]="loadingReferenceId()">
+              <button type="button" class="btn btn-ghost" (click)="generateNextReferenceId()" [disabled]="loadingReferenceId()">
                 {{
                   loadingReferenceId()
                     ? i18n.text('Generating Ref...', 'جاري توليد المرجع...')
@@ -125,7 +126,7 @@
                 }}
               </button>
             </div>
-            <button type="submit" [disabled]="busy()">
+            <button type="submit" class="btn btn-primary" [disabled]="busy()">
               {{ i18n.text('Approve with Override (Owner)', 'اعتماد مع تجاوز (مالك)') }}
             </button>
           </form>
@@ -155,13 +156,13 @@
       }
     }
 
-    <button type="button" (click)="downloadRegisterCsv()" [disabled]="busy() || exportBusy() || !activeRunId()">
+    <button type="button" class="btn btn-secondary" (click)="downloadRegisterCsv()" [disabled]="busy() || exportBusy() || !activeRunId()">
       {{ i18n.text('Export Register CSV', 'تصدير سجل الرواتب CSV') }}
     </button>
-    <button type="button" (click)="downloadGosiCsv()" [disabled]="busy() || exportBusy() || !activeRunId()">
+    <button type="button" class="btn btn-secondary" (click)="downloadGosiCsv()" [disabled]="busy() || exportBusy() || !activeRunId()">
       {{ i18n.text('Export GOSI CSV', 'تصدير ملف التأمينات CSV') }}
     </button>
-    <button type="button" (click)="downloadWpsCsv()" [disabled]="busy() || exportBusy() || !activeRunId()">
+    <button type="button" class="btn btn-secondary" (click)="downloadWpsCsv()" [disabled]="busy() || exportBusy() || !activeRunId()">
       {{ i18n.text('Export WPS CSV', 'تصدير ملف WPS CSV') }}
     </button>
     <table>
@@ -171,6 +172,7 @@
           <th>Base</th>
           <th>Allowances</th>
           <th>Manual Ded.</th>
+          <th>Loan Ded.</th>
           <th>Unpaid Days</th>
           <th>Unpaid Ded.</th>
           <th>GOSI Base</th>
@@ -191,6 +193,7 @@
             <td>{{ line.baseSalary | number: '1.2-2' }}</td>
             <td>{{ line.allowances | number: '1.2-2' }}</td>
             <td>{{ line.manualDeductions | number: '1.2-2' }}</td>
+            <td>{{ line.loanDeduction | number: '1.2-2' }}</td>
             <td>{{ line.unpaidLeaveDays | number: '1.2-2' }}</td>
             <td>{{ line.unpaidLeaveDeduction | number: '1.2-2' }}</td>
             <td>{{ line.gosiWageBase | number: '1.2-2' }}</td>
@@ -216,6 +219,7 @@
             </td>
             <td>
               <button
+                class="btn btn-ghost btn-sm"
                 type="button"
                 (click)="downloadPayslipPdf(line.employeeId, line.employeeName)"
                 [disabled]="busy() || exportBusy()">
@@ -261,7 +265,7 @@
                 {{ decision.findingsCount ?? 0 }}
               </td>
               <td>
-                <button type="button" (click)="openDecisionSnapshot(decision)">
+                <button type="button" class="btn btn-secondary btn-sm" (click)="openDecisionSnapshot(decision)">
                   {{ i18n.text('View Snapshot', 'عرض اللقطة') }}
                 </button>
               </td>
@@ -279,7 +283,7 @@
     <section class="modal-card" role="dialog" aria-modal="true">
       <div class="modal-head">
         <h4>{{ i18n.text('Approval Snapshot Evidence', 'دليل لقطة الاعتماد') }}</h4>
-        <button type="button" (click)="closeDecisionSnapshot()">×</button>
+        <button type="button" class="btn btn-ghost btn-sm" (click)="closeDecisionSnapshot()">×</button>
       </div>
       <p class="muted">
         {{ i18n.text('Decision Type', 'نوع القرار') }}: {{ snapshot.decision.decisionType }} |
@@ -349,6 +353,7 @@
             <td>{{ exportJob.completedAtUtc ? (exportJob.completedAtUtc | date: 'short') : '-' }}</td>
             <td>
               <button
+                class="btn btn-secondary btn-sm"
                 type="button"
                 [disabled]="exportBusy() || exportJob.status !== 3"
                 (click)="downloadCompletedExport(exportJob.id, exportJob.fileName)">

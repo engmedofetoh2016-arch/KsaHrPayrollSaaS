@@ -70,12 +70,25 @@
 
       <label>
         {{ i18n.text('Nitaqat Activity', 'نشاط نطاقات') }}
-        <input formControlName="nitaqatActivity" />
+        <select formControlName="nitaqatActivity">
+          <option value="General">{{ i18n.text('General', 'عام') }}</option>
+          <option value="Retail">{{ i18n.text('Retail', 'تجزئة') }}</option>
+          <option value="Construction">{{ i18n.text('Construction', 'إنشاءات') }}</option>
+          <option value="Hospitality">{{ i18n.text('Hospitality', 'ضيافة') }}</option>
+          <option value="Healthcare">{{ i18n.text('Healthcare', 'رعاية صحية') }}</option>
+          <option value="Education">{{ i18n.text('Education', 'تعليم') }}</option>
+          <option value="Manufacturing">{{ i18n.text('Manufacturing', 'تصنيع') }}</option>
+        </select>
       </label>
 
       <label>
         {{ i18n.text('Nitaqat Size Band', 'حجم المنشأة (نطاقات)') }}
-        <input formControlName="nitaqatSizeBand" />
+        <select formControlName="nitaqatSizeBand">
+          <option value="Small">{{ i18n.text('Small', 'صغيرة') }}</option>
+          <option value="Medium">{{ i18n.text('Medium', 'متوسطة') }}</option>
+          <option value="Large">{{ i18n.text('Large', 'كبيرة') }}</option>
+          <option value="VeryLarge">{{ i18n.text('Very Large', 'كبيرة جدًا') }}</option>
+        </select>
       </label>
 
       <label>
@@ -84,7 +97,7 @@
       </label>
 
       <div class="actions">
-        <button type="submit" [disabled]="saving() || !canEdit()">
+        <button type="submit" class="btn btn-primary" [disabled]="saving() || !canEdit()">
           {{ saving() ? i18n.text('Saving...', 'جاري الحفظ...') : i18n.text('Save', 'حفظ') }}
         </button>
       </div>

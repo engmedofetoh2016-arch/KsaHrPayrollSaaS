@@ -2167,6 +2167,319 @@ api.MapGet("/final-settlement/exports/{exportId:guid}/download", [Authorize(Role
     return Results.File(export.FileData, export.ContentType, export.FileName);
 });
 
+api.MapGet("/offboarding", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    Guid? employeeId,
+    string? status,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var query = from offboarding in dbContext.EmployeeOffboardings
+                join employee in dbContext.Employees on offboarding.EmployeeId equals employee.Id
+                orderby offboarding.CreatedAtUtc descending
+                select new
+                {
+                    offboarding.Id,
+                    offboarding.EmployeeId,
+                    EmployeeName = employee.FirstName + " " + employee.LastName,
+                    offboarding.EffectiveDate,
+                    offboarding.Reason,
+                    offboarding.Status,
+                    offboarding.ApprovedAtUtc,
+                    offboarding.PaidAtUtc,
+                    offboarding.ClosedAtUtc,
+                    offboarding.CreatedAtUtc
+                };
+
+    if (employeeId.HasValue && employeeId.Value != Guid.Empty)
+    {
+        query = query.Where(x => x.EmployeeId == employeeId.Value);
+    }
+
+    if (!string.IsNullOrWhiteSpace(status))
+    {
+        query = query.Where(x => x.Status == status);
+    }
+
+    var rows = await query.Take(200).ToListAsync(cancellationToken);
+    return Results.Ok(rows);
+});
+
+api.MapPost("/offboarding", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    CreateEmployeeOffboardingRequest request,
+    IApplicationDbContext dbContext,
+    HttpContext httpContext,
+    CancellationToken cancellationToken) =>
+{
+    var employee = await dbContext.Employees.FirstOrDefaultAsync(x => x.Id == request.EmployeeId, cancellationToken);
+    if (employee is null)
+    {
+        return Results.BadRequest(new { error = "Employee not found in this tenant." });
+    }
+
+    var existingOpen = await dbContext.EmployeeOffboardings.AnyAsync(
+        x => x.EmployeeId == request.EmployeeId && x.Status != "Closed",
+        cancellationToken);
+
+    if (existingOpen)
+    {
+        return Results.BadRequest(new { error = "An active offboarding record already exists for this employee." });
+    }
+
+    var createdBy = Guid.TryParse(httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId)
+        ? userId
+        : (Guid?)null;
+
+    var offboarding = new EmployeeOffboarding
+    {
+        EmployeeId = request.EmployeeId,
+        EffectiveDate = request.EffectiveDate,
+        Reason = request.Reason.Trim(),
+        Status = "Draft",
+        RequestedByUserId = createdBy
+    };
+
+    dbContext.AddEntity(offboarding);
+    await dbContext.SaveChangesAsync(cancellationToken);
+
+    var checklist = new OffboardingChecklist
+    {
+        OffboardingId = offboarding.Id,
+        EmployeeId = offboarding.EmployeeId,
+        Status = "Open",
+        Notes = string.Empty
+    };
+    dbContext.AddEntity(checklist);
+
+    var defaults = new[]
+    {
+        new { Code = "ID_CARD", Label = "Collect company ID card", Sort = 10 },
+        new { Code = "IT_ACCESS", Label = "Revoke system and email access", Sort = 20 },
+        new { Code = "ASSETS", Label = "Return company laptop and assets", Sort = 30 },
+        new { Code = "FINANCE", Label = "Clear outstanding advances/loans", Sort = 40 },
+        new { Code = "FINAL_SETTLEMENT", Label = "Final settlement reviewed and approved", Sort = 50 }
+    };
+
+    foreach (var item in defaults)
+    {
+        dbContext.AddEntity(new OffboardingChecklistItem
+        {
+            ChecklistId = checklist.Id,
+            ItemCode = item.Code,
+            ItemLabel = item.Label,
+            Status = "Pending",
+            Notes = string.Empty,
+            SortOrder = item.Sort
+        });
+    }
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+
+    return Results.Created($"/api/offboarding/{offboarding.Id}", new
+    {
+        offboarding.Id,
+        offboarding.EmployeeId,
+        offboarding.EffectiveDate,
+        offboarding.Status
+    });
+})
+    .AddEndpointFilter<ValidationFilter<CreateEmployeeOffboardingRequest>>();
+
+api.MapPost("/offboarding/{offboardingId:guid}/approve", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    Guid offboardingId,
+    IApplicationDbContext dbContext,
+    HttpContext httpContext,
+    IDateTimeProvider dateTimeProvider,
+    CancellationToken cancellationToken) =>
+{
+    var offboarding = await dbContext.EmployeeOffboardings.FirstOrDefaultAsync(x => x.Id == offboardingId, cancellationToken);
+    if (offboarding is null)
+    {
+        return Results.NotFound(new { error = "Offboarding record not found." });
+    }
+
+    offboarding.Status = "Approved";
+    offboarding.ApprovedAtUtc = dateTimeProvider.UtcNow;
+    offboarding.ApprovedByUserId = Guid.TryParse(httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId)
+        ? userId
+        : null;
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { offboarding.Id, offboarding.Status, offboarding.ApprovedAtUtc });
+});
+
+api.MapGet("/offboarding/{offboardingId:guid}/checklist", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    Guid offboardingId,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var checklist = await dbContext.OffboardingChecklists.FirstOrDefaultAsync(x => x.OffboardingId == offboardingId, cancellationToken);
+    if (checklist is null)
+    {
+        return Results.NotFound(new { error = "Checklist not found for offboarding record." });
+    }
+
+    var items = await dbContext.OffboardingChecklistItems
+        .Where(x => x.ChecklistId == checklist.Id)
+        .OrderBy(x => x.SortOrder)
+        .ThenBy(x => x.CreatedAtUtc)
+        .Select(x => new
+        {
+            x.Id,
+            x.ItemCode,
+            x.ItemLabel,
+            x.Status,
+            x.Notes,
+            x.SortOrder,
+            x.CompletedAtUtc,
+            x.CompletedByUserId
+        })
+        .ToListAsync(cancellationToken);
+
+    var completedCount = items.Count(x => x.Status == "Completed");
+    return Results.Ok(new
+    {
+        checklist.Id,
+        checklist.OffboardingId,
+        checklist.EmployeeId,
+        checklist.Status,
+        checklist.CompletedAtUtc,
+        checklist.Notes,
+        totalItems = items.Count,
+        completedItems = completedCount,
+        completionPercent = items.Count == 0 ? 0 : Math.Round(completedCount * 100m / items.Count, 1),
+        items
+    });
+});
+
+api.MapPost("/offboarding/{offboardingId:guid}/checklist/items", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    Guid offboardingId,
+    CreateOffboardingChecklistItemRequest request,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var checklist = await dbContext.OffboardingChecklists.FirstOrDefaultAsync(x => x.OffboardingId == offboardingId, cancellationToken);
+    if (checklist is null)
+    {
+        return Results.NotFound(new { error = "Checklist not found for offboarding record." });
+    }
+
+    var exists = await dbContext.OffboardingChecklistItems.AnyAsync(
+        x => x.ChecklistId == checklist.Id && x.ItemCode == request.ItemCode.Trim(),
+        cancellationToken);
+
+    if (exists)
+    {
+        return Results.BadRequest(new { error = "Checklist item code already exists in this checklist." });
+    }
+
+    var item = new OffboardingChecklistItem
+    {
+        ChecklistId = checklist.Id,
+        ItemCode = request.ItemCode.Trim(),
+        ItemLabel = request.ItemLabel.Trim(),
+        Status = "Pending",
+        Notes = (request.Notes ?? string.Empty).Trim(),
+        SortOrder = request.SortOrder
+    };
+
+    dbContext.AddEntity(item);
+    await dbContext.SaveChangesAsync(cancellationToken);
+
+    return Results.Created($"/api/offboarding/{offboardingId}/checklist/items/{item.Id}", new
+    {
+        item.Id,
+        item.ItemCode,
+        item.ItemLabel,
+        item.Status,
+        item.SortOrder
+    });
+})
+    .AddEndpointFilter<ValidationFilter<CreateOffboardingChecklistItemRequest>>();
+
+api.MapPost("/offboarding/{offboardingId:guid}/checklist/items/{itemId:guid}/complete", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    Guid offboardingId,
+    Guid itemId,
+    CompleteOffboardingChecklistItemRequest request,
+    IApplicationDbContext dbContext,
+    HttpContext httpContext,
+    IDateTimeProvider dateTimeProvider,
+    CancellationToken cancellationToken) =>
+{
+    var checklist = await dbContext.OffboardingChecklists.FirstOrDefaultAsync(x => x.OffboardingId == offboardingId, cancellationToken);
+    if (checklist is null)
+    {
+        return Results.NotFound(new { error = "Checklist not found for offboarding record." });
+    }
+
+    var item = await dbContext.OffboardingChecklistItems.FirstOrDefaultAsync(
+        x => x.Id == itemId && x.ChecklistId == checklist.Id,
+        cancellationToken);
+
+    if (item is null)
+    {
+        return Results.NotFound(new { error = "Checklist item not found." });
+    }
+
+    item.Status = "Completed";
+    item.CompletedAtUtc = dateTimeProvider.UtcNow;
+    item.CompletedByUserId = Guid.TryParse(httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId)
+        ? userId
+        : null;
+    item.Notes = string.IsNullOrWhiteSpace(request.Notes) ? item.Notes : request.Notes.Trim();
+
+    var totalItems = await dbContext.OffboardingChecklistItems.CountAsync(x => x.ChecklistId == checklist.Id, cancellationToken);
+    var completedItems = await dbContext.OffboardingChecklistItems.CountAsync(
+        x => x.ChecklistId == checklist.Id && (x.Id == itemId || x.Status == "Completed"),
+        cancellationToken);
+
+    checklist.Status = completedItems == totalItems ? "Completed" : "InProgress";
+    checklist.CompletedAtUtc = completedItems == totalItems ? dateTimeProvider.UtcNow : null;
+    checklist.CompletedByUserId = completedItems == totalItems ? item.CompletedByUserId : null;
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new
+    {
+        ItemId = item.Id,
+        ItemStatus = item.Status,
+        ItemCompletedAtUtc = item.CompletedAtUtc,
+        ChecklistStatus = checklist.Status,
+        ChecklistCompletedAtUtc = checklist.CompletedAtUtc
+    });
+})
+    .AddEndpointFilter<ValidationFilter<CompleteOffboardingChecklistItemRequest>>();
+
+api.MapPost("/offboarding/{offboardingId:guid}/checklist/items/{itemId:guid}/reopen", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    Guid offboardingId,
+    Guid itemId,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var checklist = await dbContext.OffboardingChecklists.FirstOrDefaultAsync(x => x.OffboardingId == offboardingId, cancellationToken);
+    if (checklist is null)
+    {
+        return Results.NotFound(new { error = "Checklist not found for offboarding record." });
+    }
+
+    var item = await dbContext.OffboardingChecklistItems.FirstOrDefaultAsync(
+        x => x.Id == itemId && x.ChecklistId == checklist.Id,
+        cancellationToken);
+
+    if (item is null)
+    {
+        return Results.NotFound(new { error = "Checklist item not found." });
+    }
+
+    item.Status = "Pending";
+    item.CompletedAtUtc = null;
+    item.CompletedByUserId = null;
+    checklist.Status = "InProgress";
+    checklist.CompletedAtUtc = null;
+    checklist.CompletedByUserId = null;
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { ItemId = item.Id, ItemStatus = item.Status, ChecklistStatus = checklist.Status });
+});
+
 api.MapGet("/attendance-inputs", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] (
     int year,
     int month,
@@ -3710,6 +4023,203 @@ api.MapPost("/payroll/adjustments", [Authorize(Roles = RoleNames.Owner + "," + R
 })
     .AddEndpointFilter<ValidationFilter<CreatePayrollAdjustmentRequest>>();
 
+api.MapGet("/payroll/loans", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    Guid? employeeId,
+    string? status,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var normalizedStatus = string.IsNullOrWhiteSpace(status) ? null : status.Trim();
+
+    var query = from loan in dbContext.EmployeeLoans
+                join employee in dbContext.Employees on loan.EmployeeId equals employee.Id
+                orderby loan.CreatedAtUtc descending
+                select new
+                {
+                    loan.Id,
+                    loan.EmployeeId,
+                    EmployeeName = employee.FirstName + " " + employee.LastName,
+                    loan.LoanType,
+                    loan.PrincipalAmount,
+                    loan.RemainingBalance,
+                    loan.InstallmentAmount,
+                    loan.StartYear,
+                    loan.StartMonth,
+                    loan.TotalInstallments,
+                    loan.PaidInstallments,
+                    loan.Status,
+                    loan.Notes,
+                    loan.CreatedAtUtc
+                };
+
+    if (employeeId.HasValue && employeeId.Value != Guid.Empty)
+    {
+        query = query.Where(x => x.EmployeeId == employeeId.Value);
+    }
+
+    if (!string.IsNullOrWhiteSpace(normalizedStatus))
+    {
+        query = query.Where(x => x.Status == normalizedStatus);
+    }
+
+    var rows = await query.Take(300).ToListAsync(cancellationToken);
+    return Results.Ok(rows);
+});
+
+api.MapPost("/payroll/loans", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    CreateEmployeeLoanRequest request,
+    IApplicationDbContext dbContext,
+    HttpContext httpContext,
+    CancellationToken cancellationToken) =>
+{
+    var employee = await dbContext.Employees.FirstOrDefaultAsync(x => x.Id == request.EmployeeId, cancellationToken);
+    if (employee is null)
+    {
+        return Results.BadRequest(new { error = "Employee not found in this tenant." });
+    }
+
+    if (request.StartMonth is < 1 or > 12)
+    {
+        return Results.BadRequest(new { error = "Start month must be between 1 and 12." });
+    }
+
+    var loan = new EmployeeLoan
+    {
+        EmployeeId = request.EmployeeId,
+        LoanType = string.IsNullOrWhiteSpace(request.LoanType) ? "Advance" : request.LoanType.Trim(),
+        PrincipalAmount = Math.Round(request.PrincipalAmount, 2),
+        RemainingBalance = Math.Round(request.PrincipalAmount, 2),
+        InstallmentAmount = Math.Round(request.InstallmentAmount, 2),
+        StartYear = request.StartYear,
+        StartMonth = request.StartMonth,
+        TotalInstallments = request.TotalInstallments,
+        PaidInstallments = 0,
+        Status = "Draft",
+        Notes = (request.Notes ?? string.Empty).Trim(),
+        CreatedByUserId = Guid.TryParse(httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId) ? userId : null
+    };
+
+    dbContext.AddEntity(loan);
+    await dbContext.SaveChangesAsync(cancellationToken);
+
+    var scheduleYear = request.StartYear;
+    var scheduleMonth = request.StartMonth;
+    var remaining = loan.PrincipalAmount;
+    for (var i = 0; i < request.TotalInstallments; i++)
+    {
+        var amount = i == request.TotalInstallments - 1
+            ? Math.Round(remaining, 2)
+            : Math.Round(Math.Min(loan.InstallmentAmount, remaining), 2);
+
+        remaining = Math.Max(0m, Math.Round(remaining - amount, 2));
+
+        dbContext.AddEntity(new EmployeeLoanInstallment
+        {
+            EmployeeLoanId = loan.Id,
+            EmployeeId = loan.EmployeeId,
+            Year = scheduleYear,
+            Month = scheduleMonth,
+            Amount = amount,
+            Status = "Pending"
+        });
+
+        scheduleMonth++;
+        if (scheduleMonth > 12)
+        {
+            scheduleMonth = 1;
+            scheduleYear++;
+        }
+    }
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+
+    return Results.Created($"/api/payroll/loans/{loan.Id}", new
+    {
+        loan.Id,
+        loan.Status,
+        loan.PrincipalAmount,
+        loan.InstallmentAmount,
+        loan.TotalInstallments
+    });
+})
+    .AddEndpointFilter<ValidationFilter<CreateEmployeeLoanRequest>>();
+
+api.MapPost("/payroll/loans/{loanId:guid}/approve", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    Guid loanId,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var loan = await dbContext.EmployeeLoans.FirstOrDefaultAsync(x => x.Id == loanId, cancellationToken);
+    if (loan is null)
+    {
+        return Results.NotFound(new { error = "Loan not found." });
+    }
+
+    if (loan.Status == "Closed" || loan.Status == "Cancelled")
+    {
+        return Results.BadRequest(new { error = $"Loan cannot be approved when status is {loan.Status}." });
+    }
+
+    loan.Status = "Active";
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { loan.Id, loan.Status });
+});
+
+api.MapPost("/payroll/loans/{loanId:guid}/cancel", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    Guid loanId,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var loan = await dbContext.EmployeeLoans.FirstOrDefaultAsync(x => x.Id == loanId, cancellationToken);
+    if (loan is null)
+    {
+        return Results.NotFound(new { error = "Loan not found." });
+    }
+
+    loan.Status = "Cancelled";
+    var pendingInstallments = await dbContext.EmployeeLoanInstallments
+        .Where(x => x.EmployeeLoanId == loan.Id && x.Status == "Pending")
+        .ToListAsync(cancellationToken);
+
+    foreach (var installment in pendingInstallments)
+    {
+        installment.Status = "Cancelled";
+    }
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { loan.Id, loan.Status });
+});
+
+api.MapGet("/payroll/loans/{loanId:guid}/installments", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    Guid loanId,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var loan = await dbContext.EmployeeLoans.FirstOrDefaultAsync(x => x.Id == loanId, cancellationToken);
+    if (loan is null)
+    {
+        return Results.NotFound(new { error = "Loan not found." });
+    }
+
+    var rows = await dbContext.EmployeeLoanInstallments
+        .Where(x => x.EmployeeLoanId == loanId)
+        .OrderBy(x => x.Year)
+        .ThenBy(x => x.Month)
+        .Select(x => new
+        {
+            x.Id,
+            x.Year,
+            x.Month,
+            x.Amount,
+            x.Status,
+            x.PayrollRunId,
+            x.DeductedAtUtc
+        })
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(rows);
+});
+
 api.MapPost("/payroll/runs/calculate", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
     CalculatePayrollRunRequest request,
     IApplicationDbContext dbContext,
@@ -3754,6 +4264,18 @@ api.MapPost("/payroll/runs/calculate", [Authorize(Roles = RoleNames.Owner + "," 
     var employees = await dbContext.Employees.OrderBy(x => x.FirstName).ThenBy(x => x.LastName).ToListAsync(cancellationToken);
     var attendance = await dbContext.AttendanceInputs.Where(x => x.Year == period.Year && x.Month == period.Month).ToListAsync(cancellationToken);
     var adjustments = await dbContext.PayrollAdjustments.Where(x => x.Year == period.Year && x.Month == period.Month).ToListAsync(cancellationToken);
+    var activeLoanIds = await dbContext.EmployeeLoans
+        .Where(x => x.Status == "Active")
+        .Select(x => x.Id)
+        .ToListAsync(cancellationToken);
+
+    var loanInstallments = await dbContext.EmployeeLoanInstallments
+        .Where(x =>
+            x.Year == period.Year &&
+            x.Month == period.Month &&
+            x.Status == "Pending" &&
+            activeLoanIds.Contains(x.EmployeeLoanId))
+        .ToListAsync(cancellationToken);
     var unpaidLeaves = await dbContext.LeaveRequests
         .Where(x =>
             x.LeaveType == LeaveType.Unpaid &&
@@ -3773,6 +4295,9 @@ api.MapPost("/payroll/runs/calculate", [Authorize(Roles = RoleNames.Owner + "," 
 
         var manualDeduction = adjustments
             .Where(x => x.EmployeeId == employee.Id && x.Type == PayrollAdjustmentType.Deduction)
+            .Sum(x => x.Amount);
+        var loanDeduction = loanInstallments
+            .Where(x => x.EmployeeId == employee.Id)
             .Sum(x => x.Amount);
 
         var unpaidLeaveDays = unpaidLeaves
@@ -3802,7 +4327,7 @@ api.MapPost("/payroll/runs/calculate", [Authorize(Roles = RoleNames.Owner + "," 
 
         var gosiEmployeeContribution = Math.Round(gosiWageBase * gosiEmployeeRate, 2);
         var gosiEmployerContribution = Math.Round(gosiWageBase * gosiEmployerRate, 2);
-        var totalDeductions = Math.Round(manualDeduction + unpaidLeaveDeduction + gosiEmployeeContribution, 2);
+        var totalDeductions = Math.Round(manualDeduction + loanDeduction + unpaidLeaveDeduction + gosiEmployeeContribution, 2);
 
         var overtimeRate = (employee.BaseSalary / 30m / 8m) * 1.5m;
         var overtimeAmount = Math.Round(overtimeHours * overtimeRate, 2);
@@ -3815,6 +4340,7 @@ api.MapPost("/payroll/runs/calculate", [Authorize(Roles = RoleNames.Owner + "," 
             BaseSalary = employee.BaseSalary,
             Allowances = allowance,
             ManualDeductions = manualDeduction,
+            LoanDeduction = loanDeduction,
             UnpaidLeaveDays = unpaidLeaveDays,
             UnpaidLeaveDeduction = unpaidLeaveDeduction,
             GosiWageBase = gosiWageBase,
@@ -3860,6 +4386,7 @@ api.MapGet("/payroll/runs/{runId:guid}", [Authorize(Roles = RoleNames.Owner + ",
                      line.BaseSalary,
                      line.Allowances,
                      line.ManualDeductions,
+                     line.LoanDeduction,
                      line.UnpaidLeaveDays,
                      line.UnpaidLeaveDeduction,
                      line.GosiWageBase,
@@ -4772,6 +5299,55 @@ api.MapPost("/payroll/runs/{runId:guid}/lock", [Authorize(Roles = RoleNames.Owne
 
     var period = await dbContext.PayrollPeriods.FirstAsync(x => x.Id == run.PayrollPeriodId, cancellationToken);
     period.Status = PayrollRunStatus.Locked;
+
+    var lineEmployeeIds = await dbContext.PayrollLines
+        .Where(x => x.PayrollRunId == run.Id)
+        .Select(x => x.EmployeeId)
+        .Distinct()
+        .ToListAsync(cancellationToken);
+
+    var activeLoanIds = await dbContext.EmployeeLoans
+        .Where(x => x.Status == "Active")
+        .Select(x => x.Id)
+        .ToListAsync(cancellationToken);
+
+    var installments = await dbContext.EmployeeLoanInstallments
+        .Where(x =>
+            x.Year == period.Year &&
+            x.Month == period.Month &&
+            x.Status == "Pending" &&
+            activeLoanIds.Contains(x.EmployeeLoanId) &&
+            lineEmployeeIds.Contains(x.EmployeeId))
+        .ToListAsync(cancellationToken);
+
+    if (installments.Count > 0)
+    {
+        var loanIds = installments.Select(x => x.EmployeeLoanId).Distinct().ToList();
+        var loans = await dbContext.EmployeeLoans.Where(x => loanIds.Contains(x.Id)).ToListAsync(cancellationToken);
+
+        foreach (var installment in installments)
+        {
+            installment.Status = "Deducted";
+            installment.DeductedAtUtc = dateTimeProvider.UtcNow;
+            installment.PayrollRunId = run.Id;
+        }
+
+        foreach (var loan in loans)
+        {
+            var deductedAmount = installments.Where(x => x.EmployeeLoanId == loan.Id).Sum(x => x.Amount);
+            loan.RemainingBalance = Math.Max(0m, Math.Round(loan.RemainingBalance - deductedAmount, 2));
+            loan.PaidInstallments += installments.Count(x => x.EmployeeLoanId == loan.Id);
+
+            if (loan.RemainingBalance <= 0m || loan.PaidInstallments >= loan.TotalInstallments)
+            {
+                loan.Status = "Closed";
+            }
+            else if (loan.Status == "Draft")
+            {
+                loan.Status = "Active";
+            }
+        }
+    }
 
     await dbContext.SaveChangesAsync(cancellationToken);
     return Results.Ok(new { run.Id, run.Status });
@@ -6570,6 +7146,25 @@ public sealed record CreatePayrollAdjustmentRequest(
     string Notes);
 
 public sealed record CalculatePayrollRunRequest(Guid PayrollPeriodId);
+public sealed record CreateEmployeeLoanRequest(
+    Guid EmployeeId,
+    string LoanType,
+    decimal PrincipalAmount,
+    decimal InstallmentAmount,
+    int StartYear,
+    int StartMonth,
+    int TotalInstallments,
+    string? Notes);
+public sealed record CreateEmployeeOffboardingRequest(
+    Guid EmployeeId,
+    DateOnly EffectiveDate,
+    string Reason);
+public sealed record CreateOffboardingChecklistItemRequest(
+    string ItemCode,
+    string ItemLabel,
+    int SortOrder,
+    string? Notes);
+public sealed record CompleteOffboardingChecklistItemRequest(string? Notes);
 public sealed record ApprovePayrollRunOverrideRequest(string Category, string Reason, string ReferenceId);
 public sealed record SmartAlertAcknowledgeRequest(string? Note);
 public sealed record SmartAlertSnoozeRequest(int Days, string? Note);

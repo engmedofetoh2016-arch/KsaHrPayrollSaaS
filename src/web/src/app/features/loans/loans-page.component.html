@@ -1,0 +1,83 @@
+<section class="panel">
+  <h2>{{ i18n.text('Loans & Advances', 'السلف والقروض') }}</h2>
+
+  <form class="card" [formGroup]="form" (ngSubmit)="createLoan()">
+    <h3>{{ i18n.text('Create Loan', 'إضافة سلفة/قرض') }}</h3>
+    <label>
+      {{ i18n.text('Employee', 'الموظف') }}
+      <select formControlName="employeeId">
+        <option value="">{{ i18n.text('Select employee', 'اختر موظفا') }}</option>
+        @for (employee of employees(); track employee.id) {
+          <option [value]="employee.id">{{ employee.firstName }} {{ employee.lastName }}</option>
+        }
+      </select>
+    </label>
+    <label>{{ i18n.text('Type', 'النوع') }} <input formControlName="loanType" /></label>
+    <label>{{ i18n.text('Principal', 'المبلغ الأساسي') }} <input type="number" min="1" step="0.01" formControlName="principalAmount" /></label>
+    <label>{{ i18n.text('Installment', 'القسط') }} <input type="number" min="1" step="0.01" formControlName="installmentAmount" /></label>
+    <label>{{ i18n.text('Start Year', 'سنة البدء') }} <input type="number" min="2000" max="2100" formControlName="startYear" /></label>
+    <label>{{ i18n.text('Start Month', 'شهر البدء') }} <input type="number" min="1" max="12" formControlName="startMonth" /></label>
+    <label>{{ i18n.text('Total Installments', 'إجمالي الأقساط') }} <input type="number" min="1" max="120" formControlName="totalInstallments" /></label>
+    <label>{{ i18n.text('Notes', 'ملاحظات') }} <input formControlName="notes" /></label>
+    <button type="submit" [disabled]="saving()">{{ i18n.text('Save', 'حفظ') }}</button>
+  </form>
+
+  @if (message()) { <p class="ok">{{ message() }}</p> }
+  @if (error()) { <p class="error">{{ error() }}</p> }
+
+  <h3>{{ i18n.text('Loan Records', 'سجل السلف والقروض') }}</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>{{ i18n.text('Employee', 'الموظف') }}</th>
+        <th>{{ i18n.text('Type', 'النوع') }}</th>
+        <th>{{ i18n.text('Principal', 'الأصل') }}</th>
+        <th>{{ i18n.text('Remaining', 'المتبقي') }}</th>
+        <th>{{ i18n.text('Installment', 'القسط') }}</th>
+        <th>{{ i18n.text('Status', 'الحالة') }}</th>
+        <th>{{ i18n.text('Action', 'إجراء') }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (loan of loans(); track loan.id) {
+        <tr>
+          <td>{{ loan.employeeName }}</td>
+          <td>{{ loan.loanType }}</td>
+          <td>{{ loan.principalAmount | number: '1.2-2' }}</td>
+          <td>{{ loan.remainingBalance | number: '1.2-2' }}</td>
+          <td>{{ loan.installmentAmount | number: '1.2-2' }}</td>
+          <td>{{ loan.status }}</td>
+          <td class="actions">
+            <button type="button" (click)="viewInstallments(loan.id)">{{ i18n.text('Installments', 'الأقساط') }}</button>
+            <button type="button" (click)="approveLoan(loan.id)" [disabled]="saving() || loan.status === 'Closed' || loan.status === 'Cancelled'">{{ i18n.text('Approve', 'اعتماد') }}</button>
+            <button type="button" (click)="cancelLoan(loan.id)" [disabled]="saving() || loan.status === 'Closed' || loan.status === 'Cancelled'">{{ i18n.text('Cancel', 'إلغاء') }}</button>
+          </td>
+        </tr>
+      }
+    </tbody>
+  </table>
+
+  @if (activeLoanId()) {
+    <h3>{{ i18n.text('Installment Schedule', 'جدول الأقساط') }}</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>{{ i18n.text('Period', 'الفترة') }}</th>
+          <th>{{ i18n.text('Amount', 'المبلغ') }}</th>
+          <th>{{ i18n.text('Status', 'الحالة') }}</th>
+          <th>{{ i18n.text('Payroll Run', 'تشغيل الرواتب') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (row of installments(); track row.id) {
+          <tr>
+            <td>{{ row.year }}-{{ row.month }}</td>
+            <td>{{ row.amount | number: '1.2-2' }}</td>
+            <td>{{ row.status }}</td>
+            <td>{{ row.payrollRunId || '-' }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+</section>

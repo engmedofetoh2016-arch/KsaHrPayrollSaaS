@@ -64,31 +64,31 @@
 
   <div class="grid">
     <article class="panel">
-      <h3>{{ i18n.text('Quick Actions', 'Quick Actions') }}</h3>
+      <h3>{{ i18n.text('Quick Actions', 'إجراءات سريعة') }}</h3>
       <div class="actions">
         @if (isEmployee()) {
-          <a routerLink="/employee/profile">{{ i18n.text('My Profile', 'My Profile') }}</a>
-          <a routerLink="/employee/payslips">{{ i18n.text('My Payslips', 'My Payslips') }}</a>
+          <a routerLink="/employee/profile">{{ i18n.text('My Profile', 'ملفي الشخصي') }}</a>
+          <a routerLink="/employee/payslips">{{ i18n.text('My Payslips', 'قسائم رواتبي') }}</a>
           <a routerLink="/employee/salary-certificate">{{ i18n.text('Salary Certificate', 'شهادة الراتب') }}</a>
           <a routerLink="/leave/my">{{ i18n.text('My Leave', 'إجازاتي') }}</a>
         } @else {
-          <a routerLink="/employees">{{ i18n.text('Add Employee', 'Add Employee') }}</a>
-          <a routerLink="/attendance">{{ i18n.text('Capture Attendance', 'Capture Attendance') }}</a>
-          <a routerLink="/payroll">{{ i18n.text('Run Payroll', 'Run Payroll') }}</a>
-          <a routerLink="/final-settlement">{{ i18n.text('Final Settlement', 'Final Settlement') }}</a>
-          <a routerLink="/company">{{ i18n.text('Update Company Settings', 'Update Company Settings') }}</a>
+          <a routerLink="/employees">{{ i18n.text('Add Employee', 'إضافة موظف') }}</a>
+          <a routerLink="/attendance">{{ i18n.text('Capture Attendance', 'تسجيل الحضور') }}</a>
+          <a routerLink="/payroll">{{ i18n.text('Run Payroll', 'تشغيل الرواتب') }}</a>
+          <a routerLink="/final-settlement">{{ i18n.text('Final Settlement', 'التسوية النهائية') }}</a>
+          <a routerLink="/company">{{ i18n.text('Update Company Settings', 'تحديث إعدادات الشركة') }}</a>
         }
       </div>
       @if (isEmployee()) {
         <div class="latest-payslip">
-          <p class="meta">{{ i18n.text('Latest Payslip', 'Latest Payslip') }}</p>
+          <p class="meta">{{ i18n.text('Latest Payslip', 'آخر قسيمة راتب') }}</p>
           @if (latestPayslip(); as payslip) {
             <p class="meta">{{ payslip.periodYear }}/{{ payslip.periodMonth.toString().padStart(2, '0') }} - {{ payslip.fileName }}</p>
             <button type="button" class="action-button" (click)="downloadLatestPayslip()" [disabled]="latestPayslipBusy() || payslip.status !== 3">
-              {{ i18n.text('Download Latest Payslip', 'Download Latest Payslip') }}
+              {{ i18n.text('Download Latest Payslip', 'تنزيل آخر قسيمة راتب') }}
             </button>
           } @else {
-            <p class="meta">{{ i18n.text('No payslip has been generated yet.', 'No payslip has been generated yet.') }}</p>
+            <p class="meta">{{ i18n.text('No payslip has been generated yet.', 'لم يتم إنشاء أي قسيمة راتب بعد.') }}</p>
           }
         </div>
       }
@@ -356,39 +356,39 @@
 
     @if (canSeePayrollIntelligence()) {
       <article class="panel intelligence" [class.risk-high]="payrollIntelligence().runsWithBlocking > 0">
-        <h3>{{ i18n.text('Payroll Intelligence', 'Payroll Intelligence') }}</h3>
+        <h3>{{ i18n.text('Payroll Intelligence', 'ذكاء الرواتب') }}</h3>
         <p class="meta">
-          {{ i18n.text('Recent runs scanned', 'Recent runs scanned') }}:
+          {{ i18n.text('Recent runs scanned', 'عدد التشغيلات المفحوصة') }}:
           <strong>{{ payrollIntelligence().runsScanned }}</strong>
         </p>
         <p class="meta">
-          {{ i18n.text('Blocking runs', 'Blocking runs') }}:
+          {{ i18n.text('Blocking runs', 'تشغيلات فيها حظر') }}:
           <strong>{{ payrollIntelligence().runsWithBlocking }}</strong>
         </p>
         <p class="meta">
-          {{ i18n.text('Findings', 'Findings') }}:
-          {{ i18n.text('Critical', 'Critical') }} {{ payrollIntelligence().criticalFindings }},
-          {{ i18n.text('Warning', 'Warning') }} {{ payrollIntelligence().warningFindings }},
-          {{ i18n.text('Notice', 'Notice') }} {{ payrollIntelligence().noticeFindings }}
+          {{ i18n.text('Findings', 'الملاحظات') }}:
+          {{ i18n.text('Critical', 'حرج') }} {{ payrollIntelligence().criticalFindings }},
+          {{ i18n.text('Warning', 'تحذير') }} {{ payrollIntelligence().warningFindings }},
+          {{ i18n.text('Notice', 'تنبيه') }} {{ payrollIntelligence().noticeFindings }}
         </p>
 
         @if (payrollIntelligenceLoading()) {
-          <p class="meta">{{ i18n.text('Analyzing payroll runs...', 'Analyzing payroll runs...') }}</p>
+          <p class="meta">{{ i18n.text('Analyzing payroll runs...', 'جاري تحليل تشغيلات الرواتب...') }}</p>
         } @else if (payrollIntelligenceError()) {
           <p class="error">{{ payrollIntelligenceError() }}</p>
         } @else if (payrollIntelligence().items.length === 0) {
-          <p class="meta">{{ i18n.text('No recent payroll runs found for intelligence checks.', 'No recent payroll runs found for intelligence checks.') }}</p>
+          <p class="meta">{{ i18n.text('No recent payroll runs found for intelligence checks.', 'لا توجد تشغيلات رواتب حديثة لفحوصات الذكاء.') }}</p>
         } @else {
           <div class="table-wrap">
             <table class="mini-table">
               <thead>
                 <tr>
-                  <th>{{ i18n.text('Run', 'Run') }}</th>
-                  <th>{{ i18n.text('Block', 'Block') }}</th>
-                  <th>{{ i18n.text('Critical', 'Critical') }}</th>
-                  <th>{{ i18n.text('Warning', 'Warning') }}</th>
-                  <th>{{ i18n.text('Notice', 'Notice') }}</th>
-                  <th>{{ i18n.text('Top Finding', 'Top Finding') }}</th>
+                  <th>{{ i18n.text('Run', 'التشغيل') }}</th>
+                  <th>{{ i18n.text('Block', 'حظر') }}</th>
+                  <th>{{ i18n.text('Critical', 'حرج') }}</th>
+                  <th>{{ i18n.text('Warning', 'تحذير') }}</th>
+                  <th>{{ i18n.text('Notice', 'تنبيه') }}</th>
+                  <th>{{ i18n.text('Top Finding', 'أعلى ملاحظة') }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -397,7 +397,7 @@
                     <td>
                       <a [routerLink]="['/payroll']" [queryParams]="{ runId: row.runId }">{{ row.runId }}</a>
                     </td>
-                    <td>{{ row.hasBlockingFindings ? i18n.text('Yes', 'Yes') : i18n.text('No', 'No') }}</td>
+                    <td>{{ row.hasBlockingFindings ? i18n.text('Yes', 'نعم') : i18n.text('No', 'لا') }}</td>
                     <td>{{ row.critical }}</td>
                     <td>{{ row.warning }}</td>
                     <td>{{ row.notice }}</td>

@@ -4,7 +4,7 @@
   </button>
 
   <form class="card" [formGroup]="form" (ngSubmit)="onSubmit()">
-    <h1>{{ i18n.text('HR Payroll Login', 'HR Payroll Login') }}</h1>
+    <h1>{{ i18n.text('HR Payroll Login', 'تسجيل دخول إدارة الموارد البشرية') }}</h1>
 
     <label>
       {{ i18n.text('Tenant Slug', 'Tenant Slug') }}
@@ -31,7 +31,7 @@
     </button>
 
     <button type="button" class="secondary" (click)="toggleForgotPassword()">
-      {{ showForgot() ? i18n.text('Hide Forgot Password', 'Hide Forgot Password') : i18n.text('Forgot Password?', 'Forgot Password?') }}
+      {{ showForgot() ? i18n.text('Hide Forgot Password', 'إخفاء نسيت كلمة المرور') : i18n.text('Forgot Password', 'نسيت كلمة المرور') }}
     </button>
 
     <button type="button" class="secondary" (click)="toggleSignUp()">
@@ -45,7 +45,7 @@
 
   @if (showForgot()) {
     <form class="card signup-card" [formGroup]="forgotForm" (ngSubmit)="onForgotSubmit()">
-      <h2>{{ i18n.text('Forgot Password', 'Forgot Password') }}</h2>
+      <h2>{{ i18n.text('Forgot Password', 'نسيت كلمة المرور') }}</h2>
       <label>{{ i18n.text('Tenant Slug', 'Tenant Slug') }} <input formControlName="tenantSlug" /></label>
       <label>{{ i18n.text('Email', 'Email') }} <input type="email" formControlName="email" /></label>
 

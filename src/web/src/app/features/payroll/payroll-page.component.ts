@@ -128,7 +128,7 @@ export class PayrollPageComponent implements OnInit, OnDestroy {
   }
 
   formatTotalDeductionsFormula(line: PayrollRunDetails['lines'][number]): string {
-    return `${this.money(line.manualDeductions)} + ${this.money(line.unpaidLeaveDeduction)} + ${this.money(line.gosiEmployeeContribution)} = ${this.money(line.deductions)}`;
+    return `${this.money(line.manualDeductions)} + ${this.money(line.loanDeduction)} + ${this.money(line.unpaidLeaveDeduction)} + ${this.money(line.gosiEmployeeContribution)} = ${this.money(line.deductions)}`;
   }
 
   formatGosiFormula(line: PayrollRunDetails['lines'][number]): string {

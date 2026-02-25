@@ -354,6 +354,56 @@ public class CalculatePayrollRunRequestValidator : AbstractValidator<CalculatePa
     }
 }
 
+public class CreateEmployeeLoanRequestValidator : AbstractValidator<CreateEmployeeLoanRequest>
+{
+    public CreateEmployeeLoanRequestValidator()
+    {
+        RuleFor(x => x.EmployeeId).NotEmpty();
+        RuleFor(x => x.LoanType).NotEmpty().MaximumLength(80);
+        RuleFor(x => x.PrincipalAmount).GreaterThan(0m);
+        RuleFor(x => x.InstallmentAmount).GreaterThan(0m);
+        RuleFor(x => x.StartYear).InclusiveBetween(2000, 2100);
+        RuleFor(x => x.StartMonth).InclusiveBetween(1, 12);
+        RuleFor(x => x.TotalInstallments).InclusiveBetween(1, 120);
+        RuleFor(x => x.Notes).MaximumLength(500);
+        RuleFor(x => x)
+            .Must(x => x.InstallmentAmount * x.TotalInstallments >= x.PrincipalAmount)
+            .WithMessage("Installment plan total must cover principal amount.");
+        RuleFor(x => x)
+            .Must(x => x.TotalInstallments == 1 || x.InstallmentAmount * (x.TotalInstallments - 1) < x.PrincipalAmount)
+            .WithMessage("Installment amount is too high for selected number of installments.");
+    }
+}
+
+public class CreateEmployeeOffboardingRequestValidator : AbstractValidator<CreateEmployeeOffboardingRequest>
+{
+    public CreateEmployeeOffboardingRequestValidator()
+    {
+        RuleFor(x => x.EmployeeId).NotEmpty();
+        RuleFor(x => x.EffectiveDate).GreaterThanOrEqualTo(DateOnly.FromDateTime(new DateTime(2000, 1, 1)));
+        RuleFor(x => x.Reason).NotEmpty().MaximumLength(300);
+    }
+}
+
+public class CreateOffboardingChecklistItemRequestValidator : AbstractValidator<CreateOffboardingChecklistItemRequest>
+{
+    public CreateOffboardingChecklistItemRequestValidator()
+    {
+        RuleFor(x => x.ItemCode).NotEmpty().MaximumLength(50).Matches("^[A-Z0-9_\\-]+$");
+        RuleFor(x => x.ItemLabel).NotEmpty().MaximumLength(200);
+        RuleFor(x => x.SortOrder).InclusiveBetween(1, 1000);
+        RuleFor(x => x.Notes).MaximumLength(300);
+    }
+}
+
+public class CompleteOffboardingChecklistItemRequestValidator : AbstractValidator<CompleteOffboardingChecklistItemRequest>
+{
+    public CompleteOffboardingChecklistItemRequestValidator()
+    {
+        RuleFor(x => x.Notes).MaximumLength(300);
+    }
+}
+
 public class ApprovePayrollRunOverrideRequestValidator : AbstractValidator<ApprovePayrollRunOverrideRequest>
 {
     private static readonly string[] AllowedCategories =

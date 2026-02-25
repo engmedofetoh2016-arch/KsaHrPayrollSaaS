@@ -10,6 +10,7 @@ public class PayrollLine : BaseAuditableEntity, ITenantScoped
     public decimal BaseSalary { get; set; }
     public decimal Allowances { get; set; }
     public decimal ManualDeductions { get; set; }
+    public decimal LoanDeduction { get; set; }
     public decimal UnpaidLeaveDays { get; set; }
     public decimal UnpaidLeaveDeduction { get; set; }
     public decimal GosiWageBase { get; set; }

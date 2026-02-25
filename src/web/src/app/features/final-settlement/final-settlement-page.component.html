@@ -28,19 +28,19 @@
     </label>
     <label>{{ i18n.text('Notes', 'ملاحظات') }}<input type="text" formControlName="notes" /></label>
     <div class="actions">
-      <button type="submit" [disabled]="processing()">
+      <button type="submit" class="btn btn-primary" [disabled]="processing()">
         {{ processing() ? i18n.text('Calculating...', 'جاري الحساب...') : i18n.text('Calculate', 'احسب') }}
       </button>
-      <button type="button" [disabled]="exportingCsv()" (click)="exportCsv()">
+      <button type="button" class="btn btn-secondary" [disabled]="exportingCsv()" (click)="exportCsv()">
         {{ exportingCsv() ? i18n.text('Exporting...', 'جاري التصدير...') : i18n.text('Export CSV', 'تصدير CSV') }}
       </button>
-      <button type="button" [disabled]="exportingPdf()" (click)="exportPdf()">
+      <button type="button" class="btn btn-secondary" [disabled]="exportingPdf()" (click)="exportPdf()">
         {{ exportingPdf() ? i18n.text('Exporting...', 'جاري التصدير...') : i18n.text('Export PDF', 'تصدير PDF') }}
       </button>
-      <button type="button" [disabled]="queueing()" (click)="queuePdf()">
+      <button type="button" class="btn btn-ghost" [disabled]="queueing()" (click)="queuePdf()">
         {{ queueing() ? i18n.text('Queueing...', 'جاري الجدولة...') : i18n.text('Queue Async PDF', 'جدولة PDF غير متزامن') }}
       </button>
-      <button type="button" [disabled]="bulkQueueing() || employees().length === 0" (click)="queuePdfForAllEmployees()">
+      <button type="button" class="btn btn-ghost" [disabled]="bulkQueueing() || employees().length === 0" (click)="queuePdfForAllEmployees()">
         {{
           bulkQueueing()
             ? i18n.text('Queueing for all...', 'جاري الجدولة للجميع...')
@@ -70,10 +70,10 @@
   <h3>{{ i18n.text('Export History', 'سجل التصدير') }}</h3>
   <div class="export-head">
     <div class="scope">
-      <button type="button" [class.active]="exportsScope() === 'employee'" (click)="setExportScope('employee')">
+      <button type="button" class="btn btn-ghost btn-sm" [class.active]="exportsScope() === 'employee'" (click)="setExportScope('employee')">
         {{ i18n.text('Current Employee', 'الموظف الحالي') }}
       </button>
-      <button type="button" [class.active]="exportsScope() === 'all'" (click)="setExportScope('all')">
+      <button type="button" class="btn btn-ghost btn-sm" [class.active]="exportsScope() === 'all'" (click)="setExportScope('all')">
         {{ i18n.text('All Employees', 'كل الموظفين') }}
       </button>
     </div>
@@ -87,13 +87,13 @@
         <option value="4">{{ i18n.text('Failed', 'فشل') }}</option>
       </select>
     </label>
-    <button type="button" (click)="refreshExports()">
+    <button type="button" class="btn btn-secondary btn-sm" (click)="refreshExports()">
       {{ loadingExports() ? i18n.text('Refreshing...', 'جاري التحديث...') : i18n.text('Refresh', 'تحديث') }}
     </button>
-    <button type="button" [disabled]="downloadingZip()" (click)="downloadCompletedZip()">
+    <button type="button" class="btn btn-secondary btn-sm" [disabled]="downloadingZip()" (click)="downloadCompletedZip()">
       {{ downloadingZip() ? i18n.text('Preparing ZIP...', 'جاري تجهيز الملف...') : i18n.text('Download Completed ZIP', 'تحميل ZIP المكتمل') }}
     </button>
-    <button type="button" [disabled]="retryingAllFailed()" (click)="retryAllFailed()">
+    <button type="button" class="btn btn-ghost btn-sm" [disabled]="retryingAllFailed()" (click)="retryAllFailed()">
       {{
         retryingAllFailed()
           ? i18n.text('Retrying failed...', 'جاري إعادة المحاولة...')
@@ -129,10 +129,10 @@
             </td>
             <td [attr.data-label]="i18n.text('Created', 'تاريخ الإنشاء')">{{ job.createdAtUtc }}</td>
             <td [attr.data-label]="i18n.text('Action', 'إجراء')">
-              <button type="button" [disabled]="job.status !== 3" (click)="downloadExport(job.id)">
+              <button type="button" class="btn btn-secondary btn-sm" [disabled]="job.status !== 3" (click)="downloadExport(job.id)">
                 {{ i18n.text('Download', 'تحميل') }}
               </button>
-              <button type="button" [disabled]="job.status !== 4 || retrying()" (click)="retryExport(job.id)">
+              <button type="button" class="btn btn-ghost btn-sm" [disabled]="job.status !== 4 || retrying()" (click)="retryExport(job.id)">
                 {{ i18n.text('Retry', 'إعادة محاولة') }}
               </button>
             </td>

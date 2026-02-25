@@ -1,6 +1,6 @@
 ﻿<div class="shell">
   <aside [class.open]="isMobileNavOpen">
-    <div class="brand">{{ i18n.text('KSA HR Payroll', 'كشف رواتب الموارد') }}</div>
+    <div class="brand">{{ i18n.text('KSA HR Payroll', 'إدارة الموارد البشرية') }}</div>
     <nav>
       <a routerLink="/dashboard" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Dashboard', 'لوحة التحكم') }}</a>
       @if (canAccessCompliance()) {
@@ -17,6 +17,12 @@
       }
       @if (canAccessFinalSettlement()) {
         <a routerLink="/final-settlement" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Final Settlement', 'التسوية النهائية') }}</a>
+      }
+      @if (canAccessLoans()) {
+        <a routerLink="/loans" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Loans & Advances', 'السلف والقروض') }}</a>
+      }
+      @if (canAccessOffboarding()) {
+        <a routerLink="/offboarding" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Offboarding Checklist', 'قائمة إنهاء الخدمة') }}</a>
       }
       <a routerLink="/leave/my" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('My Leave', 'إجازاتي') }}</a>
       @if (isEmployee()) {

@@ -38,6 +38,11 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
     public DbSet<ComplianceAlert> ComplianceAlertSet => Set<ComplianceAlert>();
     public DbSet<ComplianceScoreSnapshot> ComplianceScoreSnapshotSet => Set<ComplianceScoreSnapshot>();
     public DbSet<ComplianceDigestDelivery> ComplianceDigestDeliverySet => Set<ComplianceDigestDelivery>();
+    public DbSet<EmployeeLoan> EmployeeLoanSet => Set<EmployeeLoan>();
+    public DbSet<EmployeeLoanInstallment> EmployeeLoanInstallmentSet => Set<EmployeeLoanInstallment>();
+    public DbSet<EmployeeOffboarding> EmployeeOffboardingSet => Set<EmployeeOffboarding>();
+    public DbSet<OffboardingChecklist> OffboardingChecklistSet => Set<OffboardingChecklist>();
+    public DbSet<OffboardingChecklistItem> OffboardingChecklistItemSet => Set<OffboardingChecklistItem>();
 
     public IQueryable<Tenant> Tenants => TenantSet.AsQueryable();
     public IQueryable<CompanyProfile> CompanyProfiles => CompanyProfileSet.AsQueryable();
@@ -54,6 +59,11 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
     public IQueryable<ComplianceAlert> ComplianceAlerts => ComplianceAlertSet.AsQueryable();
     public IQueryable<ComplianceScoreSnapshot> ComplianceScoreSnapshots => ComplianceScoreSnapshotSet.AsQueryable();
     public IQueryable<ComplianceDigestDelivery> ComplianceDigestDeliveries => ComplianceDigestDeliverySet.AsQueryable();
+    public IQueryable<EmployeeLoan> EmployeeLoans => EmployeeLoanSet.AsQueryable();
+    public IQueryable<EmployeeLoanInstallment> EmployeeLoanInstallments => EmployeeLoanInstallmentSet.AsQueryable();
+    public IQueryable<EmployeeOffboarding> EmployeeOffboardings => EmployeeOffboardingSet.AsQueryable();
+    public IQueryable<OffboardingChecklist> OffboardingChecklists => OffboardingChecklistSet.AsQueryable();
+    public IQueryable<OffboardingChecklistItem> OffboardingChecklistItems => OffboardingChecklistItemSet.AsQueryable();
 
     public void AddEntity<TEntity>(TEntity entity) where TEntity : class
     {
@@ -86,6 +96,14 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
         modelBuilder.Entity<ComplianceScoreSnapshot>().HasIndex(x => new { x.TenantId, x.SnapshotDate }).IsUnique();
         modelBuilder.Entity<ComplianceDigestDelivery>().HasIndex(x => new { x.TenantId, x.CreatedAtUtc });
         modelBuilder.Entity<ComplianceDigestDelivery>().HasIndex(x => new { x.TenantId, x.Status, x.CreatedAtUtc });
+        modelBuilder.Entity<EmployeeLoan>().HasIndex(x => new { x.TenantId, x.EmployeeId, x.Status });
+        modelBuilder.Entity<EmployeeLoanInstallment>().HasIndex(x => new { x.TenantId, x.EmployeeLoanId, x.Year, x.Month }).IsUnique();
+        modelBuilder.Entity<EmployeeLoanInstallment>().HasIndex(x => new { x.TenantId, x.EmployeeId, x.Year, x.Month, x.Status });
+        modelBuilder.Entity<EmployeeOffboarding>().HasIndex(x => new { x.TenantId, x.Status, x.EffectiveDate });
+        modelBuilder.Entity<EmployeeOffboarding>().HasIndex(x => new { x.TenantId, x.EmployeeId, x.CreatedAtUtc });
+        modelBuilder.Entity<OffboardingChecklist>().HasIndex(x => new { x.TenantId, x.OffboardingId }).IsUnique();
+        modelBuilder.Entity<OffboardingChecklistItem>().HasIndex(x => new { x.TenantId, x.ChecklistId, x.ItemCode }).IsUnique();
+        modelBuilder.Entity<OffboardingChecklistItem>().HasIndex(x => new { x.TenantId, x.ChecklistId, x.SortOrder });
 
         modelBuilder.Entity<CompanyProfile>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
         modelBuilder.Entity<Employee>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
@@ -101,6 +119,11 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
         modelBuilder.Entity<ComplianceAlert>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
         modelBuilder.Entity<ComplianceScoreSnapshot>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
         modelBuilder.Entity<ComplianceDigestDelivery>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
+        modelBuilder.Entity<EmployeeLoan>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
+        modelBuilder.Entity<EmployeeLoanInstallment>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
+        modelBuilder.Entity<EmployeeOffboarding>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
+        modelBuilder.Entity<OffboardingChecklist>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
+        modelBuilder.Entity<OffboardingChecklistItem>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
     }
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

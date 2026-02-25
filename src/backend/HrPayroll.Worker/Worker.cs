@@ -121,6 +121,7 @@ public class Worker : BackgroundService
                               line.BaseSalary,
                               line.Allowances,
                               line.ManualDeductions,
+                              line.LoanDeduction,
                               line.UnpaidLeaveDays,
                               line.UnpaidLeaveDeduction,
                               line.GosiWageBase,
@@ -148,11 +149,11 @@ public class Worker : BackgroundService
         }
 
         var csv = new StringBuilder();
-        csv.AppendLine("Employee,BaseSalary,Allowances,ManualDeductions,UnpaidLeaveDays,UnpaidLeaveDeduction,GosiWageBase,GosiEmployeeContribution,GosiEmployerContribution,Deductions,OvertimeHours,OvertimeAmount,NetAmount");
+        csv.AppendLine("Employee,BaseSalary,Allowances,ManualDeductions,LoanDeduction,UnpaidLeaveDays,UnpaidLeaveDeduction,GosiWageBase,GosiEmployeeContribution,GosiEmployerContribution,Deductions,OvertimeHours,OvertimeAmount,NetAmount");
         foreach (var row in rows)
         {
             csv.AppendLine(
-                $"{EscapeCsvValue(row.EmployeeName)},{row.BaseSalary:F2},{row.Allowances:F2},{row.ManualDeductions:F2},{row.UnpaidLeaveDays:F2},{row.UnpaidLeaveDeduction:F2},{row.GosiWageBase:F2},{row.GosiEmployeeContribution:F2},{row.GosiEmployerContribution:F2},{row.Deductions:F2},{row.OvertimeHours:F2},{row.OvertimeAmount:F2},{row.NetAmount:F2}");
+                $"{EscapeCsvValue(row.EmployeeName)},{row.BaseSalary:F2},{row.Allowances:F2},{row.ManualDeductions:F2},{row.LoanDeduction:F2},{row.UnpaidLeaveDays:F2},{row.UnpaidLeaveDeduction:F2},{row.GosiWageBase:F2},{row.GosiEmployeeContribution:F2},{row.GosiEmployerContribution:F2},{row.Deductions:F2},{row.OvertimeHours:F2},{row.OvertimeAmount:F2},{row.NetAmount:F2}");
         }
 
         return Encoding.UTF8.GetBytes(csv.ToString());
@@ -210,6 +211,7 @@ public class Worker : BackgroundService
                     col.Item().Text($"GOSI Employee Contribution / استقطاع الموظف للتأمينات: {line.GosiEmployeeContribution:F2}");
                     col.Item().Text($"GOSI Employer Contribution / مساهمة صاحب العمل للتأمينات: {line.GosiEmployerContribution:F2}");
                     col.Item().Text($"Manual Deductions / خصومات يدوية: {line.ManualDeductions:F2}");
+                    col.Item().Text($"Loan Deduction / خصم السلفة أو القرض: {line.LoanDeduction:F2}");
                     col.Item().Text($"Unpaid Leave Days / أيام إجازة غير مدفوعة: {line.UnpaidLeaveDays:F2}");
                     col.Item().Text($"Unpaid Leave Deduction / خصم الإجازة غير المدفوعة: {line.UnpaidLeaveDeduction:F2}");
                     col.Item().Text($"Total Deductions / إجمالي الخصومات: {line.Deductions:F2}");

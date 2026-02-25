@@ -20,11 +20,11 @@
     <label>{{ i18n.text('Work Permit Expiry', 'تاريخ انتهاء رخصة العمل') }}<input type="date" formControlName="workPermitExpiryDate" /></label>
     <label>{{ i18n.text('Contract End Date', 'تاريخ نهاية العقد') }}<input type="date" formControlName="contractEndDate" /></label>
     <div class="actions">
-      <button type="submit" [disabled]="saving()">
+      <button type="submit" class="btn btn-primary" [disabled]="saving()">
         {{ saving() ? i18n.text('Creating...', 'جاري الإنشاء...') : i18n.text('Create Employee', 'إنشاء موظف') }}
       </button>
       @if (editingEmployeeId()) {
-        <button type="button" (click)="cancelEdit()">{{ i18n.text('Cancel Edit', 'Cancel Edit') }}</button>
+        <button type="button" class="btn btn-secondary" (click)="cancelEdit()">{{ i18n.text('Cancel Edit', 'إلغاء التعديل') }}</button>
       }
     </div>
   </form>
@@ -53,7 +53,7 @@
           <th>{{ i18n.text('Saudi', 'سعودي') }}</th>
           <th>{{ i18n.text('GOSI', 'التأمينات') }}</th>
           <th>{{ i18n.text('GOSI Wage Base', 'وعاء التأمينات') }}</th>
-          <th>{{ i18n.text('Actions', 'Actions') }}</th>
+          <th>{{ i18n.text('Actions', 'إجراءات') }}</th>
         </tr>
       </thead>
       <tbody>
@@ -74,10 +74,10 @@
             <td>{{ employee.isGosiEligible ? i18n.text('Yes', 'نعم') : i18n.text('No', 'لا') }}</td>
             <td>{{ (employee.gosiBasicWage + employee.gosiHousingAllowance) | number: '1.2-2' }}</td>
             <td class="row-actions">
-              <button type="button" (click)="startEdit(employee)">{{ i18n.text('Edit', 'Edit') }}</button>
-              <button type="button" (click)="connectEmployeeLogin(employee)">{{ i18n.text('Create Login', 'Create Login') }}</button>
-              <button type="button" (click)="downloadSalaryCertificate(employee)">{{ i18n.text('Salary Certificate', 'شهادة الراتب') }}</button>
-              <button type="button" (click)="deleteEmployee(employee)">{{ i18n.text('Delete', 'Delete') }}</button>
+              <button type="button" class="btn btn-secondary btn-sm" (click)="startEdit(employee)">{{ i18n.text('Edit', 'تعديل') }}</button>
+              <button type="button" class="btn btn-ghost btn-sm" (click)="connectEmployeeLogin(employee)">{{ i18n.text('Create Login', 'إنشاء دخول') }}</button>
+              <button type="button" class="btn btn-secondary btn-sm" (click)="downloadSalaryCertificate(employee)">{{ i18n.text('Salary Certificate', 'شهادة الراتب') }}</button>
+              <button type="button" class="btn btn-danger btn-sm" (click)="deleteEmployee(employee)">{{ i18n.text('Delete', 'حذف') }}</button>
             </td>
           </tr>
         }
@@ -101,7 +101,7 @@
       <input type="date" formControlName="terminationDate" />
     </label>
     <div class="actions">
-      <button type="submit" [disabled]="estimatingEos()">
+      <button type="submit" class="btn btn-primary" [disabled]="estimatingEos()">
         {{ estimatingEos() ? i18n.text('Estimating...', 'جاري الحساب...') : i18n.text('Estimate EOS', 'احسب مكافأة نهاية الخدمة') }}
       </button>
     </div>
@@ -147,19 +147,19 @@
       <input type="text" formControlName="notes" />
     </label>
     <div class="actions">
-      <button type="submit" [disabled]="estimatingFinalSettlement()">
+      <button type="submit" class="btn btn-primary" [disabled]="estimatingFinalSettlement()">
         {{ estimatingFinalSettlement() ? i18n.text('Calculating...', 'جاري الحساب...') : i18n.text('Calculate Final Settlement', 'احسب التسوية النهائية') }}
       </button>
-      <button type="button" [disabled]="exportingFinalSettlement()" (click)="exportFinalSettlementCsv()">
+      <button type="button" class="btn btn-secondary" [disabled]="exportingFinalSettlement()" (click)="exportFinalSettlementCsv()">
         {{ exportingFinalSettlement() ? i18n.text('Exporting...', 'جاري التصدير...') : i18n.text('Export CSV', 'تصدير CSV') }}
       </button>
-      <button type="button" [disabled]="exportingFinalSettlementPdf()" (click)="exportFinalSettlementPdf()">
+      <button type="button" class="btn btn-secondary" [disabled]="exportingFinalSettlementPdf()" (click)="exportFinalSettlementPdf()">
         {{ exportingFinalSettlementPdf() ? i18n.text('Exporting...', 'جاري التصدير...') : i18n.text('Export PDF', 'تصدير PDF') }}
       </button>
-      <button type="button" [disabled]="queueingFinalSettlementPdf()" (click)="queueFinalSettlementPdfExport()">
+      <button type="button" class="btn btn-ghost" [disabled]="queueingFinalSettlementPdf()" (click)="queueFinalSettlementPdfExport()">
         {{ queueingFinalSettlementPdf() ? i18n.text('Queueing...', 'جاري الجدولة...') : i18n.text('Queue Async PDF', 'جدولة PDF غير متزامن') }}
       </button>
-      <button type="button" [disabled]="loadingFinalSettlementExports()" (click)="refreshFinalSettlementExports()">
+      <button type="button" class="btn btn-ghost" [disabled]="loadingFinalSettlementExports()" (click)="refreshFinalSettlementExports()">
         {{ loadingFinalSettlementExports() ? i18n.text('Refreshing...', 'جاري التحديث...') : i18n.text('Refresh Exports', 'تحديث الصادرات') }}
       </button>
     </div>
@@ -195,7 +195,7 @@
             <td><span [class]="exportStatusClass(job.status)">{{ exportStatusLabel(job.status) }}</span></td>
             <td>{{ job.createdAtUtc }}</td>
             <td>
-              <button type="button" [disabled]="job.status !== 3" (click)="downloadQueuedFinalSettlementExport(job.id)">
+              <button type="button" class="btn btn-secondary btn-sm" [disabled]="job.status !== 3" (click)="downloadQueuedFinalSettlementExport(job.id)">
                 {{ i18n.text('Download', 'تحميل') }}
               </button>
             </td>

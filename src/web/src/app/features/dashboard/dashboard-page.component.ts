@@ -449,7 +449,7 @@ export class DashboardPageComponent implements OnInit {
         });
       },
       error: () => {
-        this.payrollIntelligenceError.set(this.i18n.text('Failed to load payroll intelligence.', 'Failed to load payroll intelligence.'));
+        this.payrollIntelligenceError.set(this.i18n.text('Failed to load payroll intelligence.', 'تعذر تحميل ذكاء الرواتب.'));
       },
       complete: () => this.payrollIntelligenceLoading.set(false)
     });

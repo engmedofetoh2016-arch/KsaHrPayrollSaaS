@@ -1,0 +1,90 @@
+<section class="panel">
+  <h2>{{ i18n.text('Offboarding Checklist', 'قائمة إنهاء الخدمة') }}</h2>
+
+  <form class="card" [formGroup]="createForm" (ngSubmit)="createOffboarding()">
+    <h3>{{ i18n.text('Create Offboarding', 'إنشاء سجل إنهاء خدمة') }}</h3>
+    <label>
+      {{ i18n.text('Employee', 'الموظف') }}
+      <select formControlName="employeeId">
+        <option value="">{{ i18n.text('Select employee', 'اختر موظفا') }}</option>
+        @for (employee of employees(); track employee.id) {
+          <option [value]="employee.id">{{ employee.firstName }} {{ employee.lastName }}</option>
+        }
+      </select>
+    </label>
+    <label>{{ i18n.text('Effective Date', 'تاريخ السريان') }} <input type="date" formControlName="effectiveDate" /></label>
+    <label>{{ i18n.text('Reason', 'السبب') }} <input formControlName="reason" /></label>
+    <button type="submit" [disabled]="saving()">{{ i18n.text('Create', 'إنشاء') }}</button>
+  </form>
+
+  @if (message()) { <p class="ok">{{ message() }}</p> }
+  @if (error()) { <p class="error">{{ error() }}</p> }
+
+  <h3>{{ i18n.text('Offboarding Records', 'سجلات إنهاء الخدمة') }}</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>{{ i18n.text('Employee', 'الموظف') }}</th>
+        <th>{{ i18n.text('Date', 'التاريخ') }}</th>
+        <th>{{ i18n.text('Status', 'الحالة') }}</th>
+        <th>{{ i18n.text('Reason', 'السبب') }}</th>
+        <th>{{ i18n.text('Action', 'إجراء') }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (offboarding of offboardings(); track offboarding.id) {
+        <tr>
+          <td>{{ offboarding.employeeName }}</td>
+          <td>{{ offboarding.effectiveDate }}</td>
+          <td>{{ offboarding.status }}</td>
+          <td>{{ offboarding.reason }}</td>
+          <td class="actions">
+            <button type="button" (click)="loadChecklist(offboarding.id)">{{ i18n.text('Checklist', 'القائمة') }}</button>
+            <button type="button" (click)="approve(offboarding.id)" [disabled]="saving() || offboarding.status === 'Approved'">{{ i18n.text('Approve', 'اعتماد') }}</button>
+          </td>
+        </tr>
+      }
+    </tbody>
+  </table>
+
+  @if (checklist(); as list) {
+    <h3>
+      {{ i18n.text('Checklist Progress', 'تقدم القائمة') }}:
+      {{ list.completedItems }}/{{ list.totalItems }} ({{ list.completionPercent }}%)
+    </h3>
+
+    <form class="card inline" [formGroup]="addItemForm" (ngSubmit)="addChecklistItem()">
+      <label>Code <input formControlName="itemCode" /></label>
+      <label>Label <input formControlName="itemLabel" /></label>
+      <label>Sort <input type="number" min="1" max="1000" formControlName="sortOrder" /></label>
+      <label>Notes <input formControlName="notes" /></label>
+      <button type="submit" [disabled]="saving()">Add</button>
+    </form>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Code</th>
+          <th>Item</th>
+          <th>Status</th>
+          <th>Completed</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (item of list.items; track item.id) {
+          <tr>
+            <td>{{ item.itemCode }}</td>
+            <td>{{ item.itemLabel }}</td>
+            <td>{{ item.status }}</td>
+            <td>{{ item.completedAtUtc ? (item.completedAtUtc | date: 'short') : '-' }}</td>
+            <td class="actions">
+              <button type="button" (click)="completeItem(item.id)" [disabled]="saving() || item.status === 'Completed'">Complete</button>
+              <button type="button" (click)="reopenItem(item.id)" [disabled]="saving() || item.status !== 'Completed'">Reopen</button>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+</section>

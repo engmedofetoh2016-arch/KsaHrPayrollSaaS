@@ -1162,6 +1162,101 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225190000_AddOffboardingChecklist') THEN
+    CREATE TABLE "OffboardingChecklistSet" (
+        "Id" uuid NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "OffboardingId" uuid NOT NULL,
+        "EmployeeId" uuid NOT NULL,
+        "Status" text NOT NULL,
+        "CompletedAtUtc" timestamp with time zone,
+        "CompletedByUserId" uuid,
+        "Notes" text NOT NULL,
+        "CreatedAtUtc" timestamp with time zone NOT NULL,
+        "UpdatedAtUtc" timestamp with time zone,
+        CONSTRAINT "PK_OffboardingChecklistSet" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225190000_AddOffboardingChecklist') THEN
+    CREATE TABLE "OffboardingChecklistItemSet" (
+        "Id" uuid NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "ChecklistId" uuid NOT NULL,
+        "ItemCode" text NOT NULL,
+        "ItemLabel" text NOT NULL,
+        "Status" text NOT NULL,
+        "CompletedAtUtc" timestamp with time zone,
+        "CompletedByUserId" uuid,
+        "Notes" text NOT NULL,
+        "SortOrder" integer NOT NULL,
+        "CreatedAtUtc" timestamp with time zone NOT NULL,
+        "UpdatedAtUtc" timestamp with time zone,
+        CONSTRAINT "PK_OffboardingChecklistItemSet" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225190000_AddOffboardingChecklist') THEN
+    CREATE UNIQUE INDEX "IX_OffboardingChecklistSet_TenantId_OffboardingId"
+    ON "OffboardingChecklistSet" ("TenantId", "OffboardingId");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225190000_AddOffboardingChecklist') THEN
+    CREATE UNIQUE INDEX "IX_OffboardingChecklistItemSet_TenantId_ChecklistId_ItemCode"
+    ON "OffboardingChecklistItemSet" ("TenantId", "ChecklistId", "ItemCode");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225190000_AddOffboardingChecklist') THEN
+    CREATE INDEX "IX_OffboardingChecklistItemSet_TenantId_ChecklistId_SortOrder"
+    ON "OffboardingChecklistItemSet" ("TenantId", "ChecklistId", "SortOrder");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225190000_AddOffboardingChecklist') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20260225190000_AddOffboardingChecklist', '8.0.12');
+    END IF;
+END $EF$;
+
+COMMIT;
+
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225193000_AddLoanDeductionToPayrollLine') THEN
+    ALTER TABLE "PayrollLineSet" ADD "LoanDeduction" numeric NOT NULL DEFAULT 0.0;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225193000_AddLoanDeductionToPayrollLine') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20260225193000_AddLoanDeductionToPayrollLine', '8.0.12');
+    END IF;
+END $EF$;
+
+COMMIT;
+
+START TRANSACTION;
+
+DO $EF$
+BEGIN
     IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225153000_AddContractRenewals') THEN
     CREATE TABLE "ContractRenewalSet" (
         "Id" uuid NOT NULL,
@@ -1289,6 +1384,88 @@ BEGIN
     IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225170000_AddOffboardingFinalSettlement') THEN
     INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260225170000_AddOffboardingFinalSettlement', '8.0.12');
+    END IF;
+END $EF$;
+
+COMMIT;
+
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225180000_AddEmployeeLoansV1') THEN
+    CREATE TABLE "EmployeeLoanSet" (
+        "Id" uuid NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "EmployeeId" uuid NOT NULL,
+        "LoanType" text NOT NULL,
+        "PrincipalAmount" numeric NOT NULL,
+        "RemainingBalance" numeric NOT NULL,
+        "InstallmentAmount" numeric NOT NULL,
+        "StartYear" integer NOT NULL,
+        "StartMonth" integer NOT NULL,
+        "TotalInstallments" integer NOT NULL,
+        "PaidInstallments" integer NOT NULL DEFAULT 0,
+        "Status" text NOT NULL,
+        "Notes" text NOT NULL,
+        "CreatedByUserId" uuid,
+        "CreatedAtUtc" timestamp with time zone NOT NULL,
+        "UpdatedAtUtc" timestamp with time zone,
+        CONSTRAINT "PK_EmployeeLoanSet" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225180000_AddEmployeeLoansV1') THEN
+    CREATE TABLE "EmployeeLoanInstallmentSet" (
+        "Id" uuid NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "EmployeeLoanId" uuid NOT NULL,
+        "EmployeeId" uuid NOT NULL,
+        "Year" integer NOT NULL,
+        "Month" integer NOT NULL,
+        "Amount" numeric NOT NULL,
+        "Status" text NOT NULL,
+        "PayrollRunId" uuid,
+        "DeductedAtUtc" timestamp with time zone,
+        "CreatedAtUtc" timestamp with time zone NOT NULL,
+        "UpdatedAtUtc" timestamp with time zone,
+        CONSTRAINT "PK_EmployeeLoanInstallmentSet" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225180000_AddEmployeeLoansV1') THEN
+    CREATE UNIQUE INDEX "IX_EmployeeLoanInstallmentSet_TenantId_EmployeeLoanId_Year_Month"
+    ON "EmployeeLoanInstallmentSet" ("TenantId", "EmployeeLoanId", "Year", "Month");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225180000_AddEmployeeLoansV1') THEN
+    CREATE INDEX "IX_EmployeeLoanSet_TenantId_EmployeeId_Status"
+    ON "EmployeeLoanSet" ("TenantId", "EmployeeId", "Status");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225180000_AddEmployeeLoansV1') THEN
+    CREATE INDEX "IX_EmployeeLoanInstallmentSet_TenantId_EmployeeId_Year_Month_Status"
+    ON "EmployeeLoanInstallmentSet" ("TenantId", "EmployeeId", "Year", "Month", "Status");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225180000_AddEmployeeLoansV1') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20260225180000_AddEmployeeLoansV1', '8.0.12');
     END IF;
 END $EF$;
 

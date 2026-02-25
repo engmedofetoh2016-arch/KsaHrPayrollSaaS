@@ -74,14 +74,14 @@ export class CompanyPageComponent implements OnInit {
       },
       error: (err) => {
         this.loading.set(false);
-        this.error.set(getApiErrorMessage(err, 'Failed to load company profile.'));
+        this.error.set(getApiErrorMessage(err, this.i18n.text('Failed to load company profile.', 'تعذر تحميل ملف الشركة.')));
       }
     });
   }
 
   save() {
     if (!this.canEdit()) {
-      this.error.set('Only Owner/Admin can update company profile.');
+      this.error.set(this.i18n.text('Only Owner/Admin can update company profile.', 'العرض فقط: المالك/المدير فقط يمكنه تحديث ملف الشركة.'));
       return;
     }
 
@@ -116,11 +116,11 @@ export class CompanyPageComponent implements OnInit {
       .subscribe({
         next: () => {
           this.saving.set(false);
-          this.message.set('Company profile saved.');
+          this.message.set(this.i18n.text('Company profile saved.', 'تم حفظ ملف الشركة.'));
         },
         error: (err) => {
           this.saving.set(false);
-          this.error.set(getApiErrorMessage(err, 'Failed to save company profile.'));
+          this.error.set(getApiErrorMessage(err, this.i18n.text('Failed to save company profile.', 'تعذر حفظ ملف الشركة.')));
         }
       });
   }

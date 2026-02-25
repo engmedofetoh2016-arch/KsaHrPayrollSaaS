@@ -17,6 +17,8 @@ import { FinalSettlementPageComponent } from './features/final-settlement/final-
 import { ReferenceRegistryPageComponent } from './features/governance/reference-registry-page.component';
 import { LeaveApprovalsPageComponent } from './features/leave/leave-approvals-page.component';
 import { MyLeavePageComponent } from './features/leave/my-leave-page.component';
+import { LoansPageComponent } from './features/loans/loans-page.component';
+import { OffboardingChecklistPageComponent } from './features/offboarding/offboarding-checklist-page.component';
 import { PayrollPageComponent } from './features/payroll/payroll-page.component';
 import { SmartAlertsPageComponent } from './features/smart-alerts/smart-alerts-page.component';
 import { UsersPageComponent } from './features/users/users-page.component';
@@ -42,6 +44,8 @@ export const routes: Routes = [
       { path: 'company', component: CompanyPageComponent, canActivate: [roleGuard], data: { roles: ['Owner', 'Admin', 'HR'] } },
       { path: 'employees', component: EmployeesPageComponent, canActivate: [roleGuard], data: { roles: ['Owner', 'Admin', 'HR'] } },
       { path: 'final-settlement', component: FinalSettlementPageComponent, canActivate: [roleGuard], data: { roles: ['Owner', 'Admin', 'HR'] } },
+      { path: 'loans', component: LoansPageComponent, canActivate: [roleGuard], data: { roles: ['Owner', 'Admin', 'HR'] } },
+      { path: 'offboarding', component: OffboardingChecklistPageComponent, canActivate: [roleGuard], data: { roles: ['Owner', 'Admin', 'HR', 'Manager'] } },
       { path: 'leave/my', component: MyLeavePageComponent },
       { path: 'employee/profile', component: MyProfilePageComponent, canActivate: [roleGuard], data: { roles: ['Employee'] } },
       { path: 'employee/payslips', component: MyPayslipsPageComponent, canActivate: [roleGuard], data: { roles: ['Employee'] } },
