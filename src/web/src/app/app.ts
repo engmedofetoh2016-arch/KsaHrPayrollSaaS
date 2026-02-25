@@ -15,7 +15,8 @@ export class App {
 
   constructor() {
     effect(() => {
-      this.title.setTitle(this.i18n.isArabic() ? 'نظام إدارة الموارد البشرية والرواتب' : 'KSA HR Payroll');
+      this.title.setTitle('KSA HR Payroll');
     });
   }
 }
+
