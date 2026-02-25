@@ -1024,3 +1024,22 @@ BEGIN
 END $EF$;
 COMMIT;
 
+
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225132503_AddEmployeeContractEndDate') THEN
+    ALTER TABLE "EmployeeSet" ADD "ContractEndDate" date;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225132503_AddEmployeeContractEndDate') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20260225132503_AddEmployeeContractEndDate', '8.0.12');
+    END IF;
+END $EF$;
+
+COMMIT;
