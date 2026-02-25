@@ -6,6 +6,9 @@
     <label>{{ i18n.text('Last Name', 'Last Name') }}<input formControlName="lastName" /></label>
     <label>{{ i18n.text('Email', 'Email') }}<input type="email" formControlName="email" /></label>
     <label>{{ i18n.text('Password', 'Password') }}<input type="password" formControlName="password" /></label>
+    <p class="hint">
+      {{ i18n.text('Password must be at least 8 characters with uppercase, lowercase, and a number.', 'كلمة المرور يجب أن تكون 8 أحرف على الأقل وتحتوي على حرف كبير وحرف صغير ورقم.') }}
+    </p>
     <label>
       {{ i18n.text('Role', 'Role') }}
       <select formControlName="role">

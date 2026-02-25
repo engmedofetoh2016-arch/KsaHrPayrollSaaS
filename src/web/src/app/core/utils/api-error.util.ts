@@ -11,19 +11,19 @@ export function getApiErrorMessage(error: unknown, fallback: string): string {
     }
 
     if (payload && typeof payload === 'object') {
+      if (Array.isArray(payload.details)) {
+        const firstDetail = payload.details.find((x) => typeof x === 'string' && x.trim().length > 0);
+        if (typeof firstDetail === 'string' && firstDetail.trim().length > 0) {
+          return localizeKnownApiMessage(firstDetail, isArabic);
+        }
+      }
+
       if (typeof payload.error === 'string' && payload.error.trim().length > 0) {
         return localizeKnownApiMessage(payload.error, isArabic);
       }
 
       if (typeof payload.message === 'string' && payload.message.trim().length > 0) {
         return localizeKnownApiMessage(payload.message, isArabic);
-      }
-
-      if (Array.isArray(payload.details)) {
-        const firstDetail = payload.details.find((x) => typeof x === 'string' && x.trim().length > 0);
-        if (typeof firstDetail === 'string' && firstDetail.trim().length > 0) {
-          return localizeKnownApiMessage(firstDetail, isArabic);
-        }
       }
     }
 

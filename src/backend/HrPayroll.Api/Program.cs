@@ -4954,55 +4954,84 @@ api.MapGet("/payroll/governance/trend", [Authorize(Roles = RoleNames.Owner + ","
     int? months,
     IApplicationDbContext dbContext,
     IDateTimeProvider dateTimeProvider,
+    ILogger<Program> logger,
     CancellationToken cancellationToken) =>
 {
     var monthsWindow = Math.Clamp(months ?? 6, 3, 12);
     var now = dateTimeProvider.UtcNow;
     var firstMonth = new DateTime(now.Year, now.Month, 1).AddMonths(-(monthsWindow - 1));
 
-    var decisions = await dbContext.AuditLogs
-        .Where(x =>
-            x.CreatedAtUtc >= firstMonth &&
-            (x.Method == "PAYROLL_APPROVE_STANDARD" || x.Method == "PAYROLL_APPROVE_OVERRIDE"))
-        .Select(x => new
-        {
-            x.CreatedAtUtc,
-            x.Method
-        })
-        .ToListAsync(cancellationToken);
-
-    var byMonth = decisions
-        .GroupBy(x => $"{x.CreatedAtUtc.Year:D4}-{x.CreatedAtUtc.Month:D2}")
-        .ToDictionary(g => g.Key, g => new
-        {
-            total = g.Count(),
-            overrides = g.Count(x => x.Method == "PAYROLL_APPROVE_OVERRIDE")
-        });
-
-    var items = new List<object>(monthsWindow);
-    for (var i = 0; i < monthsWindow; i++)
+    try
     {
-        var monthDate = firstMonth.AddMonths(i);
-        var key = $"{monthDate.Year:D4}-{monthDate.Month:D2}";
+        var decisions = await dbContext.AuditLogs
+            .Where(x =>
+                x.CreatedAtUtc >= firstMonth &&
+                (x.Method == "PAYROLL_APPROVE_STANDARD" || x.Method == "PAYROLL_APPROVE_OVERRIDE"))
+            .Select(x => new
+            {
+                x.CreatedAtUtc,
+                x.Method
+            })
+            .ToListAsync(cancellationToken);
 
-        var total = byMonth.TryGetValue(key, out var row) ? row.total : 0;
-        var overrides = byMonth.TryGetValue(key, out row) ? row.overrides : 0;
-        var rate = total == 0 ? 0m : Math.Round(overrides * 100m / total, 1);
+        var byMonth = decisions
+            .GroupBy(x => $"{x.CreatedAtUtc.Year:D4}-{x.CreatedAtUtc.Month:D2}")
+            .ToDictionary(g => g.Key, g => new
+            {
+                total = g.Count(),
+                overrides = g.Count(x => x.Method == "PAYROLL_APPROVE_OVERRIDE")
+            });
 
-        items.Add(new
+        var items = new List<object>(monthsWindow);
+        for (var i = 0; i < monthsWindow; i++)
         {
-            month = key,
-            totalApprovals = total,
-            overrideApprovals = overrides,
-            overrideRatePercent = rate
+            var monthDate = firstMonth.AddMonths(i);
+            var key = $"{monthDate.Year:D4}-{monthDate.Month:D2}";
+
+            var total = byMonth.TryGetValue(key, out var row) ? row.total : 0;
+            var overrides = byMonth.TryGetValue(key, out row) ? row.overrides : 0;
+            var rate = total == 0 ? 0m : Math.Round(overrides * 100m / total, 1);
+
+            items.Add(new
+            {
+                month = key,
+                totalApprovals = total,
+                overrideApprovals = overrides,
+                overrideRatePercent = rate
+            });
+        }
+
+        return Results.Ok(new
+        {
+            monthsWindow,
+            items
         });
     }
-
-    return Results.Ok(new
+    catch (Exception ex)
     {
-        monthsWindow,
-        items
-    });
+        logger.LogError(ex, "Failed to build payroll governance trend. Returning empty trend as fallback.");
+
+        var items = Enumerable.Range(0, monthsWindow)
+            .Select(i =>
+            {
+                var monthDate = firstMonth.AddMonths(i);
+                return new
+                {
+                    month = $"{monthDate.Year:D4}-{monthDate.Month:D2}",
+                    totalApprovals = 0,
+                    overrideApprovals = 0,
+                    overrideRatePercent = 0m
+                };
+            })
+            .ToList();
+
+        return Results.Ok(new
+        {
+            monthsWindow,
+            items,
+            degraded = true
+        });
+    }
 });
 
 api.MapGet("/payroll/governance/decisions", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
