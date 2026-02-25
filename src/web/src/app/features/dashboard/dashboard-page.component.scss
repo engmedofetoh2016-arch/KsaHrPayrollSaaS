@@ -265,6 +265,23 @@ ul {
   color: #1f3046;
 }
 
+.ai .recommendations {
+  margin: 10px 0 0;
+  padding-left: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.ai .recommendations li {
+  background: #f8fbff;
+  border: 1px solid #dce6f1;
+  border-radius: 10px;
+  padding: 9px 11px;
+  color: #2a4364;
+  line-height: 1.45;
+}
+
 .governance code {
   background: #f1f5f9;
   border: 1px solid #d9e3ef;
@@ -338,6 +355,10 @@ ul {
   justify-content: flex-end;
   align-items: center;
   padding-bottom: 4px;
+}
+
+.governance .bar.zero {
+  background: linear-gradient(180deg, #cbd8e6, #b8c8d9);
 }
 
 .governance .bar span {

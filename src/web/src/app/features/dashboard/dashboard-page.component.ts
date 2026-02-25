@@ -325,6 +325,62 @@ export class DashboardPageComponent implements OnInit {
     return severity ?? '-';
   }
 
+  complianceProviderLabel(): string {
+    const provider = String(this.complianceBrief().provider ?? '').trim().toLowerCase();
+    if (!provider) {
+      return this.i18n.text('Unknown', 'غير معروف');
+    }
+
+    if (provider === 'fallback-disabled') {
+      return this.i18n.text('Fallback (AI disabled)', 'وضع بديل (الذكاء الاصطناعي غير مفعل)');
+    }
+
+    if (provider === 'claude') {
+      return this.i18n.text('Claude AI', 'كلود للذكاء الاصطناعي');
+    }
+
+    return provider;
+  }
+
+  displayRecommendation(text: string): string {
+    const value = String(text ?? '').trim();
+    if (!value || !this.i18n.isArabic()) {
+      return value;
+    }
+
+    const saudizationMatch = value.match(/Raise Saudization ratio to at least (\d+)% target \(need (\d+) additional Saudi employee\(s\) at current headcount\)\.?/i);
+    if (saudizationMatch) {
+      const target = saudizationMatch[1];
+      const needed = saudizationMatch[2];
+      return `رفع نسبة التوطين إلى ${target}% على الأقل (يتطلب ${needed} موظف سعودي إضافي حسب العدد الحالي).`;
+    }
+
+    const wpsMatch = value.match(/Complete payment profiles for (\d+) employees\./i);
+    if (wpsMatch) {
+      return `استكمال بيانات الدفع لعدد ${wpsMatch[1]} من الموظفين.`;
+    }
+
+    const criticalMatch = value.match(/Resolve (\d+) critical compliance alerts within 7 days\./i);
+    if (criticalMatch) {
+      return `إغلاق ${criticalMatch[1]} من تنبيهات الامتثال الحرجة خلال 7 أيام.`;
+    }
+
+    const warningMatch = value.match(/Plan remediation for (\d+) warning alerts within 30 days\./i);
+    if (warningMatch) {
+      return `وضع خطة معالجة لعدد ${warningMatch[1]} من التنبيهات المتوسطة خلال 30 يومًا.`;
+    }
+
+    if (/Complete company WPS bank profile\./i.test(value)) {
+      return 'استكمال ملف حساب الشركة البنكي الخاص بنظام حماية الأجور (WPS).';
+    }
+
+    if (/Maintain current controls and run weekly compliance review\./i.test(value)) {
+      return 'الاستمرار على الضوابط الحالية وإجراء مراجعة امتثال أسبوعية.';
+    }
+
+    return value;
+  }
+
   private extractCount(response: any): number {
     if (Array.isArray(response)) {
       return response.length;
