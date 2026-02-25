@@ -260,8 +260,9 @@ ul {
   border-radius: 8px;
   padding: 10px;
   white-space: pre-wrap;
-  font-family: "Cascadia Mono", "Consolas", monospace;
-  font-size: 0.8rem;
+  font-family: inherit;
+  line-height: 1.55;
+  font-size: 0.92rem;
   color: #1f3046;
 }
 
@@ -338,7 +339,8 @@ ul {
 
 .governance .trend {
   margin-top: 8px;
-  min-height: 120px;
+  min-height: 142px;
+  padding-bottom: 24px;
   display: grid;
   grid-template-columns: repeat(6, minmax(40px, 1fr));
   gap: 8px;
@@ -354,7 +356,7 @@ ul {
   flex-direction: column;
   justify-content: flex-end;
   align-items: center;
-  padding-bottom: 4px;
+  padding: 4px 0 2px;
 }
 
 .governance .bar.zero {
@@ -369,10 +371,11 @@ ul {
 }
 
 .governance .bar small {
-  position: absolute;
-  bottom: -18px;
+  position: static;
+  margin-top: 6px;
   color: #4f6b88;
-  font-size: 0.68rem;
+  font-size: 0.74rem;
+  line-height: 1;
 }
 
 .intelligence.risk-high {

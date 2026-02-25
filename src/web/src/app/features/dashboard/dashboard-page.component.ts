@@ -348,7 +348,7 @@ export class DashboardPageComponent implements OnInit {
       return value;
     }
 
-    const saudizationMatch = value.match(/Raise Saudization ratio to at least (\d+)% target \(need (\d+) additional Saudi employee\(s\) at current headcount\)\.?/i);
+    const saudizationMatch = value.match(/Raise\s+Saudization\s+ratio\s+to\s+at\s+least\s+(\d+)%\s+target\s*\(\s*need\s+(\d+)\s+additional\s+Saudi\s+employee\(s\)\s+at\s+current\s+headcount\s*\)\.?/i);
     if (saudizationMatch) {
       const target = saudizationMatch[1];
       const needed = saudizationMatch[2];
@@ -378,7 +378,25 @@ export class DashboardPageComponent implements OnInit {
       return 'الاستمرار على الضوابط الحالية وإجراء مراجعة امتثال أسبوعية.';
     }
 
+    if (/Raise Saudization ratio/i.test(value) && /additional Saudi employee/i.test(value)) {
+      const target = value.match(/(\d+)%/)?.[1] ?? '30';
+      const needed = value.match(/need\s+(\d+)/i)?.[1] ?? '1';
+      return `رفع نسبة التوطين إلى ${target}% على الأقل (يتطلب ${needed} موظف سعودي إضافي حسب العدد الحالي).`;
+    }
+
     return value;
+  }
+
+  formatComplianceBrief(text: string): string {
+    const value = String(text ?? '').trim();
+    if (!value || !this.i18n.isArabic()) {
+      return value;
+    }
+
+    return value
+      .replace(/\(fallback-disabled\)/gi, '(وضع بديل)')
+      .replace(/^- /gm, '• ')
+      .replace(/\n-\s/g, '\n• ');
   }
 
   private extractCount(response: any): number {

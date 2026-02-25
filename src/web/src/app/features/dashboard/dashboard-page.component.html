@@ -206,7 +206,7 @@
         {{ complianceScore().noticeAlerts }} {{ i18n.text('notice', 'تنبيه') }}
       </p>
       <p class="meta">{{ i18n.text('AI Brief', 'الملخص الذكي') }} ({{ complianceProviderLabel() }})</p>
-      <pre class="brief">{{ complianceBrief().brief }}</pre>
+      <pre class="brief" [attr.dir]="i18n.isArabic() ? 'rtl' : 'ltr'">{{ formatComplianceBrief(complianceBrief().brief) }}</pre>
       @if (complianceScore().recommendations.length > 0) {
         <ul class="recommendations">
           @for (item of complianceScore().recommendations; track item) {
