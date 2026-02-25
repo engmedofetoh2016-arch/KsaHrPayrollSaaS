@@ -58,7 +58,7 @@ export class LoginPageComponent {
   constructor() {
     const reason = this.route.snapshot.queryParamMap.get('reason');
     if (reason === 'expired') {
-      this.error.set('Session expired. Please login again.');
+      this.error.set(this.i18n.text('Session expired. Please login again.', 'انتهت صلاحية الجلسة. يرجى تسجيل الدخول مرة أخرى.'));
     }
   }
 
@@ -66,7 +66,7 @@ export class LoginPageComponent {
     if (this.form.invalid || this.loading()) {
       this.form.markAllAsTouched();
       if (this.form.invalid) {
-        this.error.set('Please enter tenant slug, valid email, and password (min 8 chars).');
+        this.error.set(this.i18n.text('Please enter tenant slug, valid email, and password (min 8 chars).', 'يرجى إدخال رمز المنشأة وبريد إلكتروني صحيح وكلمة مرور لا تقل عن 8 أحرف.'));
       }
       return;
     }
@@ -85,19 +85,27 @@ export class LoginPageComponent {
       },
       error: (err) => {
         this.loading.set(false);
-        this.error.set(getApiErrorMessage(err, 'Login failed. Check tenant slug, email, and password.'));
+        this.error.set(getApiErrorMessage(err, this.i18n.text('Login failed. Check tenant slug, email, and password.', 'تعذر تسجيل الدخول. يرجى التحقق من رمز المنشأة والبريد الإلكتروني وكلمة المرور.')));
       }
     });
   }
 
   toggleSignUp() {
-    this.showSignUp.set(!this.showSignUp());
+    const next = !this.showSignUp();
+    this.showSignUp.set(next);
+    if (next) {
+      this.showForgot.set(false);
+    }
     this.signupError.set('');
     this.signupMessage.set('');
   }
 
   toggleForgotPassword() {
-    this.showForgot.set(!this.showForgot());
+    const next = !this.showForgot();
+    this.showForgot.set(next);
+    if (next) {
+      this.showSignUp.set(false);
+    }
     this.forgotError.set('');
     this.forgotMessage.set('');
     if (this.showForgot()) {
@@ -108,11 +116,19 @@ export class LoginPageComponent {
     }
   }
 
+  showLoginPanel() {
+    this.showSignUp.set(false);
+    this.showForgot.set(false);
+    this.error.set('');
+    this.signupError.set('');
+    this.forgotError.set('');
+  }
+
   onForgotSubmit() {
     if (this.forgotForm.invalid || this.forgotLoading()) {
       this.forgotForm.markAllAsTouched();
       if (this.forgotForm.invalid) {
-        this.forgotError.set('Please enter tenant slug and valid email.');
+        this.forgotError.set(this.i18n.text('Please enter tenant slug and valid email.', 'يرجى إدخال رمز المنشأة وبريد إلكتروني صحيح.'));
       }
       return;
     }
@@ -124,11 +140,11 @@ export class LoginPageComponent {
     this.authService.forgotPassword(payload).subscribe({
       next: () => {
         this.forgotLoading.set(false);
-        this.forgotMessage.set('If account exists, reset instructions were sent.');
+        this.forgotMessage.set(this.i18n.text('If account exists, reset instructions were sent.', 'في حال وجود الحساب، تم إرسال تعليمات إعادة تعيين كلمة المرور.'));
       },
       error: (err) => {
         this.forgotLoading.set(false);
-        this.forgotError.set(getApiErrorMessage(err, 'Failed to submit forgot password request.'));
+        this.forgotError.set(getApiErrorMessage(err, this.i18n.text('Failed to submit forgot password request.', 'تعذر إرسال طلب استعادة كلمة المرور.')));
       }
     });
   }
@@ -137,7 +153,7 @@ export class LoginPageComponent {
     if (this.signupForm.invalid || this.signupLoading()) {
       this.signupForm.markAllAsTouched();
       if (this.signupForm.invalid) {
-        this.signupError.set('Please complete all required sign-up fields correctly.');
+        this.signupError.set(this.i18n.text('Please complete all required sign-up fields correctly.', 'يرجى استكمال جميع حقول التسجيل المطلوبة بشكل صحيح.'));
       }
       return;
     }
@@ -162,7 +178,7 @@ export class LoginPageComponent {
     this.authService.signUp(payload).subscribe({
       next: () => {
         this.signupLoading.set(false);
-        this.signupMessage.set('Sign up successful. You can login now.');
+        this.signupMessage.set(this.i18n.text('Sign up successful. You can login now.', 'تم تسجيل المنشأة بنجاح. يمكنك تسجيل الدخول الآن.'));
         this.form.patchValue({
           tenantSlug: String(payload.slug),
           email: String(payload.ownerEmail),
@@ -172,7 +188,7 @@ export class LoginPageComponent {
       },
       error: (err) => {
         this.signupLoading.set(false);
-        this.signupError.set(getApiErrorMessage(err, 'Sign up failed. Please review your details.'));
+        this.signupError.set(getApiErrorMessage(err, this.i18n.text('Sign up failed. Please review your details.', 'تعذر تسجيل المنشأة. يرجى مراجعة البيانات المدخلة.')));
       }
     });
   }

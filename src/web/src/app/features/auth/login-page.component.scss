@@ -1,33 +1,72 @@
 .login-wrap {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(360px, 420px));
+  grid-template-columns: minmax(360px, 520px);
   justify-content: center;
-  align-content: center;
-  gap: 16px;
-  padding: 20px;
-  background: linear-gradient(135deg, #f4f7fb 0%, #e8f0ff 100%);
+  align-content: start;
+  gap: 18px;
+  padding: 72px 20px 24px;
+  background: radial-gradient(circle at 15% 10%, #eef4ff 0%, #e8f0ff 38%, #f5f8fc 100%);
 }
 
 .lang-switch {
-  position: fixed;
+  position: sticky;
   top: 16px;
   inset-inline-end: 16px;
   border: 1px solid #c8d6e4;
   border-radius: 10px;
   background: #fff;
-  padding: 8px 12px;
+  padding: 8px 12px 9px;
+  font-weight: 700;
   cursor: pointer;
+  z-index: 5;
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.lang-label {
+  color: #5b6f8d;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.lang-value {
+  color: #0f3269;
+  font-size: 0.86rem;
 }
 
 .card {
-  width: min(420px, 92vw);
+  width: min(520px, 92vw);
   background: #fff;
   border: 1px solid #dbe5f0;
   border-radius: 16px;
-  padding: 24px;
+  padding: 22px 24px;
   display: grid;
   gap: 14px;
+  box-shadow: 0 10px 24px rgba(14, 52, 110, 0.08);
+}
+
+.auth-nav {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 10px;
+}
+
+.nav-btn {
+  margin: 0;
+  background: #e8eef7;
+  color: #28456f;
+  border: 1px solid #d6e0ed;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.nav-btn.active {
+  background: #083b8a;
+  color: #fff;
+  border-color: #083b8a;
 }
 
 h1 {
@@ -40,16 +79,24 @@ h2 {
   font-size: 1.2rem;
 }
 
+.subtitle {
+  margin: -2px 0 4px;
+  font-size: 0.86rem;
+  color: #4b5f79;
+}
+
 label {
   display: grid;
   gap: 6px;
   font-size: 0.9rem;
+  color: #1b3152;
 }
 
 input {
   border: 1px solid #c9d6e2;
   border-radius: 10px;
   padding: 10px 12px;
+  font-size: 1rem;
 }
 
 button {
@@ -61,6 +108,13 @@ button {
   color: #fff;
   font-weight: 600;
   cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
+}
+
+button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.03);
+  box-shadow: 0 8px 18px rgba(9, 57, 133, 0.25);
 }
 
 button:disabled {
@@ -87,9 +141,21 @@ button:disabled {
 .hint {
   margin: -6px 0 0;
   color: #4b5f79;
-  font-size: 0.78rem;
+  font-size: 0.82rem;
+  line-height: 1.35;
 }
 
 .signup-card {
   align-self: start;
+}
+
+@media (max-width: 920px) {
+  .login-wrap {
+    padding-top: 64px;
+    justify-items: center;
+  }
+
+  .auth-nav {
+    grid-template-columns: 1fr;
+  }
 }
