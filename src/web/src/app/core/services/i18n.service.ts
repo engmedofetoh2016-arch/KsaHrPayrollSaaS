@@ -44,5 +44,6 @@ export class I18nService {
     document.documentElement.lang = language;
     document.documentElement.dir = dir;
     document.body.dir = dir;
+    document.title = language === 'ar' ? 'نظام إدارة الموارد البشرية والرواتب' : 'KSA HR Payroll';
   }
 }
