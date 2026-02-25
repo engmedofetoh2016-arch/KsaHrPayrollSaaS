@@ -1,4 +1,5 @@
-import { Component, inject } from '@angular/core';
+import { Component, effect, inject } from '@angular/core';
+import { Title } from '@angular/platform-browser';
 import { RouterOutlet } from '@angular/router';
 import { I18nService } from './core/services/i18n.service';
 
@@ -9,5 +10,12 @@ import { I18nService } from './core/services/i18n.service';
   styleUrl: './app.scss'
 })
 export class App {
-  private readonly _i18n = inject(I18nService);
+  private readonly i18n = inject(I18nService);
+  private readonly title = inject(Title);
+
+  constructor() {
+    effect(() => {
+      this.title.setTitle(this.i18n.isArabic() ? 'نظام إدارة الموارد البشرية والرواتب' : 'KSA HR Payroll');
+    });
+  }
 }
