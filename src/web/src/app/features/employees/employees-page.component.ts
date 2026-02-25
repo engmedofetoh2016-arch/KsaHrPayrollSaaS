@@ -58,7 +58,8 @@ export class EmployeesPageComponent implements OnInit, OnDestroy {
     bankIban: [''],
     iqamaNumber: [''],
     iqamaExpiryDate: [''],
-    workPermitExpiryDate: ['']
+    workPermitExpiryDate: [''],
+    contractEndDate: ['']
   });
 
   readonly eosForm = this.fb.group({
@@ -156,7 +157,8 @@ export class EmployeesPageComponent implements OnInit, OnDestroy {
       bankIban: employee.bankIban ?? '',
       iqamaNumber: employee.iqamaNumber ?? '',
       iqamaExpiryDate: employee.iqamaExpiryDate ?? '',
-      workPermitExpiryDate: employee.workPermitExpiryDate ?? ''
+      workPermitExpiryDate: employee.workPermitExpiryDate ?? '',
+      contractEndDate: employee.contractEndDate ?? ''
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -210,6 +212,22 @@ export class EmployeesPageComponent implements OnInit, OnDestroy {
       },
       error: (err) => {
         this.error.set(getApiErrorMessage(err, 'Failed to create user login for employee.'));
+      }
+    });
+  }
+
+  downloadSalaryCertificate(employee: Employee) {
+    const purpose = window.prompt(`Purpose for ${employee.firstName} ${employee.lastName} salary certificate (optional):`) ?? '';
+
+    this.error.set('');
+    this.message.set('');
+    this.employeesService.downloadSalaryCertificate(employee.id, purpose).subscribe({
+      next: (response) => {
+        this.downloadFileFromResponse(response, `salary-certificate-${employee.firstName}-${employee.lastName}.pdf`);
+        this.message.set(`Salary certificate downloaded for ${employee.firstName} ${employee.lastName}.`);
+      },
+      error: (err) => {
+        this.error.set(getApiErrorMessage(err, 'Failed to download salary certificate.'));
       }
     });
   }
@@ -493,7 +511,8 @@ export class EmployeesPageComponent implements OnInit, OnDestroy {
       bankIban: value.bankIban ?? '',
       iqamaNumber: value.iqamaNumber ?? '',
       iqamaExpiryDate: value.iqamaExpiryDate || null,
-      workPermitExpiryDate: value.workPermitExpiryDate || null
+      workPermitExpiryDate: value.workPermitExpiryDate || null,
+      contractEndDate: value.contractEndDate || null
     };
   }
 
@@ -515,7 +534,8 @@ export class EmployeesPageComponent implements OnInit, OnDestroy {
       bankIban: '',
       iqamaNumber: '',
       iqamaExpiryDate: '',
-      workPermitExpiryDate: ''
+      workPermitExpiryDate: '',
+      contractEndDate: ''
     });
   }
 }

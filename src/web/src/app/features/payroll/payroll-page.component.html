@@ -69,6 +69,15 @@
   <h3>{{ i18n.text('Run Details', 'تفاصيل التشغيل') }}</h3>
   @if (run()) {
     <p>Status: {{ run()?.status }} | Total Net: {{ totalNet() | number: '1.2-2' }}</p>
+    <h4>{{ i18n.text('Executive Summary', 'الملخص التنفيذي') }}</h4>
+    @if (loadingExecutiveSummary()) {
+      <p>{{ i18n.text('Generating summary...', 'جارٍ إنشاء الملخص...') }}</p>
+    } @else if (executiveSummary(); as summary) {
+      <div class="ok">
+        <p><strong>{{ i18n.text('English', 'English') }}:</strong> {{ summary.summaryEn }}</p>
+        <p><strong>{{ i18n.text('Arabic', 'العربية') }}:</strong> {{ summary.summaryAr }}</p>
+      </div>
+    }
     <h4>{{ i18n.text('Pre-Approval Checks', 'فحوصات ما قبل الاعتماد') }}</h4>
     @if (loadingChecks()) {
       <p>{{ i18n.text('Checking payroll anomalies...', 'جاري فحص انحرافات الرواتب...') }}</p>

@@ -21,4 +21,5 @@ public class Employee : BaseAuditableEntity, ITenantScoped
     public string IqamaNumber { get; set; } = string.Empty;
     public DateOnly? IqamaExpiryDate { get; set; }
     public DateOnly? WorkPermitExpiryDate { get; set; }
+    public DateOnly? ContractEndDate { get; set; }
 }

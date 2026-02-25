@@ -1,7 +1,7 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { apiConfig } from '../config/api.config';
-import { SmartAlertActionRequest, SmartAlertsResponse, SmartAlertSnoozeRequest } from '../models/smart-alert.models';
+import { SmartAlertActionRequest, SmartAlertExplainResponse, SmartAlertsResponse, SmartAlertSnoozeRequest } from '../models/smart-alert.models';
 
 @Injectable({ providedIn: 'root' })
 export class SmartAlertsService {
@@ -19,5 +19,10 @@ export class SmartAlertsService {
 
   snooze(key: string, request: SmartAlertSnoozeRequest) {
     return this.http.post(`${this.base}/${encodeURIComponent(key)}/snooze`, request);
+  }
+
+  explainRisk(key: string, language: string) {
+    const params = new HttpParams().set('language', language || 'en');
+    return this.http.get<SmartAlertExplainResponse>(`${this.base}/${encodeURIComponent(key)}/explain-risk`, { params });
   }
 }

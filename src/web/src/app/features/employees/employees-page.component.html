@@ -18,6 +18,7 @@
     <label>{{ i18n.text('Iqama Number', 'رقم الإقامة') }}<input formControlName="iqamaNumber" /></label>
     <label>{{ i18n.text('Iqama Expiry Date', 'تاريخ انتهاء الإقامة') }}<input type="date" formControlName="iqamaExpiryDate" /></label>
     <label>{{ i18n.text('Work Permit Expiry', 'تاريخ انتهاء رخصة العمل') }}<input type="date" formControlName="workPermitExpiryDate" /></label>
+    <label>{{ i18n.text('Contract End Date', 'تاريخ نهاية العقد') }}<input type="date" formControlName="contractEndDate" /></label>
     <div class="actions">
       <button type="submit" [disabled]="saving()">
         {{ saving() ? i18n.text('Creating...', 'جاري الإنشاء...') : i18n.text('Create Employee', 'إنشاء موظف') }}
@@ -48,6 +49,7 @@
           <th>{{ i18n.text('Iqama #', 'رقم الإقامة') }}</th>
           <th>{{ i18n.text('Iqama Expiry', 'انتهاء الإقامة') }}</th>
           <th>{{ i18n.text('Work Permit Expiry', 'انتهاء رخصة العمل') }}</th>
+          <th>{{ i18n.text('Contract End', 'نهاية العقد') }}</th>
           <th>{{ i18n.text('Saudi', 'سعودي') }}</th>
           <th>{{ i18n.text('GOSI', 'التأمينات') }}</th>
           <th>{{ i18n.text('GOSI Wage Base', 'وعاء التأمينات') }}</th>
@@ -67,12 +69,14 @@
             <td>{{ employee.iqamaNumber }}</td>
             <td>{{ employee.iqamaExpiryDate || '-' }}</td>
             <td>{{ employee.workPermitExpiryDate || '-' }}</td>
+            <td>{{ employee.contractEndDate || '-' }}</td>
             <td>{{ employee.isSaudiNational ? i18n.text('Yes', 'نعم') : i18n.text('No', 'لا') }}</td>
             <td>{{ employee.isGosiEligible ? i18n.text('Yes', 'نعم') : i18n.text('No', 'لا') }}</td>
             <td>{{ (employee.gosiBasicWage + employee.gosiHousingAllowance) | number: '1.2-2' }}</td>
             <td class="row-actions">
               <button type="button" (click)="startEdit(employee)">{{ i18n.text('Edit', 'Edit') }}</button>
               <button type="button" (click)="connectEmployeeLogin(employee)">{{ i18n.text('Create Login', 'Create Login') }}</button>
+              <button type="button" (click)="downloadSalaryCertificate(employee)">{{ i18n.text('Salary Certificate', 'شهادة الراتب') }}</button>
               <button type="button" (click)="deleteEmployee(employee)">{{ i18n.text('Delete', 'Delete') }}</button>
             </td>
           </tr>

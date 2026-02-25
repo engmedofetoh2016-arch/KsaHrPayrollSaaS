@@ -23,3 +23,13 @@ export interface SmartAlertActionRequest {
 export interface SmartAlertSnoozeRequest extends SmartAlertActionRequest {
   days: number;
 }
+
+export interface SmartAlertExplainResponse {
+  key: string;
+  provider: string;
+  usedFallback: boolean;
+  explanation: string;
+  nextAction: string;
+  targetWindowDays: number;
+  generatedAtUtc: string;
+}

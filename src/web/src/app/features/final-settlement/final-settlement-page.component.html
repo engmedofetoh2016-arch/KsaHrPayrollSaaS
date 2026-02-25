@@ -59,6 +59,9 @@
       <p>{{ i18n.text('Employee', 'الموظف') }}: {{ settlement.employeeName }}</p>
       <p>{{ i18n.text('Service Years', 'سنوات الخدمة') }}: {{ settlement.serviceYears | number: '1.2-2' }}</p>
       <p>{{ i18n.text('EOS Amount', 'مبلغ مكافأة نهاية الخدمة') }}: {{ settlement.eosAmount | number: '1.2-2' }} {{ settlement.currencyCode }}</p>
+      <p>{{ i18n.text('Pending Salary', 'الراتب المستحق') }}: {{ settlement.pendingSalaryAmount | number: '1.2-2' }} {{ settlement.currencyCode }}</p>
+      <p>{{ i18n.text('Leave Encashment', 'بدل رصيد الإجازة') }}: {{ settlement.leaveEncashmentAmount | number: '1.2-2' }} {{ settlement.currencyCode }}</p>
+      <p>{{ i18n.text('Gross Settlement', 'إجمالي المستحقات') }}: {{ settlement.settlementGross | number: '1.2-2' }} {{ settlement.currencyCode }}</p>
       <p>{{ i18n.text('Total Deductions', 'إجمالي الاستقطاعات') }}: {{ settlement.totalDeductions | number: '1.2-2' }}</p>
       <p>{{ i18n.text('Net Final Settlement', 'صافي التسوية النهائية') }}: {{ settlement.netSettlement | number: '1.2-2' }} {{ settlement.currencyCode }}</p>
     </div>

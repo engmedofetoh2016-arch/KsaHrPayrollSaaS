@@ -131,6 +131,9 @@ public class CreateEmployeeRequestValidator : AbstractValidator<CreateEmployeeRe
         RuleFor(x => x.WorkPermitExpiryDate)
             .Must(x => x is null || x.Value >= DateOnly.FromDateTime(new DateTime(2000, 1, 1)))
             .WithMessage("workPermitExpiryDate is invalid.");
+        RuleFor(x => x.ContractEndDate)
+            .Must(x => x is null || x.Value >= DateOnly.FromDateTime(new DateTime(2000, 1, 1)))
+            .WithMessage("contractEndDate is invalid.");
         RuleFor(x => x)
             .Must(x => !x.IsGosiEligible || x.GosiBasicWage > 0)
             .WithMessage("GOSI basic wage must be greater than 0 when employee is GOSI eligible.");
@@ -159,6 +162,9 @@ public class UpdateEmployeeRequestValidator : AbstractValidator<UpdateEmployeeRe
         RuleFor(x => x.WorkPermitExpiryDate)
             .Must(x => x is null || x.Value >= DateOnly.FromDateTime(new DateTime(2000, 1, 1)))
             .WithMessage("workPermitExpiryDate is invalid.");
+        RuleFor(x => x.ContractEndDate)
+            .Must(x => x is null || x.Value >= DateOnly.FromDateTime(new DateTime(2000, 1, 1)))
+            .WithMessage("contractEndDate is invalid.");
         RuleFor(x => x)
             .Must(x => !x.IsGosiEligible || x.GosiBasicWage > 0)
             .WithMessage("GOSI basic wage must be greater than 0 when employee is GOSI eligible.");

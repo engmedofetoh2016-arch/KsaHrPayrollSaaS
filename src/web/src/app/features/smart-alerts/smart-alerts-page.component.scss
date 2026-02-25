@@ -105,6 +105,23 @@ td {
   flex-wrap: wrap;
 }
 
+.explain-box {
+  width: 100%;
+  border: 1px solid #d9e3ef;
+  border-radius: 8px;
+  background: #f7fbff;
+  padding: 8px;
+  margin-top: 4px;
+}
+
+.explain-box p {
+  margin: 0 0 6px;
+}
+
+.explain-box p:last-child {
+  margin-bottom: 0;
+}
+
 .error {
   color: #a32020;
 }

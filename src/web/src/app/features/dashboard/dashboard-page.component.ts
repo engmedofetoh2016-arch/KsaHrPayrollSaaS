@@ -40,6 +40,7 @@ export class DashboardPageComponent implements OnInit {
     saudiEmployees: 0,
     expiringIqama: 0,
     expiringWorkPermit: 0,
+    expiringContract: 0,
     expiringDocuments: 0,
     attendanceRowsThisMonth: 0,
     payrollPeriods: 0,
@@ -198,8 +199,12 @@ export class DashboardPageComponent implements OnInit {
           saudiEmployees: this.extractItems(employeePaymentPage).filter((x) => !!x.isSaudiNational).length,
           expiringIqama: this.extractItems(employeePaymentPage).filter((x) => this.isExpiringWithin(x.iqamaExpiryDate, 60)).length,
           expiringWorkPermit: this.extractItems(employeePaymentPage).filter((x) => this.isExpiringWithin(x.workPermitExpiryDate, 60)).length,
+          expiringContract: this.extractItems(employeePaymentPage).filter((x) => this.isExpiringWithin(x.contractEndDate, 60)).length,
           expiringDocuments: this.extractItems(employeePaymentPage).filter(
-            (x) => this.isExpiringWithin(x.iqamaExpiryDate, 60) || this.isExpiringWithin(x.workPermitExpiryDate, 60)
+            (x) =>
+              this.isExpiringWithin(x.iqamaExpiryDate, 60) ||
+              this.isExpiringWithin(x.workPermitExpiryDate, 60) ||
+              this.isExpiringWithin(x.contractEndDate, 60)
           ).length,
           attendanceRowsThisMonth: this.extractCount(attendancePage),
           payrollPeriods: Array.isArray(payrollPeriods) ? payrollPeriods.length : 0,
@@ -301,6 +306,23 @@ export class DashboardPageComponent implements OnInit {
         this.error.set(this.i18n.text('Failed to load dashboard metrics.', 'تعذر تحميل مؤشرات لوحة التحكم.'));
       }
     });
+  }
+
+  complianceSeverityLabel(severity?: string | null): string {
+    const normalized = (severity ?? '').toLowerCase();
+    if (normalized === 'critical') {
+      return this.i18n.text('Critical', 'حرج');
+    }
+
+    if (normalized === 'warning') {
+      return this.i18n.text('Warning', 'متوسط');
+    }
+
+    if (normalized === 'notice') {
+      return this.i18n.text('Notice', 'تنبيه');
+    }
+
+    return severity ?? '-';
   }
 
   private extractCount(response: any): number {

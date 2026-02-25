@@ -97,6 +97,59 @@
     </article>
 
     <article class="panel">
+      <h3>{{ i18n.text('Saudization Hiring Simulation', 'محاكاة التوظيف للتوطين') }}</h3>
+      <div class="simulation-form">
+        <label>
+          {{ i18n.text('Planned Saudi Hires', 'التوظيف السعودي المخطط') }}
+          <input
+            type="number"
+            min="0"
+            max="500"
+            [value]="simulationInputs().plannedSaudiHires"
+            (input)="updatePlannedSaudiHires($any($event.target).value)" />
+        </label>
+        <label>
+          {{ i18n.text('Planned Non-Saudi Hires', 'التوظيف غير السعودي المخطط') }}
+          <input
+            type="number"
+            min="0"
+            max="500"
+            [value]="simulationInputs().plannedNonSaudiHires"
+            (input)="updatePlannedNonSaudiHires($any($event.target).value)" />
+        </label>
+        <button type="button" (click)="runSaudizationSimulation()" [disabled]="loadingSimulation()">
+          {{ loadingSimulation() ? i18n.text('Running...', 'جاري التشغيل...') : i18n.text('Run Simulation', 'تشغيل المحاكاة') }}
+        </button>
+      </div>
+
+      @if (simulation(); as sim) {
+        <div class="simulation-result">
+          <p class="meta">{{ i18n.text('Target', 'الهدف') }}: {{ sim.targetPercent }}%</p>
+          <p>
+            <strong>{{ i18n.text('Current', 'الحالي') }}:</strong>
+            {{ sim.current.saudizationPercent }}% ({{ sim.current.saudiEmployees }}/{{ sim.current.totalEmployees }})
+            <span class="band" [class]="bandClass(sim.current.band)">{{ bandLabel(sim.current.band) }}</span>
+          </p>
+          <p>
+            <strong>{{ i18n.text('Projected', 'بعد الخطة') }}:</strong>
+            {{ sim.projected.saudizationPercent }}% ({{ sim.projected.saudiEmployees }}/{{ sim.projected.totalEmployees }})
+            <span class="band" [class]="bandClass(sim.projected.band)">{{ bandLabel(sim.projected.band) }}</span>
+          </p>
+          <p class="meta">
+            {{ i18n.text('Change', 'التغير') }}: {{ sim.deltaPercent > 0 ? '+' : '' }}{{ sim.deltaPercent }}%
+            @if (sim.improvesBand) {
+              | {{ i18n.text('Band improves', 'تحسن النطاق') }}
+            }
+          </p>
+          <p class="meta">
+            {{ i18n.text('Additional Saudis needed after plan', 'السعوديون الإضافيون المطلوبون بعد الخطة') }}:
+            {{ sim.projected.additionalSaudiEmployeesNeeded }}
+          </p>
+        </div>
+      }
+    </article>
+
+    <article class="panel">
       <h3>{{ i18n.text('Recommended Actions', 'إجراءات مقترحة') }}</h3>
       @if (score().recommendations.length === 0) {
         <p class="meta">{{ i18n.text('No actions right now.', 'لا توجد إجراءات حالياً.') }}</p>
@@ -147,14 +200,35 @@
                   <input type="checkbox" [checked]="isSelected(alert.id)" (change)="toggleSelection(alert.id, $any($event.target).checked)" />
                 </td>
                 <td>{{ alert.employeeName }}</td>
-                <td>{{ alert.documentType === 'Iqama' ? i18n.text('Iqama', 'الإقامة') : i18n.text('Work Permit', 'رخصة العمل') }}</td>
+                <td>{{ documentLabel(alert.documentType) }}</td>
                 <td>{{ alert.expiryDate }}</td>
                 <td>{{ alert.daysLeft }}</td>
-                <td><span class="badge" [class]="severityClass(alert.severity)">{{ alert.severity }}</span></td>
+                <td><span class="badge" [class]="severityClass(alert.severity)">{{ severityLabel(alert.severity) }}</span></td>
                 <td>
-                  <button type="button" (click)="resolveAlert(alert.id)" [disabled]="resolvingIds().includes(alert.id)">
-                    {{ i18n.text('Resolve', 'إغلاق') }}
-                  </button>
+                  <div class="alert-actions">
+                    <button type="button" (click)="resolveAlert(alert.id)" [disabled]="resolvingIds().includes(alert.id)">
+                      {{ i18n.text('Resolve', 'إغلاق') }}
+                    </button>
+                    <button type="button" (click)="explainAlert(alert.id)" [disabled]="loadingExplainIds().includes(alert.id)">
+                      {{
+                        loadingExplainIds().includes(alert.id)
+                          ? i18n.text('Explaining...', 'جارٍ الشرح...')
+                          : i18n.text('Explain Risk', 'شرح الخطر')
+                      }}
+                    </button>
+                  </div>
+                  @if (alertExplanation(alert.id); as detail) {
+                    <div class="alert-explanation">
+                      <p class="meta">
+                        {{ i18n.text('Provider', 'المزوّد') }}: {{ detail.provider }}
+                        @if (detail.usedFallback) {
+                          ({{ i18n.text('fallback', 'بديل') }})
+                        }
+                      </p>
+                      <pre>{{ detail.explanation }}</pre>
+                      <p><strong>{{ i18n.text('Next action', 'الإجراء التالي') }}:</strong> {{ detail.nextAction }}</p>
+                    </div>
+                  }
                 </td>
               </tr>
             }

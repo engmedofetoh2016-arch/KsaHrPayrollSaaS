@@ -44,6 +44,16 @@ export class EmployeesService {
     );
   }
 
+  downloadSalaryCertificate(employeeId: string, purpose?: string | null) {
+    const query = purpose && purpose.trim().length > 0
+      ? `?purpose=${encodeURIComponent(purpose.trim())}`
+      : '';
+    return this.http.get(`${this.base}/${employeeId}/salary-certificate/pdf${query}`, {
+      observe: 'response',
+      responseType: 'blob'
+    });
+  }
+
   estimateEos(employeeId: string, terminationDate?: string) {
     return this.http.post<EosEstimateResult>(`${this.base}/${employeeId}/eos-estimate`, {
       terminationDate: terminationDate || null

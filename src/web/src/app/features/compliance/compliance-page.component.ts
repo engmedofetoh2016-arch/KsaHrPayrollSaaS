@@ -21,6 +21,40 @@ type ComplianceScoreHistoryRow = {
   grade: string;
 };
 
+type ComplianceAlertExplanationRow = {
+  provider: string;
+  usedFallback: boolean;
+  explanation: string;
+  nextAction: string;
+  targetWindowDays: number;
+  generatedAtUtc: string;
+};
+
+type SaudizationSimulationResult = {
+  targetPercent: number;
+  plannedSaudiHires: number;
+  plannedNonSaudiHires: number;
+  current: {
+    saudiEmployees: number;
+    totalEmployees: number;
+    saudizationPercent: number;
+    additionalSaudiEmployeesNeeded: number;
+    risk: string;
+    band: string;
+  };
+  projected: {
+    saudiEmployees: number;
+    totalEmployees: number;
+    saudizationPercent: number;
+    additionalSaudiEmployeesNeeded: number;
+    risk: string;
+    band: string;
+  };
+  deltaPercent: number;
+  improvesBand: boolean;
+  improvesRisk: boolean;
+};
+
 type DigestLogRow = {
   id: string;
   retryOfDeliveryId?: string | null;
@@ -47,12 +81,15 @@ export class CompliancePageComponent implements OnInit {
   private readonly base = `${apiConfig.baseUrl}/api`;
 
   readonly loading = signal(false);
+  readonly loadingSimulation = signal(false);
   readonly loadingDigestLogs = signal(false);
   readonly sendingDigest = signal(false);
   readonly message = signal('');
   readonly error = signal('');
   readonly resolvingIds = signal<string[]>([]);
+  readonly loadingExplainIds = signal<string[]>([]);
   readonly selectedAlertIds = signal<string[]>([]);
+  readonly alertExplanations = signal<Record<string, ComplianceAlertExplanationRow>>({});
   readonly score = signal({
     score: 0,
     grade: 'D',
@@ -75,6 +112,11 @@ export class CompliancePageComponent implements OnInit {
     brief: ''
   });
   readonly alerts = signal<ComplianceAlertRow[]>([]);
+  readonly simulationInputs = signal({
+    plannedSaudiHires: 1,
+    plannedNonSaudiHires: 0
+  });
+  readonly simulation = signal<SaudizationSimulationResult | null>(null);
   readonly scoreHistory = signal<ComplianceScoreHistoryRow[]>([]);
   readonly digestLogs = signal<DigestLogRow[]>([]);
   readonly retryingDigestId = signal<string>('');
@@ -107,10 +149,13 @@ export class CompliancePageComponent implements OnInit {
           )
         })
         .pipe(catchError(() => of(null))),
+      simulation: this.http
+        .get<any>(`${this.base}/compliance/saudization-simulation?plannedSaudiHires=1&plannedNonSaudiHires=0`)
+        .pipe(catchError(() => of(null))),
       alerts: this.http.get<any>(`${this.base}/compliance/alerts?take=200`).pipe(catchError(() => of({ items: [] }))),
       history: this.http.get<any>(`${this.base}/compliance/score-history?days=60`).pipe(catchError(() => of({ items: [] })))
     }).subscribe({
-      next: ({ score, brief, alerts, history }) => {
+      next: ({ score, brief, simulation, alerts, history }) => {
         if (score) {
           this.score.set({
             score: Number(score.score ?? 0),
@@ -138,6 +183,10 @@ export class CompliancePageComponent implements OnInit {
           });
         }
 
+        if (simulation) {
+          this.simulation.set(this.mapSimulation(simulation));
+        }
+
         const items = Array.isArray(alerts?.items) ? alerts.items : [];
         this.alerts.set(
           items.map((x: any) => ({
@@ -151,6 +200,16 @@ export class CompliancePageComponent implements OnInit {
           }))
         );
         this.selectedAlertIds.set([]);
+        const currentIds = new Set(items.map((x: any) => String(x.id)));
+        this.alertExplanations.update((existing) => {
+          const next: Record<string, ComplianceAlertExplanationRow> = {};
+          for (const id of Object.keys(existing)) {
+            if (currentIds.has(id)) {
+              next[id] = existing[id];
+            }
+          }
+          return next;
+        });
 
         const historyItems = Array.isArray(history?.items) ? history.items : [];
         this.scoreHistory.set(
@@ -183,6 +242,137 @@ export class CompliancePageComponent implements OnInit {
       },
       complete: () => this.resolvingIds.update((ids) => ids.filter((id) => id !== alertId))
     });
+  }
+
+  explainAlert(alertId: string) {
+    if (!alertId || this.loadingExplainIds().includes(alertId)) {
+      return;
+    }
+
+    this.loadingExplainIds.update((ids) => [...ids, alertId]);
+    this.http.get<any>(`${this.base}/compliance/alerts/${alertId}/explain-risk?language=${encodeURIComponent(this.i18n.language())}`).subscribe({
+      next: (res) => {
+        this.alertExplanations.update((existing) => ({
+          ...existing,
+          [alertId]: {
+            provider: String(res?.provider ?? 'fallback-disabled'),
+            usedFallback: !!res?.usedFallback,
+            explanation: String(res?.explanation ?? ''),
+            nextAction: String(res?.nextAction ?? ''),
+            targetWindowDays: Number(res?.targetWindowDays ?? 30),
+            generatedAtUtc: String(res?.generatedAtUtc ?? '')
+          }
+        }));
+      },
+      error: () => {
+        this.error.set(this.i18n.text('Failed to explain risk.', 'تعذر شرح الخطر.'));
+      },
+      complete: () => this.loadingExplainIds.update((ids) => ids.filter((id) => id !== alertId))
+    });
+  }
+
+  alertExplanation(alertId: string): ComplianceAlertExplanationRow | null {
+    return this.alertExplanations()[alertId] ?? null;
+  }
+
+  documentLabel(documentType: string): string {
+    if (documentType === 'Iqama') {
+      return this.i18n.text('Iqama', 'الإقامة');
+    }
+
+    if (documentType === 'WorkPermit') {
+      return this.i18n.text('Work Permit', 'رخصة العمل');
+    }
+
+    if (documentType === 'Contract') {
+      return this.i18n.text('Contract', 'العقد');
+    }
+
+    return documentType;
+  }
+
+  runSaudizationSimulation() {
+    const input = this.simulationInputs();
+    const plannedSaudiHires = Math.max(0, Math.min(500, Number(input.plannedSaudiHires ?? 0)));
+    const plannedNonSaudiHires = Math.max(0, Math.min(500, Number(input.plannedNonSaudiHires ?? 0)));
+
+    this.loadingSimulation.set(true);
+    this.http
+      .get<any>(
+        `${this.base}/compliance/saudization-simulation?plannedSaudiHires=${plannedSaudiHires}&plannedNonSaudiHires=${plannedNonSaudiHires}`
+      )
+      .subscribe({
+        next: (res) => {
+          this.simulation.set(this.mapSimulation(res));
+        },
+        error: () => {
+          this.error.set(this.i18n.text('Failed to run Saudization simulation.', 'تعذر تشغيل محاكاة التوطين.'));
+        },
+        complete: () => this.loadingSimulation.set(false)
+      });
+  }
+
+  updatePlannedSaudiHires(value: string) {
+    const numeric = Number(value);
+    this.simulationInputs.update((x) => ({
+      ...x,
+      plannedSaudiHires: Number.isFinite(numeric) ? Math.max(0, Math.min(500, Math.floor(numeric))) : 0
+    }));
+  }
+
+  updatePlannedNonSaudiHires(value: string) {
+    const numeric = Number(value);
+    this.simulationInputs.update((x) => ({
+      ...x,
+      plannedNonSaudiHires: Number.isFinite(numeric) ? Math.max(0, Math.min(500, Math.floor(numeric))) : 0
+    }));
+  }
+
+  bandClass(band: string): string {
+    const normalized = (band ?? '').toLowerCase();
+    if (normalized === 'green') {
+      return 'band-green';
+    }
+
+    if (normalized === 'yellow') {
+      return 'band-yellow';
+    }
+
+    return 'band-red';
+  }
+
+  severityLabel(severity: string): string {
+    const normalized = (severity ?? '').toLowerCase();
+    if (normalized === 'critical') {
+      return this.i18n.text('Critical', 'حرج');
+    }
+
+    if (normalized === 'warning') {
+      return this.i18n.text('Warning', 'متوسط');
+    }
+
+    if (normalized === 'notice') {
+      return this.i18n.text('Notice', 'تنبيه');
+    }
+
+    return severity;
+  }
+
+  bandLabel(band: string): string {
+    const normalized = (band ?? '').toLowerCase();
+    if (normalized === 'green') {
+      return this.i18n.text('Green', 'أخضر');
+    }
+
+    if (normalized === 'yellow') {
+      return this.i18n.text('Yellow', 'أصفر');
+    }
+
+    if (normalized === 'red') {
+      return this.i18n.text('Red', 'أحمر');
+    }
+
+    return band;
   }
 
   isSelected(alertId: string): boolean {
@@ -484,6 +674,33 @@ export class CompliancePageComponent implements OnInit {
     }
 
     return v;
+  }
+
+  private mapSimulation(raw: any): SaudizationSimulationResult {
+    return {
+      targetPercent: Number(raw?.targetPercent ?? 30),
+      plannedSaudiHires: Number(raw?.plannedSaudiHires ?? 0),
+      plannedNonSaudiHires: Number(raw?.plannedNonSaudiHires ?? 0),
+      current: {
+        saudiEmployees: Number(raw?.current?.saudiEmployees ?? 0),
+        totalEmployees: Number(raw?.current?.totalEmployees ?? 0),
+        saudizationPercent: Number(raw?.current?.saudizationPercent ?? 0),
+        additionalSaudiEmployeesNeeded: Number(raw?.current?.additionalSaudiEmployeesNeeded ?? 0),
+        risk: String(raw?.current?.risk ?? 'High'),
+        band: String(raw?.current?.band ?? 'Red')
+      },
+      projected: {
+        saudiEmployees: Number(raw?.projected?.saudiEmployees ?? 0),
+        totalEmployees: Number(raw?.projected?.totalEmployees ?? 0),
+        saudizationPercent: Number(raw?.projected?.saudizationPercent ?? 0),
+        additionalSaudiEmployeesNeeded: Number(raw?.projected?.additionalSaudiEmployeesNeeded ?? 0),
+        risk: String(raw?.projected?.risk ?? 'High'),
+        band: String(raw?.projected?.band ?? 'Red')
+      },
+      deltaPercent: Number(raw?.deltaPercent ?? 0),
+      improvesBand: !!raw?.improvesBand,
+      improvesRisk: !!raw?.improvesRisk
+    };
   }
 
   private downloadBlob(blob: Blob, fileName: string) {

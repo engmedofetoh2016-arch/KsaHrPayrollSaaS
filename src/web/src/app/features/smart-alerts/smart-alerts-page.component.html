@@ -48,9 +48,9 @@
           @for (item of items(); track item.key) {
             <tr>
               <td>
-                <span class="pill" [class]="severityClass(item.severity)">{{ item.severity }}</span>
+                <span class="pill" [class]="severityClass(item.severity)">{{ severityLabel(item.severity) }}</span>
               </td>
-              <td>{{ item.type }}</td>
+              <td>{{ typeLabel(item.type) }}</td>
               <td>{{ item.subject || '-' }}</td>
               <td>{{ item.message }}</td>
               <td>
@@ -73,6 +73,25 @@
                 <button type="button" (click)="snooze(item.key, 30)" [disabled]="!!actionKey()">
                   {{ i18n.text('Snooze 30d', 'تأجيل 30 يومًا') }}
                 </button>
+                <button type="button" (click)="explain(item)" [disabled]="!!explainLoadingKey()">
+                  {{
+                    explainLoadingKey() === item.key
+                      ? i18n.text('Explaining...', 'جارٍ الشرح...')
+                      : i18n.text('Explain', 'شرح')
+                  }}
+                </button>
+                @if (explained(item.key); as detail) {
+                  <div class="explain-box">
+                    <p class="meta">
+                      {{ i18n.text('Provider', 'المزوّد') }}: {{ detail.provider }}
+                      @if (detail.usedFallback) {
+                        ({{ i18n.text('fallback', 'بديل') }})
+                      }
+                    </p>
+                    <p>{{ detail.explanation }}</p>
+                    <p><strong>{{ i18n.text('Next action', 'الإجراء التالي') }}:</strong> {{ detail.nextAction }}</p>
+                  </div>
+                }
               </td>
             </tr>
           }

@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { catchError, of } from 'rxjs';
-import { SmartAlertItem } from '../../core/models/smart-alert.models';
+import { SmartAlertExplainResponse, SmartAlertItem } from '../../core/models/smart-alert.models';
 import { I18nService } from '../../core/services/i18n.service';
 import { SmartAlertsService } from '../../core/services/smart-alerts.service';
 
@@ -21,7 +21,9 @@ export class SmartAlertsPageComponent implements OnInit {
   readonly error = signal('');
   readonly message = signal('');
   readonly actionKey = signal('');
+  readonly explainLoadingKey = signal('');
   readonly items = signal<SmartAlertItem[]>([]);
+  readonly explainByKey = signal<Record<string, SmartAlertExplainResponse>>({});
 
   daysAhead = 30;
 
@@ -47,7 +49,18 @@ export class SmartAlertsPageComponent implements OnInit {
             this.error.set(this.i18n.text('Failed to load smart alerts.', 'فشل في تحميل التنبيهات الذكية.'));
             return;
           }
-          this.items.set(Array.isArray(response.items) ? response.items : []);
+          const items = Array.isArray(response.items) ? response.items : [];
+          this.items.set(items);
+          const currentKeys = new Set(items.map((x) => x.key));
+          this.explainByKey.update((existing) => {
+            const next: Record<string, SmartAlertExplainResponse> = {};
+            for (const key of Object.keys(existing)) {
+              if (currentKeys.has(key)) {
+                next[key] = existing[key];
+              }
+            }
+            return next;
+          });
         },
         complete: () => this.loading.set(false)
       });
@@ -89,10 +102,62 @@ export class SmartAlertsPageComponent implements OnInit {
     });
   }
 
+  explain(item: SmartAlertItem) {
+    if (!item?.key || this.explainLoadingKey()) {
+      return;
+    }
+
+    this.explainLoadingKey.set(item.key);
+    this.error.set('');
+    this.smartAlerts.explainRisk(item.key, this.i18n.language()).subscribe({
+      next: (res) => {
+        this.explainByKey.update((existing) => ({
+          ...existing,
+          [item.key]: res
+        }));
+      },
+      error: () => this.error.set(this.i18n.text('Failed to explain alert risk.', 'فشل في شرح خطر التنبيه.')),
+      complete: () => this.explainLoadingKey.set('')
+    });
+  }
+
+  explained(key: string): SmartAlertExplainResponse | null {
+    return this.explainByKey()[key] ?? null;
+  }
+
   severityClass(severity: string): string {
     const normalized = (severity || '').toLowerCase();
     if (normalized === 'critical') return 'critical';
     if (normalized === 'warning') return 'warning';
     return 'notice';
+  }
+
+  severityLabel(severity: string): string {
+    const normalized = (severity || '').toLowerCase();
+    if (normalized === 'critical') return this.i18n.text('Critical', 'حرج');
+    if (normalized === 'warning') return this.i18n.text('Warning', 'تحذير');
+    if (normalized === 'notice') return this.i18n.text('Notice', 'تنبيه');
+    return severity;
+  }
+
+  typeLabel(type: string): string {
+    switch (type) {
+      case 'ProbationEndingSoon':
+        return this.i18n.text('Probation Ending Soon', 'نهاية فترة التجربة');
+      case 'ContractEndingSoon':
+        return this.i18n.text('Contract Ending Soon', 'انتهاء العقد قريبًا');
+      case 'MissingIban':
+        return this.i18n.text('Missing IBAN', 'نقص الآيبان');
+      case 'MissingGosiSetup':
+        return this.i18n.text('Missing GOSI Setup', 'نقص إعداد التأمينات');
+      case 'MissingContractEndDate':
+        return this.i18n.text('Missing Contract End Date', 'نقص تاريخ نهاية العقد');
+      case 'DocumentExpiry':
+        return this.i18n.text('Document Expiry', 'انتهاء مستند');
+      case 'PayrollApprovalPending':
+        return this.i18n.text('Payroll Approval Pending', 'اعتماد الرواتب معلق');
+      default:
+        return type;
+    }
   }
 }

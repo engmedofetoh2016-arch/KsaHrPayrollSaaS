@@ -436,7 +436,8 @@ api.MapGet("/me/profile", [Authorize] async (
             x.BankIban,
             x.IqamaNumber,
             x.IqamaExpiryDate,
-            x.WorkPermitExpiryDate
+            x.WorkPermitExpiryDate,
+            x.ContractEndDate
         })
         .FirstOrDefaultAsync(cancellationToken);
 
@@ -445,6 +446,171 @@ api.MapGet("/me/profile", [Authorize] async (
         user,
         employee
     });
+});
+
+api.MapGet("/me/eos-estimate", [Authorize(Roles = RoleNames.Employee)] async (
+    DateOnly? terminationDate,
+    ITenantContext tenantContext,
+    HttpContext httpContext,
+    IApplicationDbContext dbContext,
+    IDateTimeProvider dateTimeProvider,
+    CancellationToken cancellationToken) =>
+{
+    if (tenantContext.TenantId == Guid.Empty)
+    {
+        return Results.BadRequest(new { error = "Tenant was not resolved." });
+    }
+
+    var userEmail = httpContext.User.Claims
+        .Where(x => x.Type is "email" or ClaimTypes.Email)
+        .Select(x => x.Value)
+        .FirstOrDefault();
+
+    if (string.IsNullOrWhiteSpace(userEmail))
+    {
+        return Results.BadRequest(new { error = "Your account email was not found in token." });
+    }
+
+    var normalizedEmail = userEmail.Trim().ToUpperInvariant();
+    var employee = await dbContext.Employees
+        .Where(x => x.Email.ToUpper() == normalizedEmail)
+        .Select(x => new
+        {
+            x.Id,
+            x.StartDate,
+            x.BaseSalary
+        })
+        .FirstOrDefaultAsync(cancellationToken);
+
+    if (employee is null)
+    {
+        return Results.NotFound(new { error = "Employee profile not found for current user." });
+    }
+
+    var profile = await dbContext.CompanyProfiles.FirstOrDefaultAsync(cancellationToken);
+    if (profile is null)
+    {
+        return Results.NotFound(new { error = "Company profile not found." });
+    }
+
+    var safeTerminationDate = terminationDate ?? DateOnly.FromDateTime(dateTimeProvider.UtcNow.Date);
+    if (safeTerminationDate < employee.StartDate)
+    {
+        return Results.BadRequest(new { error = "Termination date cannot be before employee start date." });
+    }
+
+    var serviceDays = safeTerminationDate.DayNumber - employee.StartDate.DayNumber + 1;
+    var serviceYears = Math.Round(serviceDays / 365m, 4);
+    var firstYears = Math.Min(serviceYears, 5m);
+    var remainingYears = Math.Max(0m, serviceYears - 5m);
+    var eosMonths = Math.Round(
+        (firstYears * profile.EosFirstFiveYearsMonthFactor) +
+        (remainingYears * profile.EosAfterFiveYearsMonthFactor),
+        4);
+    var eosAmount = Math.Round(eosMonths * employee.BaseSalary, 2);
+
+    return Results.Ok(new
+    {
+        employee.Id,
+        employee.StartDate,
+        employee.BaseSalary,
+        terminationDate = safeTerminationDate,
+        serviceDays,
+        serviceYears,
+        firstYears,
+        remainingYears,
+        profile.EosFirstFiveYearsMonthFactor,
+        profile.EosAfterFiveYearsMonthFactor,
+        eosMonths,
+        eosAmount,
+        currencyCode = profile.CurrencyCode
+    });
+});
+
+api.MapGet("/me/salary-certificate/pdf", [Authorize(Roles = RoleNames.Employee)] async (
+    string? purpose,
+    ITenantContext tenantContext,
+    HttpContext httpContext,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    if (tenantContext.TenantId == Guid.Empty)
+    {
+        return Results.BadRequest(new { error = "Tenant was not resolved." });
+    }
+
+    var userEmail = httpContext.User.Claims
+        .Where(x => x.Type is "email" or ClaimTypes.Email)
+        .Select(x => x.Value)
+        .FirstOrDefault();
+
+    if (string.IsNullOrWhiteSpace(userEmail))
+    {
+        return Results.BadRequest(new { error = "Your account email was not found in token." });
+    }
+
+    var normalizedEmail = userEmail.Trim().ToUpperInvariant();
+    var employee = await dbContext.Employees
+        .Where(x => x.Email.ToUpper() == normalizedEmail)
+        .Select(x => new
+        {
+            x.FirstName,
+            x.LastName,
+            x.JobTitle,
+            x.BaseSalary,
+            x.EmployeeNumber,
+            x.StartDate
+        })
+        .FirstOrDefaultAsync(cancellationToken);
+
+    if (employee is null)
+    {
+        return Results.NotFound(new { error = "Employee profile not found for current user." });
+    }
+
+    var company = await dbContext.CompanyProfiles
+        .Select(x => new { x.LegalName, x.CurrencyCode })
+        .FirstOrDefaultAsync(cancellationToken);
+
+    var companyName = string.IsNullOrWhiteSpace(company?.LegalName) ? "Company" : company!.LegalName.Trim();
+    var currency = string.IsNullOrWhiteSpace(company?.CurrencyCode) ? "SAR" : company!.CurrencyCode.Trim().ToUpperInvariant();
+    var issuedAt = DateTime.UtcNow;
+    var cleanPurpose = string.IsNullOrWhiteSpace(purpose)
+        ? string.Empty
+        : (purpose.Trim().Length > 120 ? purpose.Trim()[..120] : purpose.Trim());
+
+    var pdf = Document.Create(container =>
+    {
+        container.Page(page =>
+        {
+            page.Margin(30);
+            page.Size(PageSizes.A4);
+            page.Content().Column(col =>
+            {
+                col.Spacing(7);
+                col.Item().Text(companyName).FontSize(18).SemiBold();
+                col.Item().Text("Salary Certificate / شهادة تعريف بالراتب").FontSize(13).SemiBold();
+                col.Item().PaddingVertical(6).LineHorizontal(1);
+                col.Item().Text($"Employee Name / اسم الموظف: {employee.FirstName} {employee.LastName}");
+                col.Item().Text($"Employee Number / الرقم الوظيفي: {employee.EmployeeNumber}");
+                col.Item().Text($"Job Title / المسمى الوظيفي: {employee.JobTitle}");
+                col.Item().Text($"Start Date / تاريخ المباشرة: {employee.StartDate:yyyy-MM-dd}");
+                col.Item().Text($"Monthly Base Salary / الراتب الأساسي الشهري: {employee.BaseSalary:F2} {currency}");
+                if (!string.IsNullOrWhiteSpace(cleanPurpose))
+                {
+                    col.Item().Text($"Purpose / الغرض: {cleanPurpose}");
+                }
+
+                col.Item().PaddingVertical(6).LineHorizontal(1);
+                col.Item().Text($"Issued At (UTC) / تاريخ الإصدار: {issuedAt:yyyy-MM-dd HH:mm}");
+                col.Item().Text("This certificate is issued electronically without signature.");
+                col.Item().Text("تم إصدار هذه الشهادة إلكترونيا دون توقيع.");
+            });
+        });
+    }).GeneratePdf();
+
+    var fileName = $"salary-certificate-{employee.FirstName}-{employee.LastName}-{issuedAt:yyyyMMdd}.pdf".Replace(" ", "-");
+    return Results.File(pdf, "application/pdf", fileName);
 });
 
 api.MapGet("/me/payslips", [Authorize(Roles = RoleNames.Employee)] async (
@@ -1026,6 +1192,7 @@ api.MapGet("/employees", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Ad
             x.IqamaNumber,
             x.IqamaExpiryDate,
             x.WorkPermitExpiryDate,
+            x.ContractEndDate,
             x.TenantId
         })
         .ToList();
@@ -1055,7 +1222,8 @@ api.MapPost("/employees", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.A
         BankIban = (request.BankIban ?? string.Empty).Trim().ToUpperInvariant(),
         IqamaNumber = (request.IqamaNumber ?? string.Empty).Trim(),
         IqamaExpiryDate = request.IqamaExpiryDate,
-        WorkPermitExpiryDate = request.WorkPermitExpiryDate
+        WorkPermitExpiryDate = request.WorkPermitExpiryDate,
+        ContractEndDate = request.ContractEndDate
     };
 
     dbContext.AddEntity(employee);
@@ -1093,6 +1261,7 @@ api.MapPut("/employees/{employeeId:guid}", [Authorize(Roles = RoleNames.Owner + 
     employee.IqamaNumber = (request.IqamaNumber ?? string.Empty).Trim();
     employee.IqamaExpiryDate = request.IqamaExpiryDate;
     employee.WorkPermitExpiryDate = request.WorkPermitExpiryDate;
+    employee.ContractEndDate = request.ContractEndDate;
 
     await dbContext.SaveChangesAsync(cancellationToken);
     return Results.Ok(employee);
@@ -1182,6 +1351,75 @@ api.MapPost("/employees/{employeeId:guid}/create-user-login", [Authorize(Roles =
     });
 })
     .AddEndpointFilter<ValidationFilter<CreateEmployeeLoginRequest>>();
+
+api.MapGet("/employees/{employeeId:guid}/salary-certificate/pdf", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    Guid employeeId,
+    string? purpose,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var employee = await dbContext.Employees
+        .Where(x => x.Id == employeeId)
+        .Select(x => new
+        {
+            x.FirstName,
+            x.LastName,
+            x.JobTitle,
+            x.BaseSalary,
+            x.EmployeeNumber,
+            x.StartDate
+        })
+        .FirstOrDefaultAsync(cancellationToken);
+
+    if (employee is null)
+    {
+        return Results.NotFound(new { error = "Employee not found." });
+    }
+
+    var company = await dbContext.CompanyProfiles
+        .Select(x => new { x.LegalName, x.CurrencyCode })
+        .FirstOrDefaultAsync(cancellationToken);
+
+    var companyName = string.IsNullOrWhiteSpace(company?.LegalName) ? "Company" : company!.LegalName.Trim();
+    var currency = string.IsNullOrWhiteSpace(company?.CurrencyCode) ? "SAR" : company!.CurrencyCode.Trim().ToUpperInvariant();
+    var issuedAt = DateTime.UtcNow;
+    var cleanPurpose = string.IsNullOrWhiteSpace(purpose)
+        ? string.Empty
+        : (purpose.Trim().Length > 120 ? purpose.Trim()[..120] : purpose.Trim());
+
+    var pdf = Document.Create(container =>
+    {
+        container.Page(page =>
+        {
+            page.Margin(30);
+            page.Size(PageSizes.A4);
+            page.Content().Column(col =>
+            {
+                col.Spacing(7);
+                col.Item().Text(companyName).FontSize(18).SemiBold();
+                col.Item().Text("Salary Certificate / شهادة تعريف بالراتب").FontSize(13).SemiBold();
+                col.Item().PaddingVertical(6).LineHorizontal(1);
+                col.Item().Text($"Employee Name / اسم الموظف: {employee.FirstName} {employee.LastName}");
+                col.Item().Text($"Employee Number / الرقم الوظيفي: {employee.EmployeeNumber}");
+                col.Item().Text($"Job Title / المسمى الوظيفي: {employee.JobTitle}");
+                col.Item().Text($"Start Date / تاريخ المباشرة: {employee.StartDate:yyyy-MM-dd}");
+                col.Item().Text($"Monthly Base Salary / الراتب الأساسي الشهري: {employee.BaseSalary:F2} {currency}");
+                if (!string.IsNullOrWhiteSpace(cleanPurpose))
+                {
+                    col.Item().Text($"Purpose / الغرض: {cleanPurpose}");
+                }
+
+                col.Item().PaddingVertical(6).LineHorizontal(1);
+                col.Item().Text($"Issued At (UTC) / تاريخ الإصدار: {issuedAt:yyyy-MM-dd HH:mm}");
+                col.Item().Text("This certificate is issued electronically without signature.");
+                col.Item().Text("تم إصدار هذه الشهادة إلكترونيا دون توقيع.");
+            });
+        });
+    }).GeneratePdf();
+
+    var fileName = $"salary-certificate-{employee.FirstName}-{employee.LastName}-{issuedAt:yyyyMMdd}.pdf".Replace(" ", "-");
+    return Results.File(pdf, "application/pdf", fileName);
+});
 
 api.MapPost("/employees/{employeeId:guid}/eos-estimate", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
     Guid employeeId,
@@ -1294,7 +1532,22 @@ api.MapPost("/employees/{employeeId:guid}/final-settlement/estimate", [Authorize
     });
 
     var dailyRate = employee.BaseSalary / 30m;
+    var payableSalaryDays = Math.Max(0, periodEnd.DayNumber - periodStart.DayNumber + 1);
+    var pendingSalaryAmount = Math.Round(payableSalaryDays * dailyRate, 2);
     var unpaidLeaveDeduction = Math.Round(unpaidLeaveDays * dailyRate, 2);
+
+    var annualLeaveBalance = await dbContext.LeaveBalances
+        .Where(x =>
+            x.EmployeeId == employee.Id &&
+            x.Year == targetYear &&
+            x.LeaveType == LeaveType.Annual)
+        .Select(x => new { x.AllocatedDays, x.UsedDays })
+        .FirstOrDefaultAsync(cancellationToken);
+
+    var leaveEncashmentDays = annualLeaveBalance is null
+        ? 0m
+        : Math.Max(0m, annualLeaveBalance.AllocatedDays - annualLeaveBalance.UsedDays);
+    var leaveEncashmentAmount = Math.Round(leaveEncashmentDays * dailyRate, 2);
 
     var serviceDays = request.TerminationDate.DayNumber - employee.StartDate.DayNumber + 1;
     var serviceYears = Math.Round(serviceDays / 365m, 4);
@@ -1308,7 +1561,8 @@ api.MapPost("/employees/{employeeId:guid}/final-settlement/estimate", [Authorize
 
     var additionalManualDeduction = Math.Round(request.AdditionalManualDeduction, 2);
     var totalDeductions = Math.Round(manualDeductions + additionalManualDeduction + unpaidLeaveDeduction, 2);
-    var netSettlement = Math.Round(eosAmount - totalDeductions, 2);
+    var settlementGross = Math.Round(eosAmount + pendingSalaryAmount + leaveEncashmentAmount, 2);
+    var netSettlement = Math.Round(settlementGross - totalDeductions, 2);
 
     return Results.Ok(new
     {
@@ -1323,10 +1577,15 @@ api.MapPost("/employees/{employeeId:guid}/final-settlement/estimate", [Authorize
         serviceYears,
         eosMonths,
         eosAmount,
+        payableSalaryDays,
+        pendingSalaryAmount,
+        leaveEncashmentDays,
+        leaveEncashmentAmount,
         unpaidLeaveDays,
         unpaidLeaveDeduction,
         manualDeductionsFromPayroll = manualDeductions,
         additionalManualDeduction,
+        settlementGross,
         totalDeductions,
         netSettlement,
         request.Notes,
@@ -1392,7 +1651,22 @@ api.MapPost("/employees/{employeeId:guid}/final-settlement/export-csv", [Authori
     });
 
     var dailyRate = employee.BaseSalary / 30m;
+    var payableSalaryDays = Math.Max(0, periodEnd.DayNumber - periodStart.DayNumber + 1);
+    var pendingSalaryAmount = Math.Round(payableSalaryDays * dailyRate, 2);
     var unpaidLeaveDeduction = Math.Round(unpaidLeaveDays * dailyRate, 2);
+
+    var annualLeaveBalance = await dbContext.LeaveBalances
+        .Where(x =>
+            x.EmployeeId == employee.Id &&
+            x.Year == targetYear &&
+            x.LeaveType == LeaveType.Annual)
+        .Select(x => new { x.AllocatedDays, x.UsedDays })
+        .FirstOrDefaultAsync(cancellationToken);
+
+    var leaveEncashmentDays = annualLeaveBalance is null
+        ? 0m
+        : Math.Max(0m, annualLeaveBalance.AllocatedDays - annualLeaveBalance.UsedDays);
+    var leaveEncashmentAmount = Math.Round(leaveEncashmentDays * dailyRate, 2);
 
     var serviceDays = request.TerminationDate.DayNumber - employee.StartDate.DayNumber + 1;
     var serviceYears = Math.Round(serviceDays / 365m, 4);
@@ -1406,7 +1680,8 @@ api.MapPost("/employees/{employeeId:guid}/final-settlement/export-csv", [Authori
 
     var additionalManualDeduction = Math.Round(request.AdditionalManualDeduction, 2);
     var totalDeductions = Math.Round(manualDeductions + additionalManualDeduction + unpaidLeaveDeduction, 2);
-    var netSettlement = Math.Round(eosAmount - totalDeductions, 2);
+    var settlementGross = Math.Round(eosAmount + pendingSalaryAmount + leaveEncashmentAmount, 2);
+    var netSettlement = Math.Round(settlementGross - totalDeductions, 2);
 
     var csv = new StringBuilder();
     csv.AppendLine("Final Settlement Statement");
@@ -1418,6 +1693,9 @@ api.MapPost("/employees/{employeeId:guid}/final-settlement/export-csv", [Authori
     csv.AppendLine();
     csv.AppendLine("Item,Amount");
     csv.AppendLine($"EOS Amount,{eosAmount:F2}");
+    csv.AppendLine($"Pending Salary ({payableSalaryDays} days),{pendingSalaryAmount:F2}");
+    csv.AppendLine($"Leave Encashment ({leaveEncashmentDays:F2} days),{leaveEncashmentAmount:F2}");
+    csv.AppendLine($"Settlement Gross,{settlementGross:F2}");
     csv.AppendLine($"Unpaid Leave Deduction,{unpaidLeaveDeduction:F2}");
     csv.AppendLine($"Manual Deductions (Payroll),{manualDeductions:F2}");
     csv.AppendLine($"Additional Manual Deduction,{additionalManualDeduction:F2}");
@@ -1427,6 +1705,8 @@ api.MapPost("/employees/{employeeId:guid}/final-settlement/export-csv", [Authori
     csv.AppendLine($"Service Days,{serviceDays}");
     csv.AppendLine($"Service Years,{serviceYears:F4}");
     csv.AppendLine($"EOS Months,{eosMonths:F4}");
+    csv.AppendLine($"Payable Salary Days,{payableSalaryDays}");
+    csv.AppendLine($"Leave Encashment Days,{leaveEncashmentDays:F2}");
     csv.AppendLine($"Unpaid Leave Days,{unpaidLeaveDays}");
     csv.AppendLine($"Notes,{(request.Notes ?? string.Empty).Replace(',', ';')}");
 
@@ -1492,7 +1772,22 @@ api.MapPost("/employees/{employeeId:guid}/final-settlement/export-pdf", [Authori
     });
 
     var dailyRate = employee.BaseSalary / 30m;
+    var payableSalaryDays = Math.Max(0, periodEnd.DayNumber - periodStart.DayNumber + 1);
+    var pendingSalaryAmount = Math.Round(payableSalaryDays * dailyRate, 2);
     var unpaidLeaveDeduction = Math.Round(unpaidLeaveDays * dailyRate, 2);
+
+    var annualLeaveBalance = await dbContext.LeaveBalances
+        .Where(x =>
+            x.EmployeeId == employee.Id &&
+            x.Year == targetYear &&
+            x.LeaveType == LeaveType.Annual)
+        .Select(x => new { x.AllocatedDays, x.UsedDays })
+        .FirstOrDefaultAsync(cancellationToken);
+
+    var leaveEncashmentDays = annualLeaveBalance is null
+        ? 0m
+        : Math.Max(0m, annualLeaveBalance.AllocatedDays - annualLeaveBalance.UsedDays);
+    var leaveEncashmentAmount = Math.Round(leaveEncashmentDays * dailyRate, 2);
 
     var serviceDays = request.TerminationDate.DayNumber - employee.StartDate.DayNumber + 1;
     var serviceYears = Math.Round(serviceDays / 365m, 4);
@@ -1506,7 +1801,8 @@ api.MapPost("/employees/{employeeId:guid}/final-settlement/export-pdf", [Authori
 
     var additionalManualDeduction = Math.Round(request.AdditionalManualDeduction, 2);
     var totalDeductions = Math.Round(manualDeductions + additionalManualDeduction + unpaidLeaveDeduction, 2);
-    var netSettlement = Math.Round(eosAmount - totalDeductions, 2);
+    var settlementGross = Math.Round(eosAmount + pendingSalaryAmount + leaveEncashmentAmount, 2);
+    var netSettlement = Math.Round(settlementGross - totalDeductions, 2);
 
     var pdf = Document.Create(container =>
     {
@@ -1526,6 +1822,9 @@ api.MapPost("/employees/{employeeId:guid}/final-settlement/export-pdf", [Authori
                 col.Item().Text($"Currency / العملة: {profile.CurrencyCode}");
                 col.Item().PaddingVertical(8).LineHorizontal(1);
                 col.Item().Text($"EOS Amount / مكافأة نهاية الخدمة: {eosAmount:F2}");
+                col.Item().Text($"Pending Salary ({payableSalaryDays} days) / الراتب المستحق: {pendingSalaryAmount:F2}");
+                col.Item().Text($"Leave Encashment ({leaveEncashmentDays:F2} days) / بدل رصيد الإجازة: {leaveEncashmentAmount:F2}");
+                col.Item().Text($"Settlement Gross / إجمالي المستحقات: {settlementGross:F2}");
                 col.Item().Text($"Unpaid Leave Deduction / خصم إجازة غير مدفوعة: {unpaidLeaveDeduction:F2}");
                 col.Item().Text($"Manual Deductions (Payroll) / خصومات الرواتب: {manualDeductions:F2}");
                 col.Item().Text($"Additional Manual Deduction / خصم إضافي: {additionalManualDeduction:F2}");
@@ -1534,6 +1833,8 @@ api.MapPost("/employees/{employeeId:guid}/final-settlement/export-pdf", [Authori
                 col.Item().Text($"Net Final Settlement / صافي التسوية النهائية: {netSettlement:F2} {profile.CurrencyCode}").FontSize(14).Bold();
                 col.Item().PaddingTop(8).Text($"Service Years / سنوات الخدمة: {serviceYears:F4}");
                 col.Item().Text($"EOS Months / أشهر المكافأة: {eosMonths:F4}");
+                col.Item().Text($"Payable Salary Days / أيام الراتب المستحق: {payableSalaryDays}");
+                col.Item().Text($"Leave Encashment Days / أيام بدل الإجازة: {leaveEncashmentDays:F2}");
                 col.Item().Text($"Unpaid Leave Days / أيام الإجازة غير المدفوعة: {unpaidLeaveDays}");
                 if (!string.IsNullOrWhiteSpace(request.Notes))
                 {
@@ -1924,9 +2225,11 @@ api.MapGet("/compliance/expiries", [Authorize(Roles = RoleNames.Owner + "," + Ro
             x.Id,
             EmployeeName = x.FirstName + " " + x.LastName,
             x.IsSaudiNational,
+            x.EmployeeNumber,
             x.IqamaNumber,
             x.IqamaExpiryDate,
-            x.WorkPermitExpiryDate
+            x.WorkPermitExpiryDate,
+            x.ContractEndDate
         })
         .ToList();
 
@@ -1962,6 +2265,23 @@ api.MapGet("/compliance/expiries", [Authorize(Roles = RoleNames.Owner + "," + Ro
                     "WorkPermit",
                     employee.IqamaNumber,
                     employee.WorkPermitExpiryDate.Value,
+                    daysLeft
+                ));
+            }
+        }
+
+        if (employee.ContractEndDate.HasValue)
+        {
+            var daysLeft = employee.ContractEndDate.Value.DayNumber - today.DayNumber;
+            if (daysLeft >= 0 && daysLeft <= maxDays)
+            {
+                alerts.Add((
+                    employee.Id,
+                    employee.EmployeeName,
+                    employee.IsSaudiNational,
+                    "Contract",
+                    employee.EmployeeNumber,
+                    employee.ContractEndDate.Value,
                     daysLeft
                 ));
             }
@@ -2158,12 +2478,129 @@ api.MapPost("/compliance/alerts/resolve-bulk", [Authorize(Roles = RoleNames.Owne
 })
     .AddEndpointFilter<ValidationFilter<ResolveComplianceAlertsBulkRequest>>();
 
+api.MapGet("/compliance/alerts/{alertId:guid}/explain-risk", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    Guid alertId,
+    string? language,
+    IApplicationDbContext dbContext,
+    IComplianceAiService complianceAiService,
+    IDateTimeProvider dateTimeProvider,
+    CancellationToken cancellationToken) =>
+{
+    var alert = await dbContext.ComplianceAlerts.FirstOrDefaultAsync(x => x.Id == alertId, cancellationToken);
+    if (alert is null)
+    {
+        return Results.NotFound(new { error = "Compliance alert not found." });
+    }
+
+    var normalizedLanguage = string.IsNullOrWhiteSpace(language) ? "en" : language.Trim();
+    var isArabic = normalizedLanguage.StartsWith("ar", StringComparison.OrdinalIgnoreCase);
+    var score = await BuildComplianceScoreAsync(dbContext, cancellationToken);
+    var aiPrompt = BuildComplianceAlertRiskPrompt(alert, isArabic);
+    var aiInput = new ComplianceAiInput(
+        Language: normalizedLanguage,
+        Score: score.Score,
+        Grade: score.Grade,
+        SaudizationPercent: score.SaudizationPercent,
+        WpsCompanyReady: score.WpsCompanyReady,
+        EmployeesMissingPaymentData: score.EmployeesMissingPaymentData,
+        CriticalAlerts: score.CriticalAlerts,
+        WarningAlerts: score.WarningAlerts,
+        NoticeAlerts: score.NoticeAlerts,
+        Recommendations: score.Recommendations,
+        UserPrompt: aiPrompt);
+
+    var aiResult = await complianceAiService.GenerateBriefAsync(aiInput, cancellationToken);
+    var targetWindowDays = alert.DaysLeft <= 7 ? 7 : alert.DaysLeft <= 30 ? 30 : 60;
+
+    return Results.Ok(new
+    {
+        alertId = alert.Id,
+        alert.EmployeeName,
+        alert.DocumentType,
+        alert.Severity,
+        alert.DaysLeft,
+        alert.ExpiryDate,
+        provider = aiResult.Provider,
+        usedFallback = aiResult.UsedFallback,
+        explanation = aiResult.Text,
+        nextAction = BuildComplianceAlertNextAction(alert, isArabic),
+        targetWindowDays,
+        generatedAtUtc = dateTimeProvider.UtcNow
+    });
+});
+
 api.MapGet("/compliance/score", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
     IApplicationDbContext dbContext,
     CancellationToken cancellationToken) =>
 {
     var score = await BuildComplianceScoreAsync(dbContext, cancellationToken);
     return Results.Ok(score);
+});
+
+api.MapGet("/compliance/saudization-simulation", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    int? plannedSaudiHires,
+    int? plannedNonSaudiHires,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var safeSaudiHires = Math.Clamp(plannedSaudiHires ?? 1, 0, 500);
+    var safeNonSaudiHires = Math.Clamp(plannedNonSaudiHires ?? 0, 0, 500);
+
+    var current = await dbContext.Employees
+        .Select(x => new { x.IsSaudiNational })
+        .ToListAsync(cancellationToken);
+
+    var currentTotal = current.Count;
+    var currentSaudi = current.Count(x => x.IsSaudiNational);
+    const decimal targetPercent = 30m;
+    var currentPercent = currentTotal == 0 ? 0m : Math.Round(currentSaudi * 100m / currentTotal, 1);
+
+    var projectedSaudi = currentSaudi + safeSaudiHires;
+    var projectedTotal = currentTotal + safeSaudiHires + safeNonSaudiHires;
+    var projectedPercent = projectedTotal == 0 ? 0m : Math.Round(projectedSaudi * 100m / projectedTotal, 1);
+
+    var requiredSaudiNow = currentTotal == 0
+        ? 1
+        : (int)Math.Ceiling((targetPercent / 100m) * currentTotal);
+    var additionalSaudiNeededNow = Math.Max(0, requiredSaudiNow - currentSaudi);
+
+    var requiredSaudiProjected = projectedTotal == 0
+        ? 1
+        : (int)Math.Ceiling((targetPercent / 100m) * projectedTotal);
+    var additionalSaudiNeededProjected = Math.Max(0, requiredSaudiProjected - projectedSaudi);
+
+    var currentRisk = ComputeSaudizationRiskLevel(currentPercent, targetPercent);
+    var projectedRisk = ComputeSaudizationRiskLevel(projectedPercent, targetPercent);
+    var currentBand = ComputeSaudizationBand(currentPercent, targetPercent);
+    var projectedBand = ComputeSaudizationBand(projectedPercent, targetPercent);
+
+    return Results.Ok(new
+    {
+        targetPercent,
+        plannedSaudiHires = safeSaudiHires,
+        plannedNonSaudiHires = safeNonSaudiHires,
+        current = new
+        {
+            saudiEmployees = currentSaudi,
+            totalEmployees = currentTotal,
+            saudizationPercent = currentPercent,
+            additionalSaudiEmployeesNeeded = additionalSaudiNeededNow,
+            risk = currentRisk,
+            band = currentBand
+        },
+        projected = new
+        {
+            saudiEmployees = projectedSaudi,
+            totalEmployees = projectedTotal,
+            saudizationPercent = projectedPercent,
+            additionalSaudiEmployeesNeeded = additionalSaudiNeededProjected,
+            risk = projectedRisk,
+            band = projectedBand
+        },
+        deltaPercent = Math.Round(projectedPercent - currentPercent, 1),
+        improvesBand = !string.Equals(currentBand, projectedBand, StringComparison.OrdinalIgnoreCase),
+        improvesRisk = !string.Equals(currentRisk, projectedRisk, StringComparison.OrdinalIgnoreCase)
+    });
 });
 
 api.MapGet("/compliance/score-history", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
@@ -3345,12 +3782,19 @@ api.MapPost("/payroll/runs/calculate", [Authorize(Roles = RoleNames.Owner + "," 
         var gosiWageBase = employee.IsGosiEligible
             ? Math.Round(employee.GosiBasicWage + employee.GosiHousingAllowance, 2)
             : 0m;
-        var gosiEmployeeContribution = employee.IsGosiEligible
-            ? Math.Round(gosiWageBase * 0.09m, 2)
+
+        // Saudi vs non-Saudi GOSI split:
+        // Saudi: employee 9%, employer 11%
+        // Non-Saudi: employee 0%, employer 2% (occupational hazard)
+        var gosiEmployeeRate = employee.IsGosiEligible
+            ? (employee.IsSaudiNational ? 0.09m : 0m)
             : 0m;
-        var gosiEmployerContribution = employee.IsGosiEligible
-            ? Math.Round(gosiWageBase * 0.11m, 2)
+        var gosiEmployerRate = employee.IsGosiEligible
+            ? (employee.IsSaudiNational ? 0.11m : 0.02m)
             : 0m;
+
+        var gosiEmployeeContribution = Math.Round(gosiWageBase * gosiEmployeeRate, 2);
+        var gosiEmployerContribution = Math.Round(gosiWageBase * gosiEmployerRate, 2);
         var totalDeductions = Math.Round(manualDeduction + unpaidLeaveDeduction + gosiEmployeeContribution, 2);
 
         var overtimeRate = (employee.BaseSalary / 30m / 8m) * 1.5m;
@@ -3429,6 +3873,127 @@ api.MapGet("/payroll/runs/{runId:guid}", [Authorize(Roles = RoleNames.Owner + ",
         run.ApprovedAtUtc,
         run.LockedAtUtc,
         Lines = lines
+    });
+});
+
+api.MapGet("/payroll/runs/{runId:guid}/executive-summary", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    Guid runId,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var run = await dbContext.PayrollRuns.FirstOrDefaultAsync(x => x.Id == runId, cancellationToken);
+    if (run is null)
+    {
+        return Results.NotFound(new { error = "Payroll run not found." });
+    }
+
+    var period = await dbContext.PayrollPeriods.FirstOrDefaultAsync(x => x.Id == run.PayrollPeriodId, cancellationToken);
+    if (period is null)
+    {
+        return Results.NotFound(new { error = "Payroll period not found." });
+    }
+
+    var lines = await dbContext.PayrollLines
+        .Where(x => x.PayrollRunId == runId)
+        .Select(x => new
+        {
+            x.NetAmount,
+            x.Deductions,
+            x.OvertimeAmount,
+            x.UnpaidLeaveDeduction
+        })
+        .ToListAsync(cancellationToken);
+
+    if (lines.Count == 0)
+    {
+        return Results.BadRequest(new { error = "Payroll run has no lines." });
+    }
+
+    var profile = await dbContext.CompanyProfiles.FirstOrDefaultAsync(cancellationToken);
+    var currency = string.IsNullOrWhiteSpace(profile?.CurrencyCode) ? "SAR" : profile!.CurrencyCode.Trim().ToUpperInvariant();
+
+    var totalNet = Math.Round(lines.Sum(x => x.NetAmount), 2);
+    var totalDeductions = Math.Round(lines.Sum(x => x.Deductions), 2);
+    var totalOvertime = Math.Round(lines.Sum(x => x.OvertimeAmount), 2);
+    var totalUnpaidLeaveDeduction = Math.Round(lines.Sum(x => x.UnpaidLeaveDeduction), 2);
+    var employeeCount = lines.Count;
+
+    var previousMonthDate = new DateTime(period.Year, period.Month, 1).AddMonths(-1);
+    var previousPeriod = await dbContext.PayrollPeriods
+        .Where(x => x.Year == previousMonthDate.Year && x.Month == previousMonthDate.Month)
+        .OrderByDescending(x => x.CreatedAtUtc)
+        .FirstOrDefaultAsync(cancellationToken);
+
+    decimal previousTotalNet = 0m;
+    var hasPrevious = false;
+    if (previousPeriod is not null)
+    {
+        var previousRun = await dbContext.PayrollRuns
+            .Where(x =>
+                x.PayrollPeriodId == previousPeriod.Id &&
+                (x.Status == PayrollRunStatus.Approved || x.Status == PayrollRunStatus.Locked))
+            .OrderByDescending(x => x.CreatedAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (previousRun is not null)
+        {
+            previousTotalNet = await dbContext.PayrollLines
+                .Where(x => x.PayrollRunId == previousRun.Id)
+                .SumAsync(x => x.NetAmount, cancellationToken);
+            previousTotalNet = Math.Round(previousTotalNet, 2);
+            hasPrevious = true;
+        }
+    }
+
+    var deltaAmount = Math.Round(totalNet - previousTotalNet, 2);
+    var deltaPercent = hasPrevious && previousTotalNet != 0m
+        ? Math.Round((deltaAmount / previousTotalNet) * 100m, 2)
+        : 0m;
+
+    var trendEn = !hasPrevious
+        ? "with no approved previous-month baseline."
+        : deltaAmount > 0m
+            ? $"up {deltaPercent:F2}% from last month."
+            : deltaAmount < 0m
+                ? $"down {Math.Abs(deltaPercent):F2}% from last month."
+                : "flat versus last month.";
+
+    var trendAr = !hasPrevious
+        ? "ولا يوجد خط أساس معتمد للشهر السابق."
+        : deltaAmount > 0m
+            ? $"بارتفاع {deltaPercent:F2}% عن الشهر السابق."
+            : deltaAmount < 0m
+                ? $"بانخفاض {Math.Abs(deltaPercent):F2}% عن الشهر السابق."
+                : "ومستقر مقارنة بالشهر السابق.";
+
+    var summaryEn =
+        $"Payroll {period.Year}-{period.Month:00} includes {employeeCount} employee(s). " +
+        $"Net payroll is {totalNet:F2} {currency}, {trendEn} " +
+        $"Overtime impact: {totalOvertime:F2} {currency}; total deductions: {totalDeductions:F2} {currency}; " +
+        $"unpaid leave deduction: {totalUnpaidLeaveDeduction:F2} {currency}.";
+
+    var summaryAr =
+        $"رواتب {period.Year}-{period.Month:00} تشمل {employeeCount} موظف/موظفة. " +
+        $"صافي الرواتب {totalNet:F2} {currency}، {trendAr} " +
+        $"أثر العمل الإضافي: {totalOvertime:F2} {currency}؛ إجمالي الخصومات: {totalDeductions:F2} {currency}؛ " +
+        $"خصم الإجازات غير المدفوعة: {totalUnpaidLeaveDeduction:F2} {currency}.";
+
+    return Results.Ok(new
+    {
+        runId = run.Id,
+        periodYear = period.Year,
+        periodMonth = period.Month,
+        employeeCount,
+        currencyCode = currency,
+        totalNet,
+        totalDeductions,
+        totalOvertime,
+        totalUnpaidLeaveDeduction,
+        previousTotalNet = hasPrevious ? previousTotalNet : (decimal?)null,
+        deltaAmount = hasPrevious ? deltaAmount : (decimal?)null,
+        deltaPercent = hasPrevious ? deltaPercent : (decimal?)null,
+        summaryEn,
+        summaryAr
     });
 });
 
@@ -4217,6 +4782,15 @@ api.MapPost("/payroll/runs/{runId:guid}/exports/register-csv", [Authorize(Roles 
         return Results.NotFound();
     }
 
+    if (run.Status is not PayrollRunStatus.Approved and not PayrollRunStatus.Locked)
+    {
+        return Results.BadRequest(new
+        {
+            error = "Payroll register export requires payroll run status Approved or Locked.",
+            runStatus = run.Status.ToString()
+        });
+    }
+
     var period = await dbContext.PayrollPeriods.FirstOrDefaultAsync(x => x.Id == run.PayrollPeriodId, cancellationToken);
     if (period is null)
     {
@@ -4262,6 +4836,15 @@ api.MapPost("/payroll/runs/{runId:guid}/exports/gosi-csv", [Authorize(Roles = Ro
         return Results.NotFound();
     }
 
+    if (run.Status is not PayrollRunStatus.Approved and not PayrollRunStatus.Locked)
+    {
+        return Results.BadRequest(new
+        {
+            error = "GOSI export requires payroll run status Approved or Locked.",
+            runStatus = run.Status.ToString()
+        });
+    }
+
     var period = await dbContext.PayrollPeriods.FirstOrDefaultAsync(x => x.Id == run.PayrollPeriodId, cancellationToken);
     if (period is null)
     {
@@ -4305,6 +4888,15 @@ api.MapPost("/payroll/runs/{runId:guid}/exports/wps-csv", [Authorize(Roles = Rol
     if (run is null)
     {
         return Results.NotFound();
+    }
+
+    if (run.Status is not PayrollRunStatus.Approved and not PayrollRunStatus.Locked)
+    {
+        return Results.BadRequest(new
+        {
+            error = "WPS export requires payroll run status Approved or Locked.",
+            runStatus = run.Status.ToString()
+        });
     }
 
     var period = await dbContext.PayrollPeriods.FirstOrDefaultAsync(x => x.Id == run.PayrollPeriodId, cancellationToken);
@@ -4416,6 +5008,15 @@ api.MapPost("/payroll/runs/{runId:guid}/exports/payslip/{employeeId:guid}/pdf", 
     if (run is null)
     {
         return Results.NotFound();
+    }
+
+    if (run.Status is not PayrollRunStatus.Approved and not PayrollRunStatus.Locked)
+    {
+        return Results.BadRequest(new
+        {
+            error = "Payslip export requires payroll run status Approved or Locked.",
+            runStatus = run.Status.ToString()
+        });
     }
 
     var period = await dbContext.PayrollPeriods.FirstOrDefaultAsync(x => x.Id == run.PayrollPeriodId, cancellationToken);
@@ -4556,6 +5157,8 @@ api.MapGet("/smart-alerts", [Authorize(Roles = RoleNames.Owner + "," + RoleNames
             x.FirstName,
             x.LastName,
             x.StartDate,
+            x.ContractEndDate,
+            x.IsSaudiNational,
             x.EmployeeNumber,
             x.BankIban,
             x.IsGosiEligible,
@@ -4585,6 +5188,30 @@ api.MapGet("/smart-alerts", [Authorize(Roles = RoleNames.Owner + "," + RoleNames
 
     foreach (var employee in employees)
     {
+        if (!employee.ContractEndDate.HasValue)
+        {
+            continue;
+        }
+
+        var daysLeft = employee.ContractEndDate.Value.DayNumber - today.DayNumber;
+        if (daysLeft < 0 || daysLeft > safeDaysAhead)
+        {
+            continue;
+        }
+
+        var severity = daysLeft <= 7 ? "Critical" : daysLeft <= 30 ? "Warning" : "Notice";
+        alerts.Add(new SmartAlertResponse(
+            $"CONTRACT_END:{employee.Id:N}:{employee.ContractEndDate.Value:yyyyMMdd}",
+            "ContractEndingSoon",
+            severity,
+            $"{employee.FirstName} {employee.LastName}",
+            $"Employment contract ends on {employee.ContractEndDate.Value:yyyy-MM-dd} ({daysLeft} day(s) left).",
+            daysLeft,
+            employee.ContractEndDate.Value.ToString("yyyy-MM-dd")));
+    }
+
+    foreach (var employee in employees)
+    {
         var fullName = $"{employee.FirstName} {employee.LastName}".Trim();
         var employeeRef = string.IsNullOrWhiteSpace(employee.EmployeeNumber)
             ? employee.Id.ToString("N")
@@ -4610,6 +5237,18 @@ api.MapGet("/smart-alerts", [Authorize(Roles = RoleNames.Owner + "," + RoleNames
                 "Critical",
                 fullName,
                 "Employee is marked GOSI eligible but GOSI basic wage is zero. Fix before payroll approval.",
+                null,
+                null));
+        }
+
+        if (!employee.IsSaudiNational && !employee.ContractEndDate.HasValue)
+        {
+            alerts.Add(new SmartAlertResponse(
+                $"MISSING_CONTRACT_END:{employeeRef}",
+                "MissingContractEndDate",
+                "Warning",
+                fullName,
+                "Contract end date is missing. Add it to track renewal and expiry risk.",
                 null,
                 null));
         }
@@ -4741,6 +5380,75 @@ api.MapGet("/smart-alerts", [Authorize(Roles = RoleNames.Owner + "," + RoleNames
         daysAhead = safeDaysAhead,
         total = visibleAlerts.Count,
         items = visibleAlerts
+    });
+});
+
+api.MapGet("/smart-alerts/{key}/explain-risk", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    string key,
+    string? language,
+    IApplicationDbContext dbContext,
+    IComplianceAiService complianceAiService,
+    IDateTimeProvider dateTimeProvider,
+    CancellationToken cancellationToken) =>
+{
+    if (string.IsNullOrWhiteSpace(key))
+    {
+        return Results.BadRequest(new { error = "Alert key is required." });
+    }
+
+    var normalizedKey = key.Trim();
+    var normalizedLanguage = string.IsNullOrWhiteSpace(language) ? "en" : language.Trim();
+    var isArabic = normalizedLanguage.StartsWith("ar", StringComparison.OrdinalIgnoreCase);
+
+    if (normalizedKey.StartsWith("DOC:", StringComparison.OrdinalIgnoreCase))
+    {
+        var rawId = normalizedKey["DOC:".Length..].Trim();
+        if (TryParseSmartAlertGuid(rawId, out var alertId))
+        {
+            var alert = await dbContext.ComplianceAlerts.FirstOrDefaultAsync(x => x.Id == alertId, cancellationToken);
+            if (alert is not null)
+            {
+                var score = await BuildComplianceScoreAsync(dbContext, cancellationToken);
+                var aiInput = new ComplianceAiInput(
+                    Language: normalizedLanguage,
+                    Score: score.Score,
+                    Grade: score.Grade,
+                    SaudizationPercent: score.SaudizationPercent,
+                    WpsCompanyReady: score.WpsCompanyReady,
+                    EmployeesMissingPaymentData: score.EmployeesMissingPaymentData,
+                    CriticalAlerts: score.CriticalAlerts,
+                    WarningAlerts: score.WarningAlerts,
+                    NoticeAlerts: score.NoticeAlerts,
+                    Recommendations: score.Recommendations,
+                    UserPrompt: BuildComplianceAlertRiskPrompt(alert, isArabic));
+
+                var aiResult = await complianceAiService.GenerateBriefAsync(aiInput, cancellationToken);
+                var targetWindowDays = alert.DaysLeft <= 7 ? 7 : alert.DaysLeft <= 30 ? 30 : 60;
+
+                return Results.Ok(new
+                {
+                    key = normalizedKey,
+                    provider = aiResult.Provider,
+                    usedFallback = aiResult.UsedFallback,
+                    explanation = aiResult.Text,
+                    nextAction = BuildComplianceAlertNextAction(alert, isArabic),
+                    targetWindowDays,
+                    generatedAtUtc = dateTimeProvider.UtcNow
+                });
+            }
+        }
+    }
+
+    var response = BuildSmartAlertRuleExplanation(normalizedKey, isArabic);
+    return Results.Ok(new
+    {
+        key = normalizedKey,
+        provider = "rule-engine",
+        usedFallback = true,
+        explanation = response.Explanation,
+        nextAction = response.NextAction,
+        targetWindowDays = response.TargetWindowDays,
+        generatedAtUtc = dateTimeProvider.UtcNow
     });
 });
 
@@ -5116,6 +5824,16 @@ static Guid? TryReadRunIdFromAuditPath(string path)
     return Guid.TryParse(runIdSegment, out var runId) ? runId : null;
 }
 
+static bool TryParseSmartAlertGuid(string raw, out Guid id)
+{
+    if (Guid.TryParse(raw, out id))
+    {
+        return true;
+    }
+
+    return Guid.TryParseExact(raw, "N", out id);
+}
+
 static string ExtractSmartAlertKeyFromPath(string path)
 {
     if (string.IsNullOrWhiteSpace(path))
@@ -5151,6 +5869,79 @@ static string ExtractSmartAlertKeyFromPath(string path)
 
     var encodedKey = path[start..end];
     return Uri.UnescapeDataString(encodedKey);
+}
+
+static (string Explanation, string NextAction, int TargetWindowDays) BuildSmartAlertRuleExplanation(string key, bool isArabic)
+{
+    var normalized = key.Trim();
+    var prefix = normalized.Split(':', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault() ?? normalized;
+
+    if (isArabic)
+    {
+        return prefix.ToUpperInvariant() switch
+        {
+            "PROBATION" => (
+                "نهاية فترة التجربة قريبة، والتأخر في القرار قد يسبب ارتباكًا تشغيليًا ومخاطر امتثال داخلية.",
+                "حدد قرار التثبيت أو الإنهاء الآن، ووثق النتيجة في ملف الموظف قبل تاريخ نهاية التجربة.",
+                7),
+            "CONTRACT_END" => (
+                "انتهاء العقد بدون قرار مسبق قد يسبب انقطاعًا تشغيليًا أو تعثرًا في الإجراءات النظامية.",
+                "ابدأ مراجعة التجديد أو الإنهاء النظامي فورًا، وحدد القرار النهائي مبكرًا.",
+                30),
+            "MISSING_IBAN" => (
+                "غياب الآيبان يمنع صرف الرواتب بسلاسة ويرفع احتمال أخطاء أو تأخير WPS.",
+                "استكمل آيبان الموظف المعتمد من البنك قبل دورة الرواتب القادمة.",
+                7),
+            "MISSING_GOSI_SETUP" => (
+                "الموظف مؤهل للتأمينات لكن إعداد الأجر الأساسي للتأمينات غير مكتمل، ما قد يسبب أخطاء استقطاع.",
+                "حدث أجر التأمينات الأساسي فورًا ثم أعد التحقق قبل اعتماد الرواتب.",
+                7),
+            "MISSING_CONTRACT_END" => (
+                "غياب تاريخ نهاية العقد للموظف غير السعودي يقلل القدرة على التنبؤ بمخاطر التجديد والانتهاء.",
+                "أضف تاريخ نهاية العقد في ملف الموظف لتفعيل تنبيهات الامتثال بشكل صحيح.",
+                30),
+            "PAYROLL_PENDING" => (
+                "عدم اعتماد الرواتب قبل موعد الصرف يرفع مخاطر تأخير الرواتب وشكاوى الموظفين.",
+                "أكمل فحوصات ما قبل الاعتماد واعتمد الرواتب قبل يوم الصرف الافتراضي.",
+                7),
+            _ => (
+                "هذا التنبيه يشير إلى خطر تشغيلي أو امتثال يحتاج إجراءً موثقًا.",
+                "راجع السبب الجذري ونفذ الإجراء التصحيحي وأغلق التنبيه بعد التوثيق.",
+                30)
+        };
+    }
+
+    return prefix.ToUpperInvariant() switch
+    {
+        "PROBATION" => (
+            "Probation is ending soon; delayed decisions can create operational and HR compliance risk.",
+            "Finalize confirmation or compliant offboarding now and document the decision before probation end date.",
+            7),
+        "CONTRACT_END" => (
+            "Contract end is approaching; late decisions can cause service disruption or compliance issues.",
+            "Start renewal or compliant offboarding workflow now and lock decision early.",
+            30),
+        "MISSING_IBAN" => (
+            "Missing IBAN can block salary disbursement and increase WPS delay risk.",
+            "Complete and verify employee IBAN before the next payroll cycle.",
+            7),
+        "MISSING_GOSI_SETUP" => (
+            "GOSI-eligible employee has incomplete GOSI wage setup, which can cause payroll contribution errors.",
+            "Update GOSI basic wage immediately and re-run validation before payroll approval.",
+            7),
+        "MISSING_CONTRACT_END" => (
+            "Missing non-Saudi contract end date reduces control over renewal and expiry compliance.",
+            "Add contract end date in employee profile to enable accurate compliance tracking.",
+            30),
+        "PAYROLL_PENDING" => (
+            "Payroll approval is still pending close to pay day, increasing salary delay and employee trust risk.",
+            "Complete pre-approval checks and approve payroll before default pay day.",
+            7),
+        _ => (
+            "This alert indicates an operational or compliance risk requiring documented action.",
+            "Review the root cause, apply corrective action, and close the alert with evidence.",
+            30)
+    };
 }
 
 static int ResolveSmartAlertSeverityWeight(string severity)
@@ -5239,6 +6030,36 @@ static string EncodeApprovalFindingsSnapshot(IEnumerable<PayrollPreApprovalFindi
 
     var json = JsonSerializer.Serialize(snapshot);
     return Uri.EscapeDataString(json);
+}
+
+static string ComputeSaudizationRiskLevel(decimal percent, decimal targetPercent)
+{
+    if (percent >= targetPercent)
+    {
+        return "Low";
+    }
+
+    if (percent >= targetPercent - 5m)
+    {
+        return "Medium";
+    }
+
+    return "High";
+}
+
+static string ComputeSaudizationBand(decimal percent, decimal targetPercent)
+{
+    if (percent >= targetPercent)
+    {
+        return "Green";
+    }
+
+    if (percent >= targetPercent - 5m)
+    {
+        return "Yellow";
+    }
+
+    return "Red";
 }
 
 static async Task<ComplianceScoreResponse> BuildComplianceScoreAsync(IApplicationDbContext dbContext, CancellationToken cancellationToken)
@@ -5431,6 +6252,40 @@ static string BuildComplianceDigestBodyHtml(
     return sb.ToString();
 }
 
+static string BuildComplianceAlertRiskPrompt(ComplianceAlert alert, bool isArabic)
+{
+    var timelineDays = alert.DaysLeft <= 7 ? 7 : alert.DaysLeft <= 30 ? 30 : 60;
+    if (isArabic)
+    {
+        return $"اشرح مخاطر تنبيه امتثال واحد بشكل عملي: الموظف {alert.EmployeeName}، نوع المستند {alert.DocumentType}، الشدة {alert.Severity}، متبقي {alert.DaysLeft} يوم، تاريخ الانتهاء {alert.ExpiryDate:yyyy-MM-dd}. المطلوب: 3-5 نقاط قصيرة تتضمن الخطر، الأثر، الإجراء الفوري، وخطة إغلاق خلال {timelineDays} يوم.";
+    }
+
+    return $"Explain one compliance alert with practical detail: employee {alert.EmployeeName}, document type {alert.DocumentType}, severity {alert.Severity}, {alert.DaysLeft} day(s) left, expiry {alert.ExpiryDate:yyyy-MM-dd}. Return 3-5 short bullets covering risk, business impact, immediate action, and closure plan within {timelineDays} days.";
+}
+
+static string BuildComplianceAlertNextAction(ComplianceAlert alert, bool isArabic)
+{
+    var timelineDays = alert.DaysLeft <= 7 ? 7 : alert.DaysLeft <= 30 ? 30 : 60;
+    if (isArabic)
+    {
+        return alert.DocumentType switch
+        {
+            "Iqama" => $"ابدأ تجديد الإقامة فورًا، أكد رفع الطلب خلال 24 ساعة، وأغلق الخطر خلال {timelineDays} يوم.",
+            "WorkPermit" => $"ابدأ تجديد رخصة العمل فورًا، حدث حالة السداد/الإصدار، وأغلق الخطر خلال {timelineDays} يوم.",
+            "Contract" => $"راجع العقد مع الموظف الآن، وجهز التجديد أو الإنهاء النظامي مبكرًا، ووثق القرار خلال {timelineDays} يوم.",
+            _ => $"ابدأ معالجة هذا الخطر فورًا وأغلق التنبيه بعد توثيق الإجراء خلال {timelineDays} يوم."
+        };
+    }
+
+    return alert.DocumentType switch
+    {
+        "Iqama" => $"Start Iqama renewal immediately, confirm submission within 24 hours, and close this risk within {timelineDays} days.",
+        "WorkPermit" => $"Start work permit renewal immediately, update payment or issuance status, and close this risk within {timelineDays} days.",
+        "Contract" => $"Review the employment contract now, prepare renewal or compliant offboarding early, and document the decision within {timelineDays} days.",
+        _ => $"Start remediation for this document risk immediately and close the alert with documented action within {timelineDays} days."
+    };
+}
+
 static async Task<EmailSendResult> TrySendComplianceDigestEmailAsync(
     IConfiguration configuration,
     string toEmail,
@@ -5547,7 +6402,8 @@ public sealed record CreateEmployeeRequest(
     string BankIban,
     string IqamaNumber,
     DateOnly? IqamaExpiryDate,
-    DateOnly? WorkPermitExpiryDate);
+    DateOnly? WorkPermitExpiryDate,
+    DateOnly? ContractEndDate);
 
 public sealed record UpdateEmployeeRequest(
     DateOnly StartDate,
@@ -5565,7 +6421,8 @@ public sealed record UpdateEmployeeRequest(
     string BankIban,
     string IqamaNumber,
     DateOnly? IqamaExpiryDate,
-    DateOnly? WorkPermitExpiryDate);
+    DateOnly? WorkPermitExpiryDate,
+    DateOnly? ContractEndDate);
 
 public sealed record CreateEmployeeLoginRequest(string Password);
 

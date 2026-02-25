@@ -56,7 +56,8 @@
       <p class="value">{{ stats().expiringDocuments }}</p>
       <p class="meta">
         {{ i18n.text('Iqama', 'الإقامة') }}: {{ stats().expiringIqama }} |
-        {{ i18n.text('Work Permit', 'رخصة العمل') }}: {{ stats().expiringWorkPermit }}
+        {{ i18n.text('Work Permit', 'رخصة العمل') }}: {{ stats().expiringWorkPermit }} |
+        {{ i18n.text('Contract', 'العقد') }}: {{ stats().expiringContract }}
       </p>
     </article>
   </div>
@@ -68,6 +69,7 @@
         @if (isEmployee()) {
           <a routerLink="/employee/profile">{{ i18n.text('My Profile', 'My Profile') }}</a>
           <a routerLink="/employee/payslips">{{ i18n.text('My Payslips', 'My Payslips') }}</a>
+          <a routerLink="/employee/salary-certificate">{{ i18n.text('Salary Certificate', 'شهادة الراتب') }}</a>
           <a routerLink="/leave/my">{{ i18n.text('My Leave', 'إجازاتي') }}</a>
         } @else {
           <a routerLink="/employees">{{ i18n.text('Add Employee', 'Add Employee') }}</a>
@@ -147,6 +149,7 @@
       </p>
       <p class="meta">{{ i18n.text('Iqama expiring in 60 days', 'إقامات تنتهي خلال 60 يوم') }}: {{ stats().expiringIqama }}</p>
       <p class="meta">{{ i18n.text('Work permits expiring in 60 days', 'رخص عمل تنتهي خلال 60 يوم') }}: {{ stats().expiringWorkPermit }}</p>
+      <p class="meta">{{ i18n.text('Contracts ending in 60 days', 'عقود تنتهي خلال 60 يوم') }}: {{ stats().expiringContract }}</p>
       <div class="actions">
         <a routerLink="/employees">{{ i18n.text('Review Employee Documents', 'مراجعة مستندات الموظفين') }}</a>
       </div>
@@ -165,8 +168,18 @@
             @for (alert of complianceAlerts().items; track alert.id + alert.documentType + alert.expiryDate) {
               <tr>
                 <td>{{ alert.employeeName }}</td>
-                <td>{{ alert.documentType === 'Iqama' ? i18n.text('Iqama', 'الإقامة') : i18n.text('Work Permit', 'رخصة العمل') }}</td>
-                <td>{{ alert.severity ?? '-' }}</td>
+                <td>
+                  {{
+                    alert.documentType === 'Iqama'
+                      ? i18n.text('Iqama', 'الإقامة')
+                      : alert.documentType === 'WorkPermit'
+                        ? i18n.text('Work Permit', 'رخصة العمل')
+                        : alert.documentType === 'Contract'
+                          ? i18n.text('Contract', 'العقد')
+                          : alert.documentType
+                  }}
+                </td>
+                <td>{{ complianceSeverityLabel(alert.severity) }}</td>
                 <td>{{ alert.daysLeft }}</td>
                 <td>
                   <button type="button" (click)="resolveAlert(alert.id)" [disabled]="resolvingAlertIds().includes(alert.id)">

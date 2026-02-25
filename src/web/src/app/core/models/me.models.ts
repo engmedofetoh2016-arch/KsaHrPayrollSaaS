@@ -20,6 +20,7 @@ export interface MyProfileEmployee {
   iqamaNumber: string;
   iqamaExpiryDate?: string | null;
   workPermitExpiryDate?: string | null;
+  contractEndDate?: string | null;
 }
 
 export interface MyProfileResponse {
@@ -41,4 +42,20 @@ export interface MyPayslipItem {
   completedAtUtc?: string;
   periodYear: number;
   periodMonth: number;
+}
+
+export interface MyEosEstimateResponse {
+  id: string;
+  startDate: string;
+  baseSalary: number;
+  terminationDate: string;
+  serviceDays: number;
+  serviceYears: number;
+  firstYears: number;
+  remainingYears: number;
+  eosFirstFiveYearsMonthFactor: number;
+  eosAfterFiveYearsMonthFactor: number;
+  eosMonths: number;
+  eosAmount: number;
+  currencyCode: string;
 }

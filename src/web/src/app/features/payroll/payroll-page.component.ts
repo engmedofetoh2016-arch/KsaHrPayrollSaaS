@@ -7,6 +7,7 @@ import { Employee } from '../../core/models/employee.models';
 import {
   ExportJob,
   PayrollApprovalDecision,
+  PayrollExecutiveSummary,
   PayrollApprovalFindingSnapshot,
   PayrollPeriod,
   PayrollPreApprovalChecksResult,
@@ -37,6 +38,7 @@ export class PayrollPageComponent implements OnInit, OnDestroy {
   readonly employees = signal<Employee[]>([]);
   readonly adjustments = signal<any[]>([]);
   readonly run = signal<PayrollRunDetails | null>(null);
+  readonly executiveSummary = signal<PayrollExecutiveSummary | null>(null);
   readonly exports = signal<ExportJob[]>([]);
   readonly approvalDecisions = signal<PayrollApprovalDecision[]>([]);
   readonly activeDecisionSnapshot = signal<{
@@ -51,6 +53,7 @@ export class PayrollPageComponent implements OnInit, OnDestroy {
   readonly pollingExports = signal(false);
   readonly loadingChecks = signal(false);
   readonly loadingApprovalDecisions = signal(false);
+  readonly loadingExecutiveSummary = signal(false);
   readonly loadingReferenceId = signal(false);
   readonly exportsLastUpdatedAt = signal<Date | null>(null);
   readonly message = signal('');
@@ -277,6 +280,7 @@ export class PayrollPageComponent implements OnInit, OnDestroy {
     this.payrollService.getRun(runId).subscribe({
       next: (run) => {
         this.run.set(run);
+        this.loadExecutiveSummary(run.id);
         this.loadPreApprovalChecks(run.id);
         this.loadApprovalDecisions(run.id);
         this.loadExports(true);
@@ -663,6 +667,23 @@ export class PayrollPageComponent implements OnInit, OnDestroy {
       next: (response) => this.approvalDecisions.set(Array.isArray(response.items) ? response.items : []),
       error: (err) => this.error.set(getApiErrorMessage(err, 'Failed to load payroll approval decisions.')),
       complete: () => this.loadingApprovalDecisions.set(false)
+    });
+  }
+
+  private loadExecutiveSummary(runId: string) {
+    if (!runId) {
+      this.executiveSummary.set(null);
+      return;
+    }
+
+    this.loadingExecutiveSummary.set(true);
+    this.payrollService.getExecutiveSummary(runId).subscribe({
+      next: (summary) => this.executiveSummary.set(summary),
+      error: (err) => {
+        this.executiveSummary.set(null);
+        this.error.set(getApiErrorMessage(err, 'Failed to load payroll executive summary.'));
+      },
+      complete: () => this.loadingExecutiveSummary.set(false)
     });
   }
 

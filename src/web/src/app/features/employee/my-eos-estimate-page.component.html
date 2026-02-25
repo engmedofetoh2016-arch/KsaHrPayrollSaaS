@@ -1,0 +1,41 @@
+<section class="panel">
+  <h2>{{ i18n.text('My EOS Estimate', 'تقدير مكافأة نهاية الخدمة') }}</h2>
+  <p class="hint">
+    {{
+      i18n.text(
+        'Estimate your end-of-service amount based on your service period and company EOS policy.',
+        'احسب تقدير مكافأة نهاية الخدمة بناءً على مدة خدمتك وسياسة المكافأة في الشركة.'
+      )
+    }}
+  </p>
+
+  <form class="form-grid" [formGroup]="form" (ngSubmit)="calculate()">
+    <label>
+      {{ i18n.text('Termination Date', 'تاريخ إنهاء الخدمة') }}
+      <input type="date" formControlName="terminationDate" />
+    </label>
+    <div class="actions">
+      <button type="submit" [disabled]="loading()">
+        {{ loading() ? i18n.text('Calculating...', 'جارٍ الحساب...') : i18n.text('Calculate', 'احسب') }}
+      </button>
+    </div>
+  </form>
+
+  @if (error()) {
+    <p class="error">{{ error() }}</p>
+  }
+
+  @if (result(); as data) {
+    <div class="card">
+      <p><strong>{{ i18n.text('Start Date', 'تاريخ المباشرة') }}:</strong> {{ data.startDate }}</p>
+      <p><strong>{{ i18n.text('Termination Date', 'تاريخ إنهاء الخدمة') }}:</strong> {{ data.terminationDate }}</p>
+      <p><strong>{{ i18n.text('Service Days', 'أيام الخدمة') }}:</strong> {{ data.serviceDays }}</p>
+      <p><strong>{{ i18n.text('Service Years', 'سنوات الخدمة') }}:</strong> {{ data.serviceYears | number: '1.2-4' }}</p>
+      <p><strong>{{ i18n.text('EOS Months', 'أشهر المكافأة') }}:</strong> {{ data.eosMonths | number: '1.2-4' }}</p>
+      <p class="amount">
+        <strong>{{ i18n.text('Estimated EOS Amount', 'مبلغ المكافأة التقديري') }}:</strong>
+        {{ data.eosAmount | number: '1.2-2' }} {{ data.currencyCode }}
+      </p>
+    </div>
+  }
+</section>

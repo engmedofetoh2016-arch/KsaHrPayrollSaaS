@@ -1,0 +1,53 @@
+.hint {
+  color: #4e6684;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+}
+
+input {
+  border: 1px solid #c6d6e6;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+button {
+  border: 1px solid #c6d6e6;
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: #f9fcff;
+  cursor: pointer;
+}
+
+.card {
+  margin-top: 10px;
+  border: 1px solid #d9e3ef;
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.card p {
+  margin: 0 0 8px;
+}
+
+.card p:last-child {
+  margin-bottom: 0;
+}
+
+.amount {
+  color: #113b66;
+  font-size: 1.02rem;
+}
+
+.error {
+  color: #a53a3a;
+}

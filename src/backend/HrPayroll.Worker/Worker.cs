@@ -190,27 +190,31 @@ public class Worker : BackgroundService
             {
                 page.Margin(30);
                 page.Size(PageSizes.A4);
+                var currency = string.IsNullOrWhiteSpace(company?.CurrencyCode) ? "SAR" : company!.CurrencyCode;
+
                 page.Content().Column(col =>
                 {
-                    col.Spacing(6);
+                    col.Spacing(7);
                     col.Item().Text(company?.LegalName ?? "Company").FontSize(18).SemiBold();
-                    col.Item().Text($"Payslip - {period.Year}/{period.Month:00}").FontSize(12);
-                    col.Item().Text($"Employee: {employee.FirstName} {employee.LastName}");
-                    col.Item().Text($"Job Title: {employee.JobTitle}");
+                    col.Item().Text($"Payslip / مسير رواتب - {period.Year}/{period.Month:00}").FontSize(12).SemiBold();
+                    col.Item().Text($"Employee / الموظف: {employee.FirstName} {employee.LastName}");
+                    col.Item().Text($"Employee No. / الرقم الوظيفي: {employee.EmployeeNumber}");
+                    col.Item().Text($"Job Title / المسمى الوظيفي: {employee.JobTitle}");
+                    col.Item().Text($"Currency / العملة: {currency}");
                     col.Item().PaddingVertical(8).LineHorizontal(1);
-                    col.Item().Text($"Base Salary: {line.BaseSalary:F2}");
-                    col.Item().Text($"Allowances: {line.Allowances:F2}");
-                    col.Item().Text($"Manual Deductions: {line.ManualDeductions:F2}");
-                    col.Item().Text($"Unpaid Leave Days: {line.UnpaidLeaveDays:F2}");
-                    col.Item().Text($"Unpaid Leave Deduction: {line.UnpaidLeaveDeduction:F2}");
-                    col.Item().Text($"GOSI Wage Base: {line.GosiWageBase:F2}");
-                    col.Item().Text($"GOSI Employee Contribution: {line.GosiEmployeeContribution:F2}");
-                    col.Item().Text($"GOSI Employer Contribution: {line.GosiEmployerContribution:F2}");
-                    col.Item().Text($"Deductions: {line.Deductions:F2}");
-                    col.Item().Text($"Overtime Hours: {line.OvertimeHours:F2}");
-                    col.Item().Text($"Overtime Amount: {line.OvertimeAmount:F2}");
+                    col.Item().Text($"Base Salary / الراتب الأساسي: {line.BaseSalary:F2}");
+                    col.Item().Text($"Allowances / البدلات: {line.Allowances:F2}");
+                    col.Item().Text($"Overtime Hours / ساعات إضافية: {line.OvertimeHours:F2}");
+                    col.Item().Text($"Overtime Amount / بدل الساعات الإضافية: {line.OvertimeAmount:F2}");
+                    col.Item().Text($"GOSI Wage Base / وعاء التأمينات: {line.GosiWageBase:F2}");
+                    col.Item().Text($"GOSI Employee Contribution / استقطاع الموظف للتأمينات: {line.GosiEmployeeContribution:F2}");
+                    col.Item().Text($"GOSI Employer Contribution / مساهمة صاحب العمل للتأمينات: {line.GosiEmployerContribution:F2}");
+                    col.Item().Text($"Manual Deductions / خصومات يدوية: {line.ManualDeductions:F2}");
+                    col.Item().Text($"Unpaid Leave Days / أيام إجازة غير مدفوعة: {line.UnpaidLeaveDays:F2}");
+                    col.Item().Text($"Unpaid Leave Deduction / خصم الإجازة غير المدفوعة: {line.UnpaidLeaveDeduction:F2}");
+                    col.Item().Text($"Total Deductions / إجمالي الخصومات: {line.Deductions:F2}");
                     col.Item().PaddingVertical(8).LineHorizontal(1);
-                    col.Item().Text($"Net Amount: {line.NetAmount:F2}").FontSize(14).Bold();
+                    col.Item().Text($"Net Amount / صافي الراتب: {line.NetAmount:F2} {currency}").FontSize(14).Bold();
                 });
             });
         }).GeneratePdf();
@@ -385,7 +389,22 @@ public class Worker : BackgroundService
         });
 
         var dailyRate = employee.BaseSalary / 30m;
+        var payableSalaryDays = Math.Max(0, periodEnd.DayNumber - periodStart.DayNumber + 1);
+        var pendingSalaryAmount = Math.Round(payableSalaryDays * dailyRate, 2);
         var unpaidLeaveDeduction = Math.Round(unpaidLeaveDays * dailyRate, 2);
+
+        var annualLeaveBalance = await dbContext.LeaveBalances
+            .Where(x =>
+                x.EmployeeId == employee.Id &&
+                x.Year == targetYear &&
+                x.LeaveType == LeaveType.Annual)
+            .Select(x => new { x.AllocatedDays, x.UsedDays })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var leaveEncashmentDays = annualLeaveBalance is null
+            ? 0m
+            : Math.Max(0m, annualLeaveBalance.AllocatedDays - annualLeaveBalance.UsedDays);
+        var leaveEncashmentAmount = Math.Round(leaveEncashmentDays * dailyRate, 2);
 
         var serviceDays = terminationDate.DayNumber - employee.StartDate.DayNumber + 1;
         var serviceYears = Math.Round(serviceDays / 365m, 4);
@@ -399,7 +418,8 @@ public class Worker : BackgroundService
 
         var additionalManualDeduction = Math.Round(metadata.AdditionalManualDeduction, 2);
         var totalDeductions = Math.Round(manualDeductions + additionalManualDeduction + unpaidLeaveDeduction, 2);
-        var netSettlement = Math.Round(eosAmount - totalDeductions, 2);
+        var settlementGross = Math.Round(eosAmount + pendingSalaryAmount + leaveEncashmentAmount, 2);
+        var netSettlement = Math.Round(settlementGross - totalDeductions, 2);
 
         return Document.Create(container =>
         {
@@ -419,6 +439,9 @@ public class Worker : BackgroundService
                     col.Item().Text($"Currency / العملة: {profile.CurrencyCode}");
                     col.Item().PaddingVertical(8).LineHorizontal(1);
                     col.Item().Text($"EOS Amount / مكافأة نهاية الخدمة: {eosAmount:F2}");
+                    col.Item().Text($"Pending Salary ({payableSalaryDays} days) / الراتب المستحق: {pendingSalaryAmount:F2}");
+                    col.Item().Text($"Leave Encashment ({leaveEncashmentDays:F2} days) / بدل رصيد الإجازة: {leaveEncashmentAmount:F2}");
+                    col.Item().Text($"Settlement Gross / إجمالي المستحقات: {settlementGross:F2}");
                     col.Item().Text($"Unpaid Leave Deduction / خصم إجازة غير مدفوعة: {unpaidLeaveDeduction:F2}");
                     col.Item().Text($"Manual Deductions (Payroll) / خصومات الرواتب: {manualDeductions:F2}");
                     col.Item().Text($"Additional Manual Deduction / خصم إضافي: {additionalManualDeduction:F2}");
@@ -427,6 +450,8 @@ public class Worker : BackgroundService
                     col.Item().Text($"Net Final Settlement / صافي التسوية النهائية: {netSettlement:F2} {profile.CurrencyCode}").FontSize(14).Bold();
                     col.Item().PaddingTop(8).Text($"Service Years / سنوات الخدمة: {serviceYears:F4}");
                     col.Item().Text($"EOS Months / أشهر المكافأة: {eosMonths:F4}");
+                    col.Item().Text($"Payable Salary Days / أيام الراتب المستحق: {payableSalaryDays}");
+                    col.Item().Text($"Leave Encashment Days / أيام بدل الإجازة: {leaveEncashmentDays:F2}");
                     col.Item().Text($"Unpaid Leave Days / أيام الإجازة غير المدفوعة: {unpaidLeaveDays}");
                     if (!string.IsNullOrWhiteSpace(metadata.Notes))
                     {
@@ -453,9 +478,11 @@ public class Worker : BackgroundService
                 x.FirstName,
                 x.LastName,
                 x.IsSaudiNational,
+                x.EmployeeNumber,
                 x.IqamaNumber,
                 x.IqamaExpiryDate,
-                x.WorkPermitExpiryDate
+                x.WorkPermitExpiryDate,
+                x.ContractEndDate
             })
             .ToListAsync(cancellationToken);
 
@@ -506,6 +533,24 @@ public class Worker : BackgroundService
                     "WorkPermit",
                     employee.IqamaNumber,
                     employee.WorkPermitExpiryDate.Value,
+                    today,
+                    maxDays,
+                    nowUtc);
+            }
+
+            if (employee.ContractEndDate.HasValue)
+            {
+                changes += UpsertComplianceAlert(
+                    dbContext,
+                    openByKey,
+                    detectedKeys,
+                    employee.TenantId,
+                    employee.Id,
+                    employeeName,
+                    employee.IsSaudiNational,
+                    "Contract",
+                    employee.EmployeeNumber,
+                    employee.ContractEndDate.Value,
                     today,
                     maxDays,
                     nowUtc);

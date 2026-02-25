@@ -1,0 +1,21 @@
+<section class="panel">
+  <h2>{{ i18n.text('Salary Certificate', 'شهادة تعريف بالراتب') }}</h2>
+  <p class="hint">
+    {{ i18n.text('Generate an official salary certificate PDF in Arabic/English.', 'أنشئ شهادة راتب رسمية PDF باللغتين العربية والإنجليزية.') }}
+  </p>
+
+  <form class="form-grid" [formGroup]="form" (ngSubmit)="download()">
+    <label>
+      {{ i18n.text('Purpose (Optional)', 'الغرض (اختياري)') }}
+      <input formControlName="purpose" maxlength="120" />
+    </label>
+    <div class="actions">
+      <button type="submit" [disabled]="busy()">
+        {{ busy() ? i18n.text('Generating...', 'جارٍ الإنشاء...') : i18n.text('Download Certificate', 'تنزيل الشهادة') }}
+      </button>
+    </div>
+  </form>
+
+  @if (message()) { <p class="ok">{{ message() }}</p> }
+  @if (error()) { <p class="error">{{ error() }}</p> }
+</section>

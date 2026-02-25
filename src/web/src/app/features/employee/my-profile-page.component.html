@@ -24,6 +24,7 @@
           <p><strong>{{ i18n.text('Iqama Number', 'رقم الإقامة') }}:</strong> {{ data.employee.iqamaNumber || '-' }}</p>
           <p><strong>{{ i18n.text('Iqama Expiry', 'انتهاء الإقامة') }}:</strong> {{ data.employee.iqamaExpiryDate || '-' }}</p>
           <p><strong>{{ i18n.text('Work Permit Expiry', 'انتهاء رخصة العمل') }}:</strong> {{ data.employee.workPermitExpiryDate || '-' }}</p>
+          <p><strong>{{ i18n.text('Contract End', 'نهاية العقد') }}:</strong> {{ data.employee.contractEndDate || '-' }}</p>
         </div>
       } @else {
         <p class="warn">{{ i18n.text('No employee record is linked to your account email yet.', 'لا يوجد سجل موظف مرتبط ببريد حسابك حتى الآن.') }}</p>

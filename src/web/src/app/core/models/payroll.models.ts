@@ -119,3 +119,20 @@ export interface PayrollApprovalFindingSnapshot {
   metricName?: string;
   metricValue?: number;
 }
+
+export interface PayrollExecutiveSummary {
+  runId: string;
+  periodYear: number;
+  periodMonth: number;
+  employeeCount: number;
+  currencyCode: string;
+  totalNet: number;
+  totalDeductions: number;
+  totalOvertime: number;
+  totalUnpaidLeaveDeduction: number;
+  previousTotalNet?: number | null;
+  deltaAmount?: number | null;
+  deltaPercent?: number | null;
+  summaryEn: string;
+  summaryAr: string;
+}

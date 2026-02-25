@@ -16,6 +16,7 @@ export interface Employee {
   iqamaNumber: string;
   iqamaExpiryDate?: string | null;
   workPermitExpiryDate?: string | null;
+  contractEndDate?: string | null;
   tenantId: string;
 }
 
@@ -36,6 +37,7 @@ export interface CreateEmployeeRequest {
   iqamaNumber: string;
   iqamaExpiryDate?: string | null;
   workPermitExpiryDate?: string | null;
+  contractEndDate?: string | null;
 }
 
 export type UpdateEmployeeRequest = CreateEmployeeRequest;
@@ -80,6 +82,11 @@ export interface FinalSettlementEstimateResult {
   serviceYears: number;
   eosMonths: number;
   eosAmount: number;
+  payableSalaryDays: number;
+  pendingSalaryAmount: number;
+  leaveEncashmentDays: number;
+  leaveEncashmentAmount: number;
+  settlementGross: number;
   unpaidLeaveDays: number;
   unpaidLeaveDeduction: number;
   manualDeductionsFromPayroll: number;
