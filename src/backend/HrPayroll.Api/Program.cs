@@ -6956,13 +6956,21 @@ static async Task<EmailSendResult> TrySendComplianceDigestEmailAsync(
     string htmlBody,
     CancellationToken cancellationToken)
 {
-    var host = configuration["Smtp:Host"];
-    var port = int.TryParse(configuration["Smtp:Port"], out var parsedPort) ? parsedPort : 587;
-    var username = configuration["Smtp:Username"];
-    var password = configuration["Smtp:Password"];
-    var fromEmail = configuration["Smtp:FromEmail"] ?? configuration["Smtp:From"];
-    var fromName = configuration["Smtp:FromName"] ?? "HR Payroll Compliance";
-    var enableSsl = !string.Equals(configuration["Smtp:EnableSsl"], "false", StringComparison.OrdinalIgnoreCase);
+    static string? Cfg(IConfiguration cfg, string key)
+    {
+        var sectionKey = $"Smtp:{key}";
+        var doubleUnderscoreKey = $"Smtp__{key}";
+        var underscoreKey = $"Smtp_{key}";
+        return cfg[sectionKey] ?? cfg[doubleUnderscoreKey] ?? cfg[underscoreKey];
+    }
+
+    var host = Cfg(configuration, "Host");
+    var port = int.TryParse(Cfg(configuration, "Port"), out var parsedPort) ? parsedPort : 587;
+    var username = Cfg(configuration, "Username");
+    var password = Cfg(configuration, "Password");
+    var fromEmail = Cfg(configuration, "FromEmail") ?? Cfg(configuration, "From");
+    var fromName = Cfg(configuration, "FromName") ?? "HR Payroll Compliance";
+    var enableSsl = !string.Equals(Cfg(configuration, "EnableSsl"), "false", StringComparison.OrdinalIgnoreCase);
 
     if (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(fromEmail))
     {
@@ -6970,27 +6978,27 @@ static async Task<EmailSendResult> TrySendComplianceDigestEmailAsync(
         return new EmailSendResult(true, true, null);
     }
 
-    using var mail = new MailMessage
-    {
-        From = new MailAddress(fromEmail, string.IsNullOrWhiteSpace(fromName) ? "HR Payroll Compliance" : fromName),
-        Subject = subject,
-        Body = htmlBody,
-        IsBodyHtml = true
-    };
-    mail.To.Add(toEmail);
-
-    using var client = new SmtpClient(host, port)
-    {
-        EnableSsl = enableSsl
-    };
-
-    if (!string.IsNullOrWhiteSpace(username))
-    {
-        client.Credentials = new NetworkCredential(username, password ?? string.Empty);
-    }
-
     try
     {
+        using var mail = new MailMessage
+        {
+            From = new MailAddress(fromEmail, string.IsNullOrWhiteSpace(fromName) ? "HR Payroll Compliance" : fromName),
+            Subject = subject,
+            Body = htmlBody,
+            IsBodyHtml = true
+        };
+        mail.To.Add(toEmail);
+
+        using var client = new SmtpClient(host, port)
+        {
+            EnableSsl = enableSsl
+        };
+
+        if (!string.IsNullOrWhiteSpace(username))
+        {
+            client.Credentials = new NetworkCredential(username, password ?? string.Empty);
+        }
+
         cancellationToken.ThrowIfCancellationRequested();
         await client.SendMailAsync(mail, cancellationToken);
         return new EmailSendResult(true, false, null);

@@ -11,6 +11,19 @@ export function getApiErrorMessage(error: unknown, fallback: string): string {
     }
 
     if (payload && typeof payload === 'object') {
+      const validationErrors = (payload as { errors?: unknown }).errors;
+      if (validationErrors && typeof validationErrors === 'object') {
+        const entries = Object.values(validationErrors as Record<string, unknown>);
+        for (const entry of entries) {
+          if (Array.isArray(entry)) {
+            const first = entry.find((x) => typeof x === 'string' && x.trim().length > 0);
+            if (typeof first === 'string' && first.trim().length > 0) {
+              return localizeKnownApiMessage(first, isArabic);
+            }
+          }
+        }
+      }
+
       if (Array.isArray(payload.details)) {
         const firstDetail = payload.details.find((x) => typeof x === 'string' && x.trim().length > 0);
         if (typeof firstDetail === 'string' && firstDetail.trim().length > 0) {
