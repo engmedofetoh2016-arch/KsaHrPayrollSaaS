@@ -18,4 +18,7 @@ public class CompanyProfile : BaseAuditableEntity, ITenantScoped
     public string ComplianceDigestFrequency { get; set; } = "Weekly";
     public int ComplianceDigestHourUtc { get; set; } = 6;
     public DateTime? LastComplianceDigestSentAtUtc { get; set; }
+    public string NitaqatActivity { get; set; } = "General";
+    public string NitaqatSizeBand { get; set; } = "Small";
+    public decimal NitaqatTargetPercent { get; set; } = 30m;
 }

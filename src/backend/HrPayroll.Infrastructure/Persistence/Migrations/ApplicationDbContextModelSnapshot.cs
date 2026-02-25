@@ -146,6 +146,17 @@ namespace HrPayroll.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("NitaqatActivity")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("NitaqatSizeBand")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("NitaqatTargetPercent")
+                        .HasColumnType("numeric");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
 

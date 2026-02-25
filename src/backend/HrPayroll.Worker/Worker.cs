@@ -910,6 +910,9 @@ public class Worker : BackgroundService
         var totalEmployees = employeeItems.Count;
         var saudiEmployees = employeeItems.Count(x => x.IsSaudiNational);
         var saudizationPercent = totalEmployees == 0 ? 0m : Math.Round(saudiEmployees * 100m / totalEmployees, 1);
+        var saudizationTargetPercent = company is null
+            ? 30m
+            : Math.Clamp(company.NitaqatTargetPercent, 0m, 100m);
 
         var wpsCompanyReady = company is not null &&
                               !string.IsNullOrWhiteSpace(company.WpsCompanyBankName) &&
@@ -941,9 +944,9 @@ public class Worker : BackgroundService
         score -= Math.Min(10m, warningAlerts * 2m);
         score -= Math.Min(5m, noticeAlerts);
 
-        if (saudizationPercent < 30m)
+        if (saudizationPercent < saudizationTargetPercent)
         {
-            score -= Math.Min(20m, (30m - saudizationPercent) * 1.2m);
+            score -= Math.Min(20m, (saudizationTargetPercent - saudizationPercent) * 1.2m);
         }
 
         var finalScore = (int)Math.Clamp(Math.Round(score), 0m, 100m);

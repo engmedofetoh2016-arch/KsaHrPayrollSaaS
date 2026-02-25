@@ -137,7 +137,10 @@ api.MapPost("/tenants", async (
         CurrencyCode = string.IsNullOrWhiteSpace(request.CurrencyCode) ? "SAR" : request.CurrencyCode.Trim().ToUpperInvariant(),
         DefaultPayDay = request.DefaultPayDay,
         EosFirstFiveYearsMonthFactor = 0.5m,
-        EosAfterFiveYearsMonthFactor = 1.0m
+        EosAfterFiveYearsMonthFactor = 1.0m,
+        NitaqatActivity = "General",
+        NitaqatSizeBand = "Small",
+        NitaqatTargetPercent = 30m
     };
 
     dbContext.AddEntity(company);
@@ -589,22 +592,21 @@ api.MapGet("/me/salary-certificate/pdf", [Authorize(Roles = RoleNames.Employee)]
             {
                 col.Spacing(7);
                 col.Item().Text(companyName).FontSize(18).SemiBold();
-                col.Item().Text("Salary Certificate / شهادة تعريف بالراتب").FontSize(13).SemiBold();
+                col.Item().Text("Salary Certificate").FontSize(13).SemiBold();
                 col.Item().PaddingVertical(6).LineHorizontal(1);
-                col.Item().Text($"Employee Name / اسم الموظف: {employee.FirstName} {employee.LastName}");
-                col.Item().Text($"Employee Number / الرقم الوظيفي: {employee.EmployeeNumber}");
-                col.Item().Text($"Job Title / المسمى الوظيفي: {employee.JobTitle}");
-                col.Item().Text($"Start Date / تاريخ المباشرة: {employee.StartDate:yyyy-MM-dd}");
-                col.Item().Text($"Monthly Base Salary / الراتب الأساسي الشهري: {employee.BaseSalary:F2} {currency}");
+                col.Item().Text($"Employee Name: {employee.FirstName} {employee.LastName}");
+                col.Item().Text($"Employee Number: {employee.EmployeeNumber}");
+                col.Item().Text($"Job Title: {employee.JobTitle}");
+                col.Item().Text($"Start Date: {employee.StartDate:yyyy-MM-dd}");
+                col.Item().Text($"Monthly Base Salary: {employee.BaseSalary:F2} {currency}");
                 if (!string.IsNullOrWhiteSpace(cleanPurpose))
                 {
-                    col.Item().Text($"Purpose / الغرض: {cleanPurpose}");
+                    col.Item().Text($"Purpose: {cleanPurpose}");
                 }
 
                 col.Item().PaddingVertical(6).LineHorizontal(1);
-                col.Item().Text($"Issued At (UTC) / تاريخ الإصدار: {issuedAt:yyyy-MM-dd HH:mm}");
+                col.Item().Text($"Issued At (UTC): {issuedAt:yyyy-MM-dd HH:mm}");
                 col.Item().Text("This certificate is issued electronically without signature.");
-                col.Item().Text("تم إصدار هذه الشهادة إلكترونيا دون توقيع.");
             });
         });
     }).GeneratePdf();
@@ -825,6 +827,9 @@ api.MapPut("/company-profile", [Authorize(Roles = RoleNames.Owner + "," + RoleNa
     profile.ComplianceDigestEmail = (request.ComplianceDigestEmail ?? string.Empty).Trim();
     profile.ComplianceDigestFrequency = string.IsNullOrWhiteSpace(request.ComplianceDigestFrequency) ? "Weekly" : request.ComplianceDigestFrequency.Trim();
     profile.ComplianceDigestHourUtc = Math.Clamp(request.ComplianceDigestHourUtc, 0, 23);
+    profile.NitaqatActivity = string.IsNullOrWhiteSpace(request.NitaqatActivity) ? "General" : request.NitaqatActivity.Trim();
+    profile.NitaqatSizeBand = string.IsNullOrWhiteSpace(request.NitaqatSizeBand) ? "Small" : request.NitaqatSizeBand.Trim();
+    profile.NitaqatTargetPercent = Math.Clamp(request.NitaqatTargetPercent, 0m, 100m);
 
     await dbContext.SaveChangesAsync(cancellationToken);
     return Results.Ok(profile);
@@ -1397,22 +1402,21 @@ api.MapGet("/employees/{employeeId:guid}/salary-certificate/pdf", [Authorize(Rol
             {
                 col.Spacing(7);
                 col.Item().Text(companyName).FontSize(18).SemiBold();
-                col.Item().Text("Salary Certificate / شهادة تعريف بالراتب").FontSize(13).SemiBold();
+                col.Item().Text("Salary Certificate").FontSize(13).SemiBold();
                 col.Item().PaddingVertical(6).LineHorizontal(1);
-                col.Item().Text($"Employee Name / اسم الموظف: {employee.FirstName} {employee.LastName}");
-                col.Item().Text($"Employee Number / الرقم الوظيفي: {employee.EmployeeNumber}");
-                col.Item().Text($"Job Title / المسمى الوظيفي: {employee.JobTitle}");
-                col.Item().Text($"Start Date / تاريخ المباشرة: {employee.StartDate:yyyy-MM-dd}");
-                col.Item().Text($"Monthly Base Salary / الراتب الأساسي الشهري: {employee.BaseSalary:F2} {currency}");
+                col.Item().Text($"Employee Name: {employee.FirstName} {employee.LastName}");
+                col.Item().Text($"Employee Number: {employee.EmployeeNumber}");
+                col.Item().Text($"Job Title: {employee.JobTitle}");
+                col.Item().Text($"Start Date: {employee.StartDate:yyyy-MM-dd}");
+                col.Item().Text($"Monthly Base Salary: {employee.BaseSalary:F2} {currency}");
                 if (!string.IsNullOrWhiteSpace(cleanPurpose))
                 {
-                    col.Item().Text($"Purpose / الغرض: {cleanPurpose}");
+                    col.Item().Text($"Purpose: {cleanPurpose}");
                 }
 
                 col.Item().PaddingVertical(6).LineHorizontal(1);
-                col.Item().Text($"Issued At (UTC) / تاريخ الإصدار: {issuedAt:yyyy-MM-dd HH:mm}");
+                col.Item().Text($"Issued At (UTC): {issuedAt:yyyy-MM-dd HH:mm}");
                 col.Item().Text("This certificate is issued electronically without signature.");
-                col.Item().Text("تم إصدار هذه الشهادة إلكترونيا دون توقيع.");
             });
         });
     }).GeneratePdf();
@@ -2545,6 +2549,7 @@ api.MapGet("/compliance/saudization-simulation", [Authorize(Roles = RoleNames.Ow
 {
     var safeSaudiHires = Math.Clamp(plannedSaudiHires ?? 1, 0, 500);
     var safeNonSaudiHires = Math.Clamp(plannedNonSaudiHires ?? 0, 0, 500);
+    var company = await dbContext.CompanyProfiles.FirstOrDefaultAsync(cancellationToken);
 
     var current = await dbContext.Employees
         .Select(x => new { x.IsSaudiNational })
@@ -2552,7 +2557,9 @@ api.MapGet("/compliance/saudization-simulation", [Authorize(Roles = RoleNames.Ow
 
     var currentTotal = current.Count;
     var currentSaudi = current.Count(x => x.IsSaudiNational);
-    const decimal targetPercent = 30m;
+    var targetPercent = company is null
+        ? 30m
+        : Math.Clamp(company.NitaqatTargetPercent, 0m, 100m);
     var currentPercent = currentTotal == 0 ? 0m : Math.Round(currentSaudi * 100m / currentTotal, 1);
 
     var projectedSaudi = currentSaudi + safeSaudiHires;
@@ -5328,6 +5335,46 @@ api.MapGet("/smart-alerts", [Authorize(Roles = RoleNames.Owner + "," + RoleNames
         }
     }
 
+    var currentRun = period is null
+        ? null
+        : await dbContext.PayrollRuns
+            .Where(x => x.PayrollPeriodId == period.Id)
+            .OrderByDescending(x => x.CreatedAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+    var payrollApprovedOrLocked = currentRun is not null &&
+        (currentRun.Status == PayrollRunStatus.Approved || currentRun.Status == PayrollRunStatus.Locked);
+
+    if (!payrollApprovedOrLocked)
+    {
+        var overtimeRows = await (from att in dbContext.AttendanceInputs
+                                  join employee in dbContext.Employees on att.EmployeeId equals employee.Id
+                                  where att.Year == currentYear && att.Month == currentMonth && att.OvertimeHours >= 8m
+                                  select new
+                                  {
+                                      employee.Id,
+                                      employee.FirstName,
+                                      employee.LastName,
+                                      att.OvertimeHours
+                                  })
+            .OrderByDescending(x => x.OvertimeHours)
+            .Take(100)
+            .ToListAsync(cancellationToken);
+
+        foreach (var row in overtimeRows)
+        {
+            var severity = row.OvertimeHours >= 30m ? "Critical" : row.OvertimeHours >= 16m ? "Warning" : "Notice";
+            var daysLeft = Math.Max(0, defaultPayDay - now.Day);
+            alerts.Add(new SmartAlertResponse(
+                $"OVERTIME_PENDING:{row.Id:N}:{currentYear}{currentMonth:00}",
+                "OvertimePendingReview",
+                severity,
+                $"{row.FirstName} {row.LastName}",
+                $"Overtime input is {row.OvertimeHours:F2} hour(s) for {currentYear}-{currentMonth:00}. Review before payroll approval.",
+                daysLeft,
+                new DateOnly(currentYear, currentMonth, Math.Min(defaultPayDay, DateTime.DaysInMonth(currentYear, currentMonth))).ToString("yyyy-MM-dd")));
+        }
+    }
+
     var actionPaths = await dbContext.AuditLogs
         .Where(x => x.Method == "SMART_ALERT_ACK" || x.Method == "SMART_ALERT_SNOOZE")
         .OrderByDescending(x => x.CreatedAtUtc)
@@ -5904,6 +5951,10 @@ static (string Explanation, string NextAction, int TargetWindowDays) BuildSmartA
                 "عدم اعتماد الرواتب قبل موعد الصرف يرفع مخاطر تأخير الرواتب وشكاوى الموظفين.",
                 "أكمل فحوصات ما قبل الاعتماد واعتمد الرواتب قبل يوم الصرف الافتراضي.",
                 7),
+            "OVERTIME_PENDING" => (
+                "ساعات العمل الإضافي مرتفعة وتحتاج مراجعة قبل اعتماد الرواتب لتفادي تضخم تكلفة الرواتب أو أخطاء احتساب.",
+                "راجع مبررات وساعات العمل الإضافي واعتمد الساعات الصحيحة قبل اعتماد الرواتب.",
+                7),
             _ => (
                 "هذا التنبيه يشير إلى خطر تشغيلي أو امتثال يحتاج إجراءً موثقًا.",
                 "راجع السبب الجذري ونفذ الإجراء التصحيحي وأغلق التنبيه بعد التوثيق.",
@@ -5936,6 +5987,10 @@ static (string Explanation, string NextAction, int TargetWindowDays) BuildSmartA
         "PAYROLL_PENDING" => (
             "Payroll approval is still pending close to pay day, increasing salary delay and employee trust risk.",
             "Complete pre-approval checks and approve payroll before default pay day.",
+            7),
+        "OVERTIME_PENDING" => (
+            "Overtime input is high and needs review before payroll approval to avoid cost spikes or calculation errors.",
+            "Review overtime justification and hours, then approve corrected values before payroll approval.",
             7),
         _ => (
             "This alert indicates an operational or compliance risk requiring documented action.",
@@ -6078,7 +6133,9 @@ static async Task<ComplianceScoreResponse> BuildComplianceScoreAsync(IApplicatio
     var totalEmployees = employeeItems.Count;
     var saudiEmployees = employeeItems.Count(x => x.IsSaudiNational);
     var saudizationPercent = totalEmployees == 0 ? 0m : Math.Round(saudiEmployees * 100m / totalEmployees, 1);
-    const decimal saudizationTargetPercent = 30m;
+    var saudizationTargetPercent = company is null
+        ? 30m
+        : Math.Clamp(company.NitaqatTargetPercent, 0m, 100m);
     var saudizationGapPercent = Math.Max(0m, saudizationTargetPercent - saudizationPercent);
     var requiredSaudiEmployees = totalEmployees == 0
         ? 1
@@ -6381,7 +6438,10 @@ public sealed record UpdateCompanyProfileRequest(
     bool ComplianceDigestEnabled,
     string ComplianceDigestEmail,
     string ComplianceDigestFrequency,
-    int ComplianceDigestHourUtc);
+    int ComplianceDigestHourUtc,
+    string NitaqatActivity,
+    string NitaqatSizeBand,
+    decimal NitaqatTargetPercent);
 
 public sealed record CreateUserRequest(string FirstName, string LastName, string Email, string Password, string Role);
 public sealed record AdminResetUserPasswordRequest(string NewPassword);

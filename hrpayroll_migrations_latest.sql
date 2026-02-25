@@ -1043,3 +1043,253 @@ BEGIN
 END $EF$;
 
 COMMIT;
+
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225143000_AddNitaqatSettingsToCompanyProfile') THEN
+    ALTER TABLE "CompanyProfileSet" ADD "NitaqatActivity" text NOT NULL DEFAULT 'General';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225143000_AddNitaqatSettingsToCompanyProfile') THEN
+    ALTER TABLE "CompanyProfileSet" ADD "NitaqatSizeBand" text NOT NULL DEFAULT 'Small';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225143000_AddNitaqatSettingsToCompanyProfile') THEN
+    ALTER TABLE "CompanyProfileSet" ADD "NitaqatTargetPercent" numeric NOT NULL DEFAULT 30.0;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225143000_AddNitaqatSettingsToCompanyProfile') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20260225143000_AddNitaqatSettingsToCompanyProfile', '8.0.12');
+    END IF;
+END $EF$;
+
+COMMIT;
+
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225150000_AddContractExpiryAlerts') THEN
+    CREATE TABLE "ContractExpiryAlertSet" (
+        "Id" uuid NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "EmployeeId" uuid NOT NULL,
+        "EmployeeName" text NOT NULL,
+        "JobTitle" text NOT NULL,
+        "ContractEndDate" date NOT NULL,
+        "DaysLeft" integer NOT NULL,
+        "AlertWindowDays" integer NOT NULL,
+        "Status" text NOT NULL,
+        "ResolveReason" text NOT NULL,
+        "ResolvedByUserId" uuid,
+        "ResolvedAtUtc" timestamp with time zone,
+        "LastReminderSentAtUtc" timestamp with time zone,
+        "CreatedAtUtc" timestamp with time zone NOT NULL,
+        "UpdatedAtUtc" timestamp with time zone,
+        CONSTRAINT "PK_ContractExpiryAlertSet" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225150000_AddContractExpiryAlerts') THEN
+    CREATE UNIQUE INDEX "IX_ContractExpiryAlertSet_TenantId_EmployeeId_ContractEndDate_AlertWindowDays"
+    ON "ContractExpiryAlertSet" ("TenantId", "EmployeeId", "ContractEndDate", "AlertWindowDays");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225150000_AddContractExpiryAlerts') THEN
+    CREATE INDEX "IX_ContractExpiryAlertSet_TenantId_Status_DaysLeft"
+    ON "ContractExpiryAlertSet" ("TenantId", "Status", "DaysLeft");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225150000_AddContractExpiryAlerts') THEN
+    CREATE INDEX "IX_ContractExpiryAlertSet_TenantId_ContractEndDate"
+    ON "ContractExpiryAlertSet" ("TenantId", "ContractEndDate");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225150000_AddContractExpiryAlerts') THEN
+    ALTER TABLE "CompanyProfileSet" ADD "ContractExpiryDigestEnabled" boolean NOT NULL DEFAULT FALSE;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225150000_AddContractExpiryAlerts') THEN
+    ALTER TABLE "CompanyProfileSet" ADD "ContractExpiryDigestEmail" text NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225150000_AddContractExpiryAlerts') THEN
+    ALTER TABLE "CompanyProfileSet" ADD "ContractExpiryDigestHourUtc" integer NOT NULL DEFAULT 7;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225150000_AddContractExpiryAlerts') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20260225150000_AddContractExpiryAlerts', '8.0.12');
+    END IF;
+END $EF$;
+
+COMMIT;
+
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225153000_AddContractRenewals') THEN
+    CREATE TABLE "ContractRenewalSet" (
+        "Id" uuid NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "EmployeeId" uuid NOT NULL,
+        "CurrentContractEndDate" date NOT NULL,
+        "ProposedNewEndDate" date NOT NULL,
+        "Status" text NOT NULL,
+        "Reason" text NOT NULL,
+        "Notes" text NOT NULL,
+        "RequestedByUserId" uuid,
+        "ReviewedByUserId" uuid,
+        "ReviewedAtUtc" timestamp with time zone,
+        "AppliedAtUtc" timestamp with time zone,
+        "CreatedAtUtc" timestamp with time zone NOT NULL,
+        "UpdatedAtUtc" timestamp with time zone,
+        CONSTRAINT "PK_ContractRenewalSet" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225153000_AddContractRenewals') THEN
+    CREATE INDEX "IX_ContractRenewalSet_TenantId_EmployeeId_CreatedAtUtc"
+    ON "ContractRenewalSet" ("TenantId", "EmployeeId", "CreatedAtUtc");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225153000_AddContractRenewals') THEN
+    CREATE INDEX "IX_ContractRenewalSet_TenantId_Status_CreatedAtUtc"
+    ON "ContractRenewalSet" ("TenantId", "Status", "CreatedAtUtc");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225153000_AddContractRenewals') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20260225153000_AddContractRenewals', '8.0.12');
+    END IF;
+END $EF$;
+
+COMMIT;
+
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225170000_AddOffboardingFinalSettlement') THEN
+    CREATE TABLE "EmployeeOffboardingSet" (
+        "Id" uuid NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "EmployeeId" uuid NOT NULL,
+        "EffectiveDate" date NOT NULL,
+        "Reason" text NOT NULL,
+        "Status" text NOT NULL,
+        "RequestedByUserId" uuid,
+        "ApprovedByUserId" uuid,
+        "ApprovedAtUtc" timestamp with time zone,
+        "PaidAtUtc" timestamp with time zone,
+        "ClosedAtUtc" timestamp with time zone,
+        "CreatedAtUtc" timestamp with time zone NOT NULL,
+        "UpdatedAtUtc" timestamp with time zone,
+        CONSTRAINT "PK_EmployeeOffboardingSet" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225170000_AddOffboardingFinalSettlement') THEN
+    CREATE TABLE "FinalSettlementSet" (
+        "Id" uuid NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "OffboardingId" uuid NOT NULL,
+        "EmployeeId" uuid NOT NULL,
+        "AsOfDate" date NOT NULL,
+        "LastWorkingDate" date NOT NULL,
+        "BasicSalary" numeric NOT NULL,
+        "EosAmount" numeric NOT NULL DEFAULT 0.0,
+        "LeaveEncashmentAmount" numeric NOT NULL DEFAULT 0.0,
+        "PendingPayrollAmount" numeric NOT NULL DEFAULT 0.0,
+        "OtherAdjustmentsAmount" numeric NOT NULL DEFAULT 0.0,
+        "DeductionsAmount" numeric NOT NULL DEFAULT 0.0,
+        "NetSettlementAmount" numeric NOT NULL DEFAULT 0.0,
+        "CurrencyCode" text NOT NULL DEFAULT 'SAR',
+        "Status" text NOT NULL,
+        "Notes" text NOT NULL,
+        "CreatedAtUtc" timestamp with time zone NOT NULL,
+        "UpdatedAtUtc" timestamp with time zone,
+        CONSTRAINT "PK_FinalSettlementSet" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225170000_AddOffboardingFinalSettlement') THEN
+    CREATE UNIQUE INDEX "IX_FinalSettlementSet_TenantId_OffboardingId"
+    ON "FinalSettlementSet" ("TenantId", "OffboardingId");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225170000_AddOffboardingFinalSettlement') THEN
+    CREATE INDEX "IX_EmployeeOffboardingSet_TenantId_Status_EffectiveDate"
+    ON "EmployeeOffboardingSet" ("TenantId", "Status", "EffectiveDate");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225170000_AddOffboardingFinalSettlement') THEN
+    CREATE INDEX "IX_EmployeeOffboardingSet_TenantId_EmployeeId_CreatedAtUtc"
+    ON "EmployeeOffboardingSet" ("TenantId", "EmployeeId", "CreatedAtUtc");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225170000_AddOffboardingFinalSettlement') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20260225170000_AddOffboardingFinalSettlement', '8.0.12');
+    END IF;
+END $EF$;
+
+COMMIT;

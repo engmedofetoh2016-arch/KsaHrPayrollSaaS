@@ -154,10 +154,11 @@ export class SmartAlertsPageComponent implements OnInit {
         return this.i18n.text('Missing Contract End Date', 'نقص تاريخ نهاية العقد');
       case 'DocumentExpiry':
         return this.i18n.text('Document Expiry', 'انتهاء مستند');
-      case 'PayrollApprovalPending':
-        return this.i18n.text('Payroll Approval Pending', 'اعتماد الرواتب معلق');
+            case 'OvertimePendingReview':
+        return this.i18n.text('Overtime Pending Review', '????? ?????? ??????? ????????');
       default:
         return type;
     }
   }
 }
+

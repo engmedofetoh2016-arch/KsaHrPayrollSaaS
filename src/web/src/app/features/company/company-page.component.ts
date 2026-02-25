@@ -37,7 +37,10 @@ export class CompanyPageComponent implements OnInit {
     complianceDigestEnabled: [false],
     complianceDigestEmail: [''],
     complianceDigestFrequency: ['Weekly'],
-    complianceDigestHourUtc: [6, [Validators.min(0), Validators.max(23)]]
+    complianceDigestHourUtc: [6, [Validators.min(0), Validators.max(23)]],
+    nitaqatActivity: ['General'],
+    nitaqatSizeBand: ['Small'],
+    nitaqatTargetPercent: [30, [Validators.min(0), Validators.max(100)]]
   });
 
   ngOnInit(): void {
@@ -62,7 +65,10 @@ export class CompanyPageComponent implements OnInit {
           complianceDigestEnabled: !!profile.complianceDigestEnabled,
           complianceDigestEmail: profile.complianceDigestEmail ?? '',
           complianceDigestFrequency: profile.complianceDigestFrequency ?? 'Weekly',
-          complianceDigestHourUtc: Number(profile.complianceDigestHourUtc ?? 6)
+          complianceDigestHourUtc: Number(profile.complianceDigestHourUtc ?? 6),
+          nitaqatActivity: profile.nitaqatActivity ?? 'General',
+          nitaqatSizeBand: profile.nitaqatSizeBand ?? 'Small',
+          nitaqatTargetPercent: Number(profile.nitaqatTargetPercent ?? 30)
         });
         this.loading.set(false);
       },
@@ -102,7 +108,10 @@ export class CompanyPageComponent implements OnInit {
         complianceDigestEnabled: !!value.complianceDigestEnabled,
         complianceDigestEmail: value.complianceDigestEmail ?? '',
         complianceDigestFrequency: value.complianceDigestFrequency ?? 'Weekly',
-        complianceDigestHourUtc: Number(value.complianceDigestHourUtc ?? 6)
+        complianceDigestHourUtc: Number(value.complianceDigestHourUtc ?? 6),
+        nitaqatActivity: value.nitaqatActivity ?? 'General',
+        nitaqatSizeBand: value.nitaqatSizeBand ?? 'Small',
+        nitaqatTargetPercent: Number(value.nitaqatTargetPercent ?? 30)
       })
       .subscribe({
         next: () => {

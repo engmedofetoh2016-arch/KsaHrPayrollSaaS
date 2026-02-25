@@ -76,6 +76,9 @@ public class UpdateCompanyProfileRequestValidator : AbstractValidator<UpdateComp
         RuleFor(x => x.WpsCompanyIban).MaximumLength(34);
         RuleFor(x => x.ComplianceDigestEmail).MaximumLength(200);
         RuleFor(x => x.ComplianceDigestHourUtc).InclusiveBetween(0, 23);
+        RuleFor(x => x.NitaqatActivity).MaximumLength(120);
+        RuleFor(x => x.NitaqatSizeBand).MaximumLength(60);
+        RuleFor(x => x.NitaqatTargetPercent).InclusiveBetween(0m, 100m);
         RuleFor(x => x.ComplianceDigestFrequency)
             .Must(x => string.IsNullOrWhiteSpace(x) || string.Equals(x, "Daily", StringComparison.OrdinalIgnoreCase) || string.Equals(x, "Weekly", StringComparison.OrdinalIgnoreCase))
             .WithMessage("Compliance digest frequency must be Daily or Weekly.");

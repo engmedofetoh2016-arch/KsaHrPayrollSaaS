@@ -14,6 +14,9 @@ export interface CompanyProfile {
   complianceDigestFrequency: string;
   complianceDigestHourUtc: number;
   lastComplianceDigestSentAtUtc?: string | null;
+  nitaqatActivity: string;
+  nitaqatSizeBand: string;
+  nitaqatTargetPercent: number;
 }
 
 export interface UpdateCompanyProfileRequest {
@@ -29,4 +32,7 @@ export interface UpdateCompanyProfileRequest {
   complianceDigestEmail: string;
   complianceDigestFrequency: string;
   complianceDigestHourUtc: number;
+  nitaqatActivity: string;
+  nitaqatSizeBand: string;
+  nitaqatTargetPercent: number;
 }
