@@ -20,6 +20,7 @@ export class OperationsStudioPageComponent implements OnInit {
 
   readonly loading = signal(false);
   readonly saving = signal(false);
+  readonly showTechnicalCodes = signal(false);
   readonly error = signal('');
   readonly message = signal('');
 
@@ -32,7 +33,7 @@ export class OperationsStudioPageComponent implements OnInit {
   readonly dataQualityIssues = signal<any[]>([]);
 
   readonly allowanceForm = {
-    policyName: 'Standard',
+    policyName: 'قياسي',
     gradeCode: 'G1',
     locationCode: 'RIYADH',
     housingAmount: 1000,
@@ -48,7 +49,7 @@ export class OperationsStudioPageComponent implements OnInit {
   readonly stageForm = {
     payrollScope: 'Default',
     stageCode: 'REVIEWER',
-    stageName: 'Reviewer',
+    stageName: 'مراجع',
     stageOrder: 1,
     approverRole: 'Manager',
     allowRollback: true,
@@ -57,7 +58,7 @@ export class OperationsStudioPageComponent implements OnInit {
 
   readonly ruleForm = {
     ruleCode: 'WPS_MISSING',
-    ruleName: 'WPS Missing Data',
+    ruleName: 'نقص بيانات حماية الأجور',
     ruleCategory: 'WPS',
     severity: 'Critical',
     ruleConfigJson: '{"daysThreshold":3}',
@@ -65,7 +66,7 @@ export class OperationsStudioPageComponent implements OnInit {
   };
 
   readonly forecastForm = {
-    scenarioName: 'Monthly What-If',
+    scenarioName: 'سيناريو شهري',
     basePayrollRunId: '',
     plannedSaudiHires: 1,
     plannedNonSaudiHires: 0,
@@ -77,8 +78,8 @@ export class OperationsStudioPageComponent implements OnInit {
   readonly templateForm = {
     templateCode: 'CONTRACT_EXPIRY',
     channel: 'Email',
-    subject: 'Contract expiring soon',
-    body: 'Your contract will expire soon. Please review.',
+    subject: 'انتهاء العقد قريب',
+    body: 'سينتهي عقدك قريبًا. يرجى المراجعة.',
     isActive: true
   };
 
@@ -94,6 +95,10 @@ export class OperationsStudioPageComponent implements OnInit {
 
   ngOnInit(): void {
     this.refresh();
+  }
+
+  toggleTechnicalCodes() {
+    this.showTechnicalCodes.set(!this.showTechnicalCodes());
   }
 
   refresh() {
@@ -253,6 +258,45 @@ export class OperationsStudioPageComponent implements OnInit {
       }),
       this.i18n.text('Fix batch applied.', 'تم تطبيق دفعة الإصلاح.')
     );
+  }
+
+  codeLabel(value: string | null | undefined): string {
+    const code = String(value ?? '').trim().toUpperCase();
+    switch (code) {
+      case 'REVIEWER':
+        return 'مرحلة المراجع';
+      case 'FINANCE':
+        return 'مرحلة المالية';
+      case 'FINAL':
+        return 'الاعتماد النهائي';
+      case 'WPS_MISSING':
+        return 'نقص بيانات حماية الأجور';
+      case 'GOSI_MISSING':
+        return 'نقص بيانات التأمينات الاجتماعية';
+      case 'SAUDIZATION_GAP':
+        return 'فجوة نسبة السعودة';
+      case 'CONTRACT_EXPIRY':
+        return 'تنبيه انتهاء العقد';
+      default:
+        return code ? 'رمز مخصص' : 'غير محدد';
+    }
+  }
+
+  channelLabel(value: string | null | undefined): string {
+    const channel = String(value ?? '').trim().toLowerCase();
+    switch (channel) {
+      case 'email':
+        return 'البريد الإلكتروني';
+      case 'sms':
+        return 'رسائل نصية';
+      case 'whatsapp':
+        return 'واتساب';
+      case 'inapp':
+      case 'in-app':
+        return 'داخل النظام';
+      default:
+        return value ? 'قناة مخصصة' : 'غير محددة';
+    }
   }
 
   private runSave(request$: any, successMessage: string) {

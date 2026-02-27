@@ -5,6 +5,8 @@ export interface Employee {
   lastName: string;
   email: string;
   jobTitle: string;
+  gradeCode?: string;
+  locationCode?: string;
   baseSalary: number;
   isSaudiNational: boolean;
   isGosiEligible: boolean;
@@ -26,6 +28,8 @@ export interface CreateEmployeeRequest {
   lastName: string;
   email: string;
   jobTitle: string;
+  gradeCode?: string | null;
+  locationCode?: string | null;
   baseSalary: number;
   isSaudiNational: boolean;
   isGosiEligible: boolean;

@@ -7,6 +7,8 @@
     <label>{{ i18n.text('Last Name', 'اسم العائلة') }}<input formControlName="lastName" /></label>
     <label>{{ i18n.text('Email', 'البريد الإلكتروني') }}<input type="email" formControlName="email" /></label>
     <label>{{ i18n.text('Job Title', 'المسمى الوظيفي') }}<input formControlName="jobTitle" /></label>
+    <label>{{ i18n.text('Grade Code', 'رمز الدرجة') }}<input formControlName="gradeCode" /></label>
+    <label>{{ i18n.text('Location Code', 'رمز الموقع') }}<input formControlName="locationCode" /></label>
     <label>{{ i18n.text('Base Salary', 'الراتب الأساسي') }}<input type="number" formControlName="baseSalary" min="1" /></label>
     <label>{{ i18n.text('Saudi National', 'سعودي') }}<input type="checkbox" formControlName="isSaudiNational" /></label>
     <label>{{ i18n.text('GOSI Eligible', 'مشمول في التأمينات') }}<input type="checkbox" formControlName="isGosiEligible" /></label>
@@ -43,6 +45,8 @@
           <th>{{ i18n.text('Start Date', 'تاريخ المباشرة') }}</th>
           <th>{{ i18n.text('Email', 'البريد الإلكتروني') }}</th>
           <th>{{ i18n.text('Job Title', 'المسمى الوظيفي') }}</th>
+          <th>{{ i18n.text('Grade', 'الدرجة') }}</th>
+          <th>{{ i18n.text('Location', 'الموقع') }}</th>
           <th>{{ i18n.text('Base Salary', 'الراتب الأساسي') }}</th>
           <th>{{ i18n.text('Employee #', 'الرقم الوظيفي') }}</th>
           <th>{{ i18n.text('IBAN', 'الآيبان') }}</th>
@@ -63,6 +67,8 @@
             <td>{{ employee.startDate }}</td>
             <td>{{ employee.email }}</td>
             <td>{{ employee.jobTitle }}</td>
+            <td>{{ employee.gradeCode || 'DEFAULT' }}</td>
+            <td>{{ employee.locationCode || 'DEFAULT' }}</td>
             <td>{{ employee.baseSalary | number: '1.2-2' }}</td>
             <td>{{ employee.employeeNumber }}</td>
             <td>{{ employee.bankIban }}</td>
@@ -205,5 +211,7 @@
     </table>
   }
 </section>
+
+
 
 

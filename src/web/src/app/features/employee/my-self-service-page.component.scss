@@ -1,0 +1,71 @@
+.self-service-page {
+  display: grid;
+  gap: 1rem;
+}
+
+.card {
+  border: 1px solid #d9e2ef;
+  border-radius: 0.75rem;
+  padding: 0.9rem;
+  background: #fff;
+  display: grid;
+  gap: 0.6rem;
+}
+
+label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
+}
+
+input,
+select,
+textarea {
+  padding: 0.45rem 0.55rem;
+  border: 1px solid #c7d2e2;
+  border-radius: 0.45rem;
+}
+
+button {
+  padding: 0.5rem 0.7rem;
+  border: 0;
+  border-radius: 0.45rem;
+  background: #17406d;
+  color: #fff;
+}
+
+.refresh {
+  background: #3f5e7e;
+}
+
+.title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  border-bottom: 1px solid #e5ebf3;
+  padding: 0.45rem;
+  text-align: start;
+}
+
+.error {
+  color: #9c1d1d;
+}
+
+.message {
+  color: #0f5f32;
+}

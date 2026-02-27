@@ -10,6 +10,10 @@ header {
   align-items: center;
 }
 
+.toggle-codes {
+  background: #415c7a;
+}
+
 header h1 {
   margin: 0;
   font-size: 1.25rem;
@@ -90,4 +94,14 @@ li {
   justify-content: space-between;
   gap: 0.5rem;
   align-items: center;
+}
+
+.code-hint {
+  color: #3f4f65;
+}
+
+.code-tech {
+  color: #6f7f96;
+  font-size: 0.78rem;
+  margin-inline-start: 0.3rem;
 }

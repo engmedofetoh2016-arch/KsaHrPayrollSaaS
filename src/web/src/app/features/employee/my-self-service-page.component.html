@@ -1,0 +1,64 @@
+<section class="self-service-page">
+  <header>
+    <h2>{{ i18n.text('My Self-Service Requests', 'طلباتي للخدمة الذاتية') }}</h2>
+    <p>{{ i18n.text('Submit leave, profile, loan, and contract-related requests.', 'قدّم طلبات الإجازة وتحديث الملف والقروض والعقود.') }}</p>
+  </header>
+
+  @if (error()) {
+    <p class="error">{{ error() }}</p>
+  }
+  @if (message()) {
+    <p class="message">{{ message() }}</p>
+  }
+
+  <div class="card">
+    <h3>{{ i18n.text('New Request', 'طلب جديد') }}</h3>
+    <label>
+      {{ i18n.text('Type', 'النوع') }}
+      <select [(ngModel)]="requestType">
+        <option value="ProfileUpdate">{{ i18n.text('Profile Update', 'تحديث الملف') }}</option>
+        <option value="LeaveRequest">{{ i18n.text('Leave Request', 'طلب إجازة') }}</option>
+        <option value="LoanRequest">{{ i18n.text('Loan Request', 'طلب قرض') }}</option>
+        <option value="ContractRenewal">{{ i18n.text('Contract Renewal', 'تجديد عقد') }}</option>
+      </select>
+    </label>
+    <label>
+      {{ i18n.text('Details (JSON)', 'التفاصيل (JSON)') }}
+      <textarea rows="6" [(ngModel)]="payloadJson"></textarea>
+    </label>
+    <button type="button" (click)="submit()" [disabled]="saving()">{{ i18n.text('Submit', 'إرسال') }}</button>
+  </div>
+
+  <div class="card">
+    <div class="title-row">
+      <h3>{{ i18n.text('My Requests', 'طلباتي') }}</h3>
+      <button type="button" class="refresh" (click)="load()" [disabled]="loading()">{{ i18n.text('Refresh', 'تحديث') }}</button>
+    </div>
+    @if (loading()) {
+      <p>{{ i18n.text('Loading...', 'جاري التحميل...') }}</p>
+    } @else if (items().length === 0) {
+      <p>{{ i18n.text('No requests yet.', 'لا توجد طلبات بعد.') }}</p>
+    } @else {
+      <table>
+        <thead>
+          <tr>
+            <th>{{ i18n.text('Type', 'النوع') }}</th>
+            <th>{{ i18n.text('Status', 'الحالة') }}</th>
+            <th>{{ i18n.text('Created', 'تاريخ الإنشاء') }}</th>
+            <th>{{ i18n.text('Review Notes', 'ملاحظات المراجعة') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (item of items(); track item.id) {
+            <tr>
+              <td>{{ item.requestType }}</td>
+              <td>{{ item.status }}</td>
+              <td>{{ item.createdAtUtc }}</td>
+              <td>{{ item.resolutionNotes || '-' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+  </div>
+</section>

@@ -118,6 +118,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
         modelBuilder.Entity<Tenant>().HasIndex(x => x.Slug).IsUnique();
         modelBuilder.Entity<CompanyProfile>().HasIndex(x => x.TenantId).IsUnique();
         modelBuilder.Entity<Employee>().HasIndex(x => new { x.TenantId, x.Email });
+        modelBuilder.Entity<Employee>().HasIndex(x => new { x.TenantId, x.GradeCode, x.LocationCode });
         modelBuilder.Entity<AttendanceInput>().HasIndex(x => new { x.TenantId, x.EmployeeId, x.Year, x.Month }).IsUnique();
         modelBuilder.Entity<PayrollPeriod>().HasIndex(x => new { x.TenantId, x.Year, x.Month }).IsUnique();
         modelBuilder.Entity<PayrollRun>().HasIndex(x => new { x.TenantId, x.PayrollPeriodId });

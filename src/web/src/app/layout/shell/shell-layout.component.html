@@ -27,6 +27,7 @@
       <a routerLink="/leave/my" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('My Leave', 'إجازاتي') }}</a>
       @if (isEmployee()) {
         <a routerLink="/employee/profile" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('My Profile', 'ملفي الشخصي') }}</a>
+        <a routerLink="/employee/self-service" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Self-Service Requests', 'طلبات الخدمة الذاتية') }}</a>
         <a routerLink="/employee/payslips" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('My Payslips', 'قسائم رواتبي') }}</a>
         <a routerLink="/employee/salary-certificate" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Salary Certificate', 'شهادة الراتب') }}</a>
         <a routerLink="/employee/eos-estimate" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('EOS Estimate', 'تقدير نهاية الخدمة') }}</a>

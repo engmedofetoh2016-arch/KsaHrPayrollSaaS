@@ -10,6 +10,8 @@ public class Employee : BaseAuditableEntity, ITenantScoped
     public string LastName { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public string JobTitle { get; set; } = string.Empty;
+    public string GradeCode { get; set; } = "DEFAULT";
+    public string LocationCode { get; set; } = "DEFAULT";
     public decimal BaseSalary { get; set; }
     public bool IsSaudiNational { get; set; }
     public bool IsGosiEligible { get; set; }

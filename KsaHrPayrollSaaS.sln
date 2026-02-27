@@ -17,6 +17,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HrPayroll.Domain", "src\bac
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HrPayroll.Infrastructure", "src\backend\HrPayroll.Infrastructure\HrPayroll.Infrastructure.csproj", "{B35A7603-3475-4C06-9995-0497720B9661}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HrPayroll.Api.Tests", "src\backend\HrPayroll.Api.Tests\HrPayroll.Api.Tests.csproj", "{D21F5394-9274-42FA-A592-82D3EA9E547D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -87,6 +89,18 @@ Global
 		{B35A7603-3475-4C06-9995-0497720B9661}.Release|x64.Build.0 = Release|Any CPU
 		{B35A7603-3475-4C06-9995-0497720B9661}.Release|x86.ActiveCfg = Release|Any CPU
 		{B35A7603-3475-4C06-9995-0497720B9661}.Release|x86.Build.0 = Release|Any CPU
+		{D21F5394-9274-42FA-A592-82D3EA9E547D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D21F5394-9274-42FA-A592-82D3EA9E547D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D21F5394-9274-42FA-A592-82D3EA9E547D}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{D21F5394-9274-42FA-A592-82D3EA9E547D}.Debug|x64.Build.0 = Debug|Any CPU
+		{D21F5394-9274-42FA-A592-82D3EA9E547D}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{D21F5394-9274-42FA-A592-82D3EA9E547D}.Debug|x86.Build.0 = Debug|Any CPU
+		{D21F5394-9274-42FA-A592-82D3EA9E547D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D21F5394-9274-42FA-A592-82D3EA9E547D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D21F5394-9274-42FA-A592-82D3EA9E547D}.Release|x64.ActiveCfg = Release|Any CPU
+		{D21F5394-9274-42FA-A592-82D3EA9E547D}.Release|x64.Build.0 = Release|Any CPU
+		{D21F5394-9274-42FA-A592-82D3EA9E547D}.Release|x86.ActiveCfg = Release|Any CPU
+		{D21F5394-9274-42FA-A592-82D3EA9E547D}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -98,5 +112,6 @@ Global
 		{3E4B74D2-15FF-4C3C-A893-67EE81CB2F7A} = {FE360695-3F2B-1049-3887-35FBB5135923}
 		{AA583DFE-AFF0-438D-A574-94FED3C6F7C3} = {FE360695-3F2B-1049-3887-35FBB5135923}
 		{B35A7603-3475-4C06-9995-0497720B9661} = {FE360695-3F2B-1049-3887-35FBB5135923}
+		{D21F5394-9274-42FA-A592-82D3EA9E547D} = {FE360695-3F2B-1049-3887-35FBB5135923}
 	EndGlobalSection
 EndGlobal

@@ -30,6 +30,8 @@ public class Worker : BackgroundService
         var nextComplianceScanUtc = DateTime.MinValue;
         var nextComplianceScoreSnapshotUtc = DateTime.MinValue;
         var nextComplianceDigestCheckUtc = DateTime.MinValue;
+        var nextNotificationDispatchUtc = DateTime.MinValue;
+        var nextComplianceRuleEngineUtc = DateTime.MinValue;
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -55,6 +57,19 @@ public class Worker : BackgroundService
                 var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
                 await ProcessComplianceDigestsAsync(dbContext, configuration, nowUtc, stoppingToken);
                 nextComplianceDigestCheckUtc = nowUtc.AddMinutes(30);
+            }
+
+            if (nowUtc >= nextComplianceRuleEngineUtc)
+            {
+                await ProcessComplianceRuleEngineAsync(dbContext, nowUtc, stoppingToken);
+                nextComplianceRuleEngineUtc = nowUtc.AddMinutes(30);
+            }
+
+            if (nowUtc >= nextNotificationDispatchUtc)
+            {
+                var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+                await ProcessNotificationQueueAsync(dbContext, configuration, nowUtc, stoppingToken);
+                nextNotificationDispatchUtc = nowUtc.AddMinutes(1);
             }
 
             var exportJob = await dbContext.ExportArtifacts
@@ -736,6 +751,355 @@ public class Worker : BackgroundService
                 await dbContext.SaveChangesAsync(cancellationToken);
             }
         }
+    }
+
+    private async Task ProcessNotificationQueueAsync(
+        IApplicationDbContext dbContext,
+        IConfiguration configuration,
+        DateTime nowUtc,
+        CancellationToken cancellationToken)
+    {
+        var dueItems = await dbContext.NotificationQueueItems
+            .Where(x => x.Status == "Queued" && x.ScheduledAtUtc <= nowUtc)
+            .OrderBy(x => x.ScheduledAtUtc)
+            .Take(100)
+            .ToListAsync(cancellationToken);
+
+        if (dueItems.Count == 0)
+        {
+            return;
+        }
+
+        var templates = await dbContext.NotificationTemplates
+            .Where(x => x.IsActive)
+            .ToListAsync(cancellationToken);
+
+        foreach (var item in dueItems)
+        {
+            var template = templates.FirstOrDefault(x =>
+                string.Equals(x.TemplateCode, item.TemplateCode, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(x.Channel, item.Channel, StringComparison.OrdinalIgnoreCase));
+
+            var payload = ParseJsonDictionary(item.PayloadJson);
+            var subject = RenderTemplate(template?.Subject ?? item.TemplateCode, payload);
+            var body = RenderTemplate(template?.Body ?? string.Empty, payload);
+
+            try
+            {
+                var channel = (item.Channel ?? string.Empty).Trim().ToUpperInvariant();
+                switch (channel)
+                {
+                    case "EMAIL":
+                        var emailSend = await TrySendEmailAsync(
+                            configuration,
+                            item.RecipientValue,
+                            string.IsNullOrWhiteSpace(subject) ? item.TemplateCode : subject,
+                            body,
+                            $"<p>{WebUtility.HtmlEncode(body)}</p>",
+                            cancellationToken);
+
+                        if (!emailSend.Sent)
+                        {
+                            item.Status = "Failed";
+                            item.ErrorMessage = emailSend.ErrorMessage ?? "Email send failed.";
+                            item.SentAtUtc = nowUtc;
+                            break;
+                        }
+
+                        item.Status = "Sent";
+                        item.ProviderMessageId = emailSend.Simulated
+                            ? $"SIM-EMAIL-{nowUtc:yyyyMMddHHmmss}"
+                            : $"SMTP-{nowUtc:yyyyMMddHHmmss}";
+                        item.SentAtUtc = nowUtc;
+                        item.ErrorMessage = string.Empty;
+                        break;
+
+                    case "SMS":
+                    case "WHATSAPP":
+                    case "INAPP":
+                    case "IN-APP":
+                        // External providers are not wired yet, so this acts as an operationally successful simulated dispatch.
+                        item.Status = "Sent";
+                        item.ProviderMessageId = $"SIM-{channel}-{nowUtc:yyyyMMddHHmmss}";
+                        item.SentAtUtc = nowUtc;
+                        item.ErrorMessage = string.Empty;
+                        break;
+
+                    default:
+                        item.Status = "Failed";
+                        item.ErrorMessage = $"Unsupported notification channel '{item.Channel}'.";
+                        item.SentAtUtc = nowUtc;
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                item.Status = "Failed";
+                item.SentAtUtc = nowUtc;
+                item.ErrorMessage = ex.Message.Length <= 800 ? ex.Message : ex.Message[..800];
+            }
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task ProcessComplianceRuleEngineAsync(
+        IApplicationDbContext dbContext,
+        DateTime nowUtc,
+        CancellationToken cancellationToken)
+    {
+        var rules = await dbContext.ComplianceRules
+            .Where(x => x.IsEnabled)
+            .ToListAsync(cancellationToken);
+        if (rules.Count == 0)
+        {
+            return;
+        }
+
+        var employees = await dbContext.Employees
+            .Select(x => new
+            {
+                x.Id,
+                x.TenantId,
+                EmployeeName = x.FirstName + " " + x.LastName,
+                x.IsGosiEligible,
+                x.GosiBasicWage,
+                x.BankName,
+                x.BankIban,
+                x.EmployeeNumber,
+                x.IqamaExpiryDate,
+                x.WorkPermitExpiryDate,
+                x.ContractEndDate
+            })
+            .ToListAsync(cancellationToken);
+
+        var profiles = await dbContext.CompanyProfiles
+            .Select(x => new { x.TenantId, x.NitaqatTargetPercent })
+            .ToListAsync(cancellationToken);
+
+        var existingOpenEvents = await dbContext.ComplianceRuleEvents
+            .Where(x => x.Status == "Open")
+            .ToListAsync(cancellationToken);
+
+        foreach (var rule in rules)
+        {
+            var ruleCode = (rule.RuleCode ?? string.Empty).Trim().ToUpperInvariant();
+            var tenantEmployees = employees.Where(x => x.TenantId == rule.TenantId).ToList();
+            if (tenantEmployees.Count == 0)
+            {
+                continue;
+            }
+
+            switch (ruleCode)
+            {
+                case "WPS_MISSING":
+                    foreach (var employee in tenantEmployees)
+                    {
+                        var missingWps = string.IsNullOrWhiteSpace(employee.EmployeeNumber) ||
+                                         string.IsNullOrWhiteSpace(employee.BankName) ||
+                                         string.IsNullOrWhiteSpace(employee.BankIban);
+                        UpsertComplianceRuleEventAsync(
+                            dbContext,
+                            existingOpenEvents,
+                            rule,
+                            employee.Id,
+                            employee.EmployeeName,
+                            "Employee",
+                            employee.Id,
+                            "WPS payment profile is incomplete.",
+                            missingWps,
+                            nowUtc);
+                    }
+                    break;
+
+                case "GOSI_MISSING":
+                    foreach (var employee in tenantEmployees.Where(x => x.IsGosiEligible))
+                    {
+                        var missingGosi = employee.GosiBasicWage <= 0m;
+                        UpsertComplianceRuleEventAsync(
+                            dbContext,
+                            existingOpenEvents,
+                            rule,
+                            employee.Id,
+                            employee.EmployeeName,
+                            "Employee",
+                            employee.Id,
+                            "GOSI eligible employee has missing GOSI basic wage.",
+                            missingGosi,
+                            nowUtc);
+                    }
+                    break;
+
+                case "EXPIRING_DOCS":
+                    foreach (var employee in tenantEmployees)
+                    {
+                        var hasExpiringDoc =
+                            IsExpiringWithin(employee.IqamaExpiryDate, 30, nowUtc.Date) ||
+                            IsExpiringWithin(employee.WorkPermitExpiryDate, 30, nowUtc.Date) ||
+                            IsExpiringWithin(employee.ContractEndDate, 30, nowUtc.Date);
+                        UpsertComplianceRuleEventAsync(
+                            dbContext,
+                            existingOpenEvents,
+                            rule,
+                            employee.Id,
+                            employee.EmployeeName,
+                            "Employee",
+                            employee.Id,
+                            "Employee has compliance document expiring within 30 days.",
+                            hasExpiringDoc,
+                            nowUtc);
+                    }
+                    break;
+
+                case "SAUDIZATION_GAP":
+                    var profile = profiles.FirstOrDefault(x => x.TenantId == rule.TenantId);
+                    var target = profile is null ? 30m : Math.Clamp(profile.NitaqatTargetPercent, 0m, 100m);
+                    var total = tenantEmployees.Count;
+                    var saudiCount = await dbContext.Employees
+                        .Where(x => x.TenantId == rule.TenantId && x.IsSaudiNational)
+                        .CountAsync(cancellationToken);
+                    var percent = total == 0 ? 0m : Math.Round(saudiCount * 100m / total, 1);
+                    var hasGap = percent < target;
+
+                    UpsertComplianceRuleEventAsync(
+                        dbContext,
+                        existingOpenEvents,
+                        rule,
+                        null,
+                        null,
+                        "Tenant",
+                        rule.TenantId,
+                        $"Saudization ratio {percent:F1}% is below configured target {target:F1}%.",
+                        hasGap,
+                        nowUtc);
+                    break;
+            }
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private static void UpsertComplianceRuleEventAsync(
+        IApplicationDbContext dbContext,
+        List<ComplianceRuleEvent> existingOpenEvents,
+        ComplianceRule rule,
+        Guid? employeeId,
+        string? employeeName,
+        string entityType,
+        Guid? entityId,
+        string message,
+        bool shouldBeOpen,
+        DateTime nowUtc)
+    {
+        var existing = existingOpenEvents.FirstOrDefault(x =>
+            x.RuleId == rule.Id &&
+            x.EntityType == entityType &&
+            x.EntityId == entityId &&
+            x.EmployeeId == employeeId &&
+            x.Status == "Open");
+
+        if (shouldBeOpen)
+        {
+            if (existing is null)
+            {
+                var metadata = JsonSerializer.Serialize(new
+                {
+                    ruleCode = rule.RuleCode,
+                    ruleName = rule.RuleName,
+                    severity = rule.Severity,
+                    employeeName
+                });
+
+                var created = new ComplianceRuleEvent
+                {
+                    TenantId = rule.TenantId,
+                    RuleId = rule.Id,
+                    EmployeeId = employeeId,
+                    EntityType = entityType,
+                    EntityId = entityId,
+                    Status = "Open",
+                    TriggeredAtUtc = nowUtc,
+                    Message = message,
+                    MetadataJson = metadata
+                };
+                dbContext.AddEntity(created);
+                existingOpenEvents.Add(created);
+            }
+            else
+            {
+                existing.Message = message;
+                existing.MetadataJson = JsonSerializer.Serialize(new
+                {
+                    ruleCode = rule.RuleCode,
+                    ruleName = rule.RuleName,
+                    severity = rule.Severity,
+                    employeeName
+                });
+                existing.UpdatedAtUtc = nowUtc;
+            }
+
+            return;
+        }
+
+        if (existing is not null)
+        {
+            existing.Status = "Resolved";
+            existing.ResolvedAtUtc = nowUtc;
+            existing.UpdatedAtUtc = nowUtc;
+            existingOpenEvents.Remove(existing);
+        }
+    }
+
+    private static Dictionary<string, string> ParseJsonDictionary(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            }
+
+            return doc.RootElement.EnumerateObject()
+                .ToDictionary(x => x.Name, x => x.Value.ToString(), StringComparer.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    private static string RenderTemplate(string template, IReadOnlyDictionary<string, string> payload)
+    {
+        if (string.IsNullOrEmpty(template) || payload.Count == 0)
+        {
+            return template ?? string.Empty;
+        }
+
+        var output = template;
+        foreach (var (key, value) in payload)
+        {
+            output = output.Replace($"{{{key}}}", value ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        }
+
+        return output;
+    }
+
+    private static bool IsExpiringWithin(DateOnly? expiryDate, int days, DateTime todayUtcDate)
+    {
+        if (!expiryDate.HasValue)
+        {
+            return false;
+        }
+
+        var today = DateOnly.FromDateTime(todayUtcDate);
+        var delta = expiryDate.Value.DayNumber - today.DayNumber;
+        return delta >= 0 && delta <= days;
     }
 
     private static bool ShouldSendDigest(string frequency, int hourUtc, DateTime? lastSentAtUtc, DateTime nowUtc)

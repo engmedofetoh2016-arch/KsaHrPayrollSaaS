@@ -434,6 +434,8 @@ api.MapGet("/me/profile", [Authorize] async (
             x.LastName,
             x.Email,
             x.JobTitle,
+            x.GradeCode,
+            x.LocationCode,
             x.BaseSalary,
             x.EmployeeNumber,
             x.BankName,
@@ -1218,6 +1220,8 @@ api.MapPost("/employees", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.A
         LastName = request.LastName.Trim(),
         Email = request.Email.Trim(),
         JobTitle = request.JobTitle.Trim(),
+        GradeCode = string.IsNullOrWhiteSpace(request.GradeCode) ? "DEFAULT" : request.GradeCode.Trim().ToUpperInvariant(),
+        LocationCode = string.IsNullOrWhiteSpace(request.LocationCode) ? "DEFAULT" : request.LocationCode.Trim().ToUpperInvariant(),
         BaseSalary = request.BaseSalary,
         IsSaudiNational = request.IsSaudiNational,
         IsGosiEligible = request.IsGosiEligible,
@@ -1256,6 +1260,8 @@ api.MapPut("/employees/{employeeId:guid}", [Authorize(Roles = RoleNames.Owner + 
     employee.LastName = request.LastName.Trim();
     employee.Email = request.Email.Trim();
     employee.JobTitle = request.JobTitle.Trim();
+    employee.GradeCode = string.IsNullOrWhiteSpace(request.GradeCode) ? "DEFAULT" : request.GradeCode.Trim().ToUpperInvariant();
+    employee.LocationCode = string.IsNullOrWhiteSpace(request.LocationCode) ? "DEFAULT" : request.LocationCode.Trim().ToUpperInvariant();
     employee.BaseSalary = request.BaseSalary;
     employee.IsSaudiNational = request.IsSaudiNational;
     employee.IsGosiEligible = request.IsGosiEligible;
@@ -6479,6 +6485,12 @@ api.MapPost("/payroll/runs/calculate", [Authorize(Roles = RoleNames.Owner + "," 
             x.EffectiveFrom <= period.PeriodEndDate &&
             (x.EffectiveTo == null || x.EffectiveTo >= period.PeriodStartDate))
         .ToListAsync(cancellationToken);
+    var allowancePolicyMatrices = await dbContext.AllowancePolicyMatrices
+        .Where(x =>
+            x.IsActive &&
+            x.EffectiveFrom <= period.PeriodEndDate &&
+            (x.EffectiveTo == null || x.EffectiveTo >= period.PeriodStartDate))
+        .ToListAsync(cancellationToken);
     var activeLoanIds = await dbContext.EmployeeLoans
         .Where(x => x.Status == "Active")
         .Select(x => x.Id)
@@ -6513,9 +6525,55 @@ api.MapPost("/payroll/runs/calculate", [Authorize(Roles = RoleNames.Owner + "," 
                 string.Equals(x.JobTitle.Trim(), employee.JobTitle.Trim(), StringComparison.OrdinalIgnoreCase))
             .Sum(x => x.MonthlyAmount);
 
+        var employeeGradeCode = string.IsNullOrWhiteSpace(employee.GradeCode)
+            ? "DEFAULT"
+            : employee.GradeCode.Trim().ToUpperInvariant();
+        var employeeLocationCode = string.IsNullOrWhiteSpace(employee.LocationCode)
+            ? "DEFAULT"
+            : employee.LocationCode.Trim().ToUpperInvariant();
+
+        var matrixAllowance = allowancePolicyMatrices
+            .Where(x =>
+                (x.GradeCode == employeeGradeCode || x.GradeCode == "*") &&
+                (x.LocationCode == employeeLocationCode || x.LocationCode == "*"))
+            .Sum(x =>
+            {
+                var monthlyAmount = x.HousingAmount + x.TransportAmount + x.MealAmount;
+                if (monthlyAmount == 0m)
+                {
+                    return 0m;
+                }
+
+                var normalizedProration = string.IsNullOrWhiteSpace(x.ProrationMethod)
+                    ? "CALENDARDAYS"
+                    : x.ProrationMethod.Trim().ToUpperInvariant();
+                if (normalizedProration is "NONE" or "FULLMONTH")
+                {
+                    return monthlyAmount;
+                }
+
+                var effectiveStart = x.EffectiveFrom > period.PeriodStartDate ? x.EffectiveFrom : period.PeriodStartDate;
+                var effectiveEnd = x.EffectiveTo.HasValue && x.EffectiveTo.Value < period.PeriodEndDate
+                    ? x.EffectiveTo.Value
+                    : period.PeriodEndDate;
+                if (effectiveEnd < effectiveStart)
+                {
+                    return 0m;
+                }
+
+                var activeDays = effectiveEnd.DayNumber - effectiveStart.DayNumber + 1;
+                var totalPeriodDays = period.PeriodEndDate.DayNumber - period.PeriodStartDate.DayNumber + 1;
+                if (totalPeriodDays <= 0)
+                {
+                    return 0m;
+                }
+
+                return Math.Round(monthlyAmount * activeDays / totalPeriodDays, 2);
+            });
+
         var allowance = adjustments
             .Where(x => x.EmployeeId == employee.Id && x.Type == PayrollAdjustmentType.Allowance)
-            .Sum(x => x.Amount) + policyAllowance;
+            .Sum(x => x.Amount) + policyAllowance + matrixAllowance;
 
         var manualDeduction = adjustments
             .Where(x => x.EmployeeId == employee.Id && x.Type == PayrollAdjustmentType.Deduction)
@@ -6821,6 +6879,32 @@ api.MapPost("/payroll/runs/{runId:guid}/approve", [Authorize(Roles = RoleNames.O
         return Results.BadRequest(new { error = "Only calculated runs can be approved." });
     }
 
+    var activeStages = await dbContext.PayrollApprovalMatrices
+        .Where(x => x.PayrollScope == "Default" && x.IsActive)
+        .OrderBy(x => x.StageOrder)
+        .ToListAsync(cancellationToken);
+    if (activeStages.Count > 0)
+    {
+        var approvedStageCodes = await dbContext.PayrollApprovalActions
+            .Where(x => x.PayrollRunId == runId && x.ActionType == "Approve" && x.ActionStatus == "Completed")
+            .Select(x => x.StageCode)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var missingStages = activeStages
+            .Where(x => !approvedStageCodes.Contains(x.StageCode))
+            .Select(x => x.StageCode)
+            .ToList();
+        if (missingStages.Count > 0)
+        {
+            return Results.BadRequest(new
+            {
+                error = "Approval matrix is incomplete. Complete all workflow stages first.",
+                missingStages
+            });
+        }
+    }
+
     var findings = await BuildPayrollPreApprovalFindingsAsync(dbContext, run, cancellationToken);
     var blockingFindings = findings.Where(x => string.Equals(x.Severity, "Critical", StringComparison.OrdinalIgnoreCase)).ToList();
     if (blockingFindings.Count > 0)
@@ -6841,6 +6925,15 @@ api.MapPost("/payroll/runs/{runId:guid}/approve", [Authorize(Roles = RoleNames.O
 
     var warningCount = findings.Count(x => string.Equals(x.Severity, "Warning", StringComparison.OrdinalIgnoreCase));
     var findingsSnapshot = EncodeApprovalFindingsSnapshot(findings);
+
+    run.Status = PayrollRunStatus.Approved;
+    run.ApprovedAtUtc = dateTimeProvider.UtcNow;
+    var period = await dbContext.PayrollPeriods.FirstOrDefaultAsync(x => x.Id == run.PayrollPeriodId, cancellationToken);
+    if (period is not null)
+    {
+        period.Status = PayrollRunStatus.Approved;
+    }
+
     dbContext.AddEntity(new AuditLog
     {
         TenantId = run.TenantId,
@@ -6873,6 +6966,32 @@ api.MapPost("/payroll/runs/{runId:guid}/approve-override", [Authorize(Roles = Ro
     if (run.Status != PayrollRunStatus.Calculated)
     {
         return Results.BadRequest(new { error = "Only calculated runs can be approved." });
+    }
+
+    var activeStages = await dbContext.PayrollApprovalMatrices
+        .Where(x => x.PayrollScope == "Default" && x.IsActive)
+        .OrderBy(x => x.StageOrder)
+        .ToListAsync(cancellationToken);
+    if (activeStages.Count > 0)
+    {
+        var approvedStageCodes = await dbContext.PayrollApprovalActions
+            .Where(x => x.PayrollRunId == runId && x.ActionType == "Approve" && x.ActionStatus == "Completed")
+            .Select(x => x.StageCode)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var missingStages = activeStages
+            .Where(x => !approvedStageCodes.Contains(x.StageCode))
+            .Select(x => x.StageCode)
+            .ToList();
+        if (missingStages.Count > 0)
+        {
+            return Results.BadRequest(new
+            {
+                error = "Approval matrix is incomplete. Complete all workflow stages first.",
+                missingStages
+            });
+        }
     }
 
     var findings = await BuildPayrollPreApprovalFindingsAsync(dbContext, run, cancellationToken);
@@ -9334,7 +9453,9 @@ public sealed record CreateEmployeeRequest(
     string IqamaNumber,
     DateOnly? IqamaExpiryDate,
     DateOnly? WorkPermitExpiryDate,
-    DateOnly? ContractEndDate);
+    DateOnly? ContractEndDate,
+    string? GradeCode = null,
+    string? LocationCode = null);
 
 public sealed record UpdateEmployeeRequest(
     DateOnly StartDate,
@@ -9353,7 +9474,9 @@ public sealed record UpdateEmployeeRequest(
     string IqamaNumber,
     DateOnly? IqamaExpiryDate,
     DateOnly? WorkPermitExpiryDate,
-    DateOnly? ContractEndDate);
+    DateOnly? ContractEndDate,
+    string? GradeCode = null,
+    string? LocationCode = null);
 
 public sealed record CreateEmployeeLoginRequest(string Password);
 
@@ -9649,4 +9772,8 @@ public sealed record SmartAlertResponse(
     string Message,
     int? DaysLeft,
     string? DueDate);
+
+public partial class Program
+{
+}
 
