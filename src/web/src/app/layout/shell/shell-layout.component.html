@@ -39,6 +39,7 @@
       }
       @if (canAccessPayroll()) {
         <a routerLink="/payroll" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Payroll', 'الرواتب') }}</a>
+        <a routerLink="/operations-studio" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Operations Studio', 'استوديو العمليات') }}</a>
       }
       @if (canAccessGovernanceRegistry()) {
         <a routerLink="/governance/references" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Reference Registry', 'سجل المراجع') }}</a>

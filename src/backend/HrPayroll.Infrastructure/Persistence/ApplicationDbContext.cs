@@ -49,6 +49,18 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
     public DbSet<ShiftRule> ShiftRuleSet => Set<ShiftRule>();
     public DbSet<TimesheetEntry> TimesheetEntrySet => Set<TimesheetEntry>();
     public DbSet<AllowancePolicy> AllowancePolicySet => Set<AllowancePolicy>();
+    public DbSet<AllowancePolicyMatrix> AllowancePolicyMatrixSet => Set<AllowancePolicyMatrix>();
+    public DbSet<PayrollApprovalMatrix> PayrollApprovalMatrixSet => Set<PayrollApprovalMatrix>();
+    public DbSet<PayrollApprovalAction> PayrollApprovalActionSet => Set<PayrollApprovalAction>();
+    public DbSet<EmployeeSelfServiceRequest> EmployeeSelfServiceRequestSet => Set<EmployeeSelfServiceRequest>();
+    public DbSet<ComplianceRule> ComplianceRuleSet => Set<ComplianceRule>();
+    public DbSet<ComplianceRuleEvent> ComplianceRuleEventSet => Set<ComplianceRuleEvent>();
+    public DbSet<PayrollForecastScenario> PayrollForecastScenarioSet => Set<PayrollForecastScenario>();
+    public DbSet<PayrollForecastResult> PayrollForecastResultSet => Set<PayrollForecastResult>();
+    public DbSet<NotificationTemplate> NotificationTemplateSet => Set<NotificationTemplate>();
+    public DbSet<NotificationQueueItem> NotificationQueueSet => Set<NotificationQueueItem>();
+    public DbSet<DataQualityIssue> DataQualityIssueSet => Set<DataQualityIssue>();
+    public DbSet<DataQualityFixBatch> DataQualityFixBatchSet => Set<DataQualityFixBatch>();
 
     public IQueryable<Tenant> Tenants => TenantSet.AsQueryable();
     public IQueryable<CompanyProfile> CompanyProfiles => CompanyProfileSet.AsQueryable();
@@ -76,6 +88,18 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
     public IQueryable<ShiftRule> ShiftRules => ShiftRuleSet.AsQueryable();
     public IQueryable<TimesheetEntry> TimesheetEntries => TimesheetEntrySet.AsQueryable();
     public IQueryable<AllowancePolicy> AllowancePolicies => AllowancePolicySet.AsQueryable();
+    public IQueryable<AllowancePolicyMatrix> AllowancePolicyMatrices => AllowancePolicyMatrixSet.AsQueryable();
+    public IQueryable<PayrollApprovalMatrix> PayrollApprovalMatrices => PayrollApprovalMatrixSet.AsQueryable();
+    public IQueryable<PayrollApprovalAction> PayrollApprovalActions => PayrollApprovalActionSet.AsQueryable();
+    public IQueryable<EmployeeSelfServiceRequest> EmployeeSelfServiceRequests => EmployeeSelfServiceRequestSet.AsQueryable();
+    public IQueryable<ComplianceRule> ComplianceRules => ComplianceRuleSet.AsQueryable();
+    public IQueryable<ComplianceRuleEvent> ComplianceRuleEvents => ComplianceRuleEventSet.AsQueryable();
+    public IQueryable<PayrollForecastScenario> PayrollForecastScenarios => PayrollForecastScenarioSet.AsQueryable();
+    public IQueryable<PayrollForecastResult> PayrollForecastResults => PayrollForecastResultSet.AsQueryable();
+    public IQueryable<NotificationTemplate> NotificationTemplates => NotificationTemplateSet.AsQueryable();
+    public IQueryable<NotificationQueueItem> NotificationQueueItems => NotificationQueueSet.AsQueryable();
+    public IQueryable<DataQualityIssue> DataQualityIssues => DataQualityIssueSet.AsQueryable();
+    public IQueryable<DataQualityFixBatch> DataQualityFixBatches => DataQualityFixBatchSet.AsQueryable();
 
     public void AddEntity<TEntity>(TEntity entity) where TEntity : class
     {
@@ -125,6 +149,24 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
         modelBuilder.Entity<TimesheetEntry>().HasIndex(x => new { x.TenantId, x.Status, x.WorkDate });
         modelBuilder.Entity<AllowancePolicy>().HasIndex(x => new { x.TenantId, x.IsActive, x.JobTitle });
         modelBuilder.Entity<AllowancePolicy>().HasIndex(x => new { x.TenantId, x.PolicyName }).IsUnique();
+        modelBuilder.Entity<AllowancePolicyMatrix>().HasIndex(x => new { x.TenantId, x.IsActive, x.GradeCode, x.LocationCode });
+        modelBuilder.Entity<AllowancePolicyMatrix>().HasIndex(x => new { x.TenantId, x.GradeCode, x.LocationCode, x.EffectiveFrom }).IsUnique();
+        modelBuilder.Entity<PayrollApprovalMatrix>().HasIndex(x => new { x.TenantId, x.PayrollScope, x.StageCode }).IsUnique();
+        modelBuilder.Entity<PayrollApprovalAction>().HasIndex(x => new { x.TenantId, x.PayrollRunId, x.ActionAtUtc });
+        modelBuilder.Entity<PayrollApprovalAction>().HasIndex(x => new { x.TenantId, x.StageCode, x.ActionStatus });
+        modelBuilder.Entity<EmployeeSelfServiceRequest>().HasIndex(x => new { x.TenantId, x.EmployeeId, x.RequestType, x.Status });
+        modelBuilder.Entity<EmployeeSelfServiceRequest>().HasIndex(x => new { x.TenantId, x.Status, x.CreatedAtUtc });
+        modelBuilder.Entity<ComplianceRule>().HasIndex(x => new { x.TenantId, x.RuleCode }).IsUnique();
+        modelBuilder.Entity<ComplianceRuleEvent>().HasIndex(x => new { x.TenantId, x.Status, x.TriggeredAtUtc });
+        modelBuilder.Entity<ComplianceRuleEvent>().HasIndex(x => new { x.TenantId, x.RuleId, x.Status });
+        modelBuilder.Entity<PayrollForecastScenario>().HasIndex(x => new { x.TenantId, x.CreatedAtUtc });
+        modelBuilder.Entity<PayrollForecastResult>().HasIndex(x => new { x.TenantId, x.ScenarioId, x.ForecastYear, x.ForecastMonth }).IsUnique();
+        modelBuilder.Entity<NotificationTemplate>().HasIndex(x => new { x.TenantId, x.TemplateCode, x.Channel }).IsUnique();
+        modelBuilder.Entity<NotificationQueueItem>().HasIndex(x => new { x.TenantId, x.Status, x.ScheduledAtUtc });
+        modelBuilder.Entity<NotificationQueueItem>().HasIndex(x => new { x.TenantId, x.Channel, x.Status });
+        modelBuilder.Entity<DataQualityIssue>().HasIndex(x => new { x.TenantId, x.IssueStatus, x.Severity, x.DetectedAtUtc });
+        modelBuilder.Entity<DataQualityIssue>().HasIndex(x => new { x.TenantId, x.EntityType, x.EntityId });
+        modelBuilder.Entity<DataQualityFixBatch>().HasIndex(x => new { x.TenantId, x.BatchReference }).IsUnique();
 
         modelBuilder.Entity<CompanyProfile>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
         modelBuilder.Entity<Employee>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
@@ -151,6 +193,18 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
         modelBuilder.Entity<ShiftRule>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
         modelBuilder.Entity<TimesheetEntry>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
         modelBuilder.Entity<AllowancePolicy>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
+        modelBuilder.Entity<AllowancePolicyMatrix>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
+        modelBuilder.Entity<PayrollApprovalMatrix>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
+        modelBuilder.Entity<PayrollApprovalAction>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
+        modelBuilder.Entity<EmployeeSelfServiceRequest>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
+        modelBuilder.Entity<ComplianceRule>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
+        modelBuilder.Entity<ComplianceRuleEvent>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
+        modelBuilder.Entity<PayrollForecastScenario>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
+        modelBuilder.Entity<PayrollForecastResult>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
+        modelBuilder.Entity<NotificationTemplate>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
+        modelBuilder.Entity<NotificationQueueItem>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
+        modelBuilder.Entity<DataQualityIssue>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
+        modelBuilder.Entity<DataQualityFixBatch>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
     }
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

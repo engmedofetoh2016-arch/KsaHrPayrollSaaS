@@ -20,6 +20,7 @@ import { MyLeavePageComponent } from './features/leave/my-leave-page.component';
 import { LoansPageComponent } from './features/loans/loans-page.component';
 import { OffboardingChecklistPageComponent } from './features/offboarding/offboarding-checklist-page.component';
 import { PayrollPageComponent } from './features/payroll/payroll-page.component';
+import { OperationsStudioPageComponent } from './features/operations/operations-studio-page.component';
 import { SmartAlertsPageComponent } from './features/smart-alerts/smart-alerts-page.component';
 import { UsersPageComponent } from './features/users/users-page.component';
 import { ShellLayoutComponent } from './layout/shell/shell-layout.component';
@@ -59,6 +60,7 @@ export const routes: Routes = [
       },
       { path: 'attendance', component: AttendancePageComponent, canActivate: [roleGuard], data: { roles: ['Owner', 'Admin', 'HR', 'Manager'] } },
       { path: 'payroll', component: PayrollPageComponent, canActivate: [roleGuard], data: { roles: ['Owner', 'Admin', 'HR'] } },
+      { path: 'operations-studio', component: OperationsStudioPageComponent, canActivate: [roleGuard], data: { roles: ['Owner', 'Admin', 'HR', 'Manager'] } },
       { path: 'smart-alerts', component: SmartAlertsPageComponent, canActivate: [roleGuard], data: { roles: ['Owner', 'Admin', 'HR', 'Manager'] } },
       { path: 'governance/references', component: ReferenceRegistryPageComponent, canActivate: [roleGuard], data: { roles: ['Owner', 'Admin', 'HR', 'Manager'] } },
       { path: 'users', component: UsersPageComponent, canActivate: [roleGuard], data: { roles: ['Owner', 'Admin'] } },

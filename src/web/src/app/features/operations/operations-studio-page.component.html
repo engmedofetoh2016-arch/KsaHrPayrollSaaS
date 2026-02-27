@@ -1,0 +1,104 @@
+<section class="ops-page">
+  <header>
+    <h1>{{ i18n.text('Operations Studio', 'استوديو العمليات') }}</h1>
+    <p>{{ i18n.text('Configure payroll workflows, compliance rules, forecasting, notifications, and data quality.', 'تهيئة سير عمل الرواتب وقواعد الامتثال والتنبؤات والإشعارات وجودة البيانات.') }}</p>
+    <button type="button" (click)="refresh()" [disabled]="loading() || saving()">{{ i18n.text('Refresh', 'تحديث') }}</button>
+  </header>
+
+  @if (error()) {
+    <p class="error">{{ error() }}</p>
+  }
+  @if (message()) {
+    <p class="message">{{ message() }}</p>
+  }
+
+  <div class="grid">
+    <article>
+      <h2>{{ i18n.text('Allowance Matrix', 'مصفوفة البدلات') }}</h2>
+      <div class="form">
+        <input [(ngModel)]="allowanceForm.policyName" placeholder="Policy Name" />
+        <input [(ngModel)]="allowanceForm.gradeCode" placeholder="Grade" />
+        <input [(ngModel)]="allowanceForm.locationCode" placeholder="Location" />
+        <input [(ngModel)]="allowanceForm.housingAmount" type="number" placeholder="Housing" />
+        <input [(ngModel)]="allowanceForm.transportAmount" type="number" placeholder="Transport" />
+        <input [(ngModel)]="allowanceForm.mealAmount" type="number" placeholder="Meal" />
+        <input [(ngModel)]="allowanceForm.effectiveFrom" type="date" />
+        <button type="button" (click)="saveAllowanceMatrix()" [disabled]="saving()">{{ i18n.text('Save Matrix Row', 'حفظ سطر المصفوفة') }}</button>
+      </div>
+      <small>{{ allowanceMatrix().length }} {{ i18n.text('rows', 'سجل') }}</small>
+    </article>
+
+    <article>
+      <h2>{{ i18n.text('Payroll Approval Matrix', 'مصفوفة اعتماد الرواتب') }}</h2>
+      <div class="form">
+        <button type="button" (click)="seedApprovalMatrix()" [disabled]="saving()">{{ i18n.text('Seed Default Flow', 'تهيئة المسار الافتراضي') }}</button>
+        <input [(ngModel)]="stageForm.stageCode" placeholder="Stage Code" />
+        <input [(ngModel)]="stageForm.stageName" placeholder="Stage Name" />
+        <input [(ngModel)]="stageForm.stageOrder" type="number" placeholder="Order" />
+        <input [(ngModel)]="stageForm.approverRole" placeholder="Approver Role" />
+        <button type="button" (click)="saveApprovalStage()" [disabled]="saving()">{{ i18n.text('Save Stage', 'حفظ المرحلة') }}</button>
+      </div>
+      <small>{{ approvalMatrix().length }} {{ i18n.text('active stages', 'مرحلة نشطة') }}</small>
+    </article>
+
+    <article>
+      <h2>{{ i18n.text('Compliance Rules Studio', 'استوديو قواعد الامتثال') }}</h2>
+      <div class="form">
+        <input [(ngModel)]="ruleForm.ruleCode" placeholder="Rule Code" />
+        <input [(ngModel)]="ruleForm.ruleName" placeholder="Rule Name" />
+        <input [(ngModel)]="ruleForm.ruleCategory" placeholder="Category" />
+        <input [(ngModel)]="ruleForm.severity" placeholder="Severity" />
+        <textarea [(ngModel)]="ruleForm.ruleConfigJson" rows="3" placeholder="Rule Config JSON"></textarea>
+        <button type="button" (click)="saveComplianceRule()" [disabled]="saving()">{{ i18n.text('Save Rule', 'حفظ القاعدة') }}</button>
+      </div>
+      <small>{{ complianceRules().length }} {{ i18n.text('enabled rules', 'قاعدة مفعلة') }}</small>
+    </article>
+
+    <article>
+      <h2>{{ i18n.text('Analytics & Forecasting', 'التحليلات والتنبؤ') }}</h2>
+      <div class="form">
+        <input [(ngModel)]="forecastForm.scenarioName" placeholder="Scenario Name" />
+        <input [(ngModel)]="forecastForm.plannedSaudiHires" type="number" placeholder="Saudi Hires" />
+        <input [(ngModel)]="forecastForm.plannedNonSaudiHires" type="number" placeholder="Non-Saudi Hires" />
+        <input [(ngModel)]="forecastForm.plannedAttrition" type="number" placeholder="Attrition" />
+        <input [(ngModel)]="forecastForm.plannedSalaryDeltaPercent" type="number" placeholder="Salary Delta %" />
+        <button type="button" (click)="createForecastScenario()" [disabled]="saving()">{{ i18n.text('Create Scenario', 'إنشاء سيناريو') }}</button>
+      </div>
+      <ul>
+        @for (item of forecastScenarios(); track item.id) {
+          <li>
+            {{ item.scenarioName }}
+            <button type="button" (click)="runForecastScenario(item.id)" [disabled]="saving()">{{ i18n.text('Run', 'تشغيل') }}</button>
+          </li>
+        }
+      </ul>
+    </article>
+
+    <article>
+      <h2>{{ i18n.text('Notification Center', 'مركز الإشعارات') }}</h2>
+      <div class="form">
+        <input [(ngModel)]="templateForm.templateCode" placeholder="Template Code" />
+        <input [(ngModel)]="templateForm.channel" placeholder="Channel" />
+        <input [(ngModel)]="templateForm.subject" placeholder="Subject" />
+        <textarea [(ngModel)]="templateForm.body" rows="2" placeholder="Body"></textarea>
+        <button type="button" (click)="saveNotificationTemplate()" [disabled]="saving()">{{ i18n.text('Save Template', 'حفظ القالب') }}</button>
+      </div>
+      <div class="form">
+        <input [(ngModel)]="queueForm.recipientValue" placeholder="Recipient" />
+        <input [(ngModel)]="queueForm.channel" placeholder="Channel" />
+        <input [(ngModel)]="queueForm.templateCode" placeholder="Template Code" />
+        <button type="button" (click)="enqueueNotification()" [disabled]="saving()">{{ i18n.text('Queue Notification', 'جدولة الإشعار') }}</button>
+      </div>
+      <small>{{ notificationTemplates().length }} {{ i18n.text('templates', 'قالب') }}, {{ notificationQueue().length }} {{ i18n.text('queue records', 'سجل انتظار') }}</small>
+    </article>
+
+    <article>
+      <h2>{{ i18n.text('Data Quality & Reconciliation', 'جودة البيانات والمطابقة') }}</h2>
+      <div class="form">
+        <button type="button" (click)="runDataQualityScan()" [disabled]="saving()">{{ i18n.text('Run Scan', 'تشغيل الفحص') }}</button>
+        <button type="button" (click)="fixOpenIssues()" [disabled]="saving()">{{ i18n.text('Apply Auto Fixes', 'تطبيق الإصلاحات التلقائية') }}</button>
+      </div>
+      <small>{{ dataQualityIssues().length }} {{ i18n.text('open issues', 'مشكلة مفتوحة') }}</small>
+    </article>
+  </div>
+</section>

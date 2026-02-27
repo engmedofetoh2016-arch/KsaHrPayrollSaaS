@@ -30,6 +30,18 @@ public interface IApplicationDbContext
     IQueryable<ShiftRule> ShiftRules { get; }
     IQueryable<TimesheetEntry> TimesheetEntries { get; }
     IQueryable<AllowancePolicy> AllowancePolicies { get; }
+    IQueryable<AllowancePolicyMatrix> AllowancePolicyMatrices { get; }
+    IQueryable<PayrollApprovalMatrix> PayrollApprovalMatrices { get; }
+    IQueryable<PayrollApprovalAction> PayrollApprovalActions { get; }
+    IQueryable<EmployeeSelfServiceRequest> EmployeeSelfServiceRequests { get; }
+    IQueryable<ComplianceRule> ComplianceRules { get; }
+    IQueryable<ComplianceRuleEvent> ComplianceRuleEvents { get; }
+    IQueryable<PayrollForecastScenario> PayrollForecastScenarios { get; }
+    IQueryable<PayrollForecastResult> PayrollForecastResults { get; }
+    IQueryable<NotificationTemplate> NotificationTemplates { get; }
+    IQueryable<NotificationQueueItem> NotificationQueueItems { get; }
+    IQueryable<DataQualityIssue> DataQualityIssues { get; }
+    IQueryable<DataQualityFixBatch> DataQualityFixBatches { get; }
 
     void AddEntity<TEntity>(TEntity entity) where TEntity : class;
     void RemoveEntities<TEntity>(IEnumerable<TEntity> entities) where TEntity : class;

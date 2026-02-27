@@ -20,6 +20,7 @@ using System.Net.Mail;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -3126,6 +3127,1186 @@ api.MapPost("/payroll/allowance-policies", [Authorize(Roles = RoleNames.Owner + 
     return Results.Ok(new { policyName });
 })
     .AddEndpointFilter<ValidationFilter<UpsertAllowancePolicyRequest>>();
+
+api.MapGet("/payroll/allowance-policy-matrix", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    bool? activeOnly,
+    string? gradeCode,
+    string? locationCode,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var query = dbContext.AllowancePolicyMatrices.AsQueryable();
+    if (activeOnly.GetValueOrDefault())
+    {
+        query = query.Where(x => x.IsActive);
+    }
+
+    if (!string.IsNullOrWhiteSpace(gradeCode))
+    {
+        var grade = gradeCode.Trim();
+        query = query.Where(x => x.GradeCode == grade);
+    }
+
+    if (!string.IsNullOrWhiteSpace(locationCode))
+    {
+        var location = locationCode.Trim();
+        query = query.Where(x => x.LocationCode == location);
+    }
+
+    var rows = await query
+        .OrderBy(x => x.GradeCode)
+        .ThenBy(x => x.LocationCode)
+        .ThenByDescending(x => x.EffectiveFrom)
+        .Select(x => new
+        {
+            x.Id,
+            x.PolicyName,
+            x.GradeCode,
+            x.LocationCode,
+            x.HousingAmount,
+            x.TransportAmount,
+            x.MealAmount,
+            x.ProrationMethod,
+            x.EffectiveFrom,
+            x.EffectiveTo,
+            x.IsTaxable,
+            x.IsActive
+        })
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(rows);
+});
+
+api.MapPost("/payroll/allowance-policy-matrix", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    UpsertAllowancePolicyMatrixRequest request,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var gradeCode = request.GradeCode.Trim().ToUpperInvariant();
+    var locationCode = request.LocationCode.Trim().ToUpperInvariant();
+    var policyName = request.PolicyName.Trim();
+
+    var existing = await dbContext.AllowancePolicyMatrices.FirstOrDefaultAsync(x =>
+        x.GradeCode == gradeCode &&
+        x.LocationCode == locationCode &&
+        x.EffectiveFrom == request.EffectiveFrom,
+        cancellationToken);
+
+    if (existing is null)
+    {
+        dbContext.AddEntity(new AllowancePolicyMatrix
+        {
+            PolicyName = policyName,
+            GradeCode = gradeCode,
+            LocationCode = locationCode,
+            HousingAmount = Math.Round(request.HousingAmount, 2),
+            TransportAmount = Math.Round(request.TransportAmount, 2),
+            MealAmount = Math.Round(request.MealAmount, 2),
+            ProrationMethod = string.IsNullOrWhiteSpace(request.ProrationMethod) ? "CalendarDays" : request.ProrationMethod.Trim(),
+            EffectiveFrom = request.EffectiveFrom,
+            EffectiveTo = request.EffectiveTo,
+            IsTaxable = request.IsTaxable,
+            IsActive = request.IsActive
+        });
+    }
+    else
+    {
+        existing.PolicyName = policyName;
+        existing.HousingAmount = Math.Round(request.HousingAmount, 2);
+        existing.TransportAmount = Math.Round(request.TransportAmount, 2);
+        existing.MealAmount = Math.Round(request.MealAmount, 2);
+        existing.ProrationMethod = string.IsNullOrWhiteSpace(request.ProrationMethod) ? "CalendarDays" : request.ProrationMethod.Trim();
+        existing.EffectiveTo = request.EffectiveTo;
+        existing.IsTaxable = request.IsTaxable;
+        existing.IsActive = request.IsActive;
+    }
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { policyName, gradeCode, locationCode });
+});
+
+api.MapGet("/payroll/approval-matrix", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    string? payrollScope,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var scope = string.IsNullOrWhiteSpace(payrollScope) ? "Default" : payrollScope.Trim();
+    var rows = await dbContext.PayrollApprovalMatrices
+        .Where(x => x.PayrollScope == scope && x.IsActive)
+        .OrderBy(x => x.StageOrder)
+        .Select(x => new
+        {
+            x.Id,
+            x.PayrollScope,
+            x.StageCode,
+            x.StageName,
+            x.StageOrder,
+            x.ApproverRole,
+            x.AllowRollback,
+            x.IsActive
+        })
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(rows);
+});
+
+api.MapPost("/payroll/approval-matrix", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin)] async (
+    UpsertPayrollApprovalStageRequest request,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var scope = string.IsNullOrWhiteSpace(request.PayrollScope) ? "Default" : request.PayrollScope.Trim();
+    var stageCode = request.StageCode.Trim().ToUpperInvariant();
+
+    var existing = await dbContext.PayrollApprovalMatrices
+        .FirstOrDefaultAsync(x => x.PayrollScope == scope && x.StageCode == stageCode, cancellationToken);
+
+    if (existing is null)
+    {
+        dbContext.AddEntity(new PayrollApprovalMatrix
+        {
+            PayrollScope = scope,
+            StageCode = stageCode,
+            StageName = request.StageName.Trim(),
+            StageOrder = request.StageOrder,
+            ApproverRole = request.ApproverRole.Trim(),
+            AllowRollback = request.AllowRollback,
+            IsActive = request.IsActive
+        });
+    }
+    else
+    {
+        existing.StageName = request.StageName.Trim();
+        existing.StageOrder = request.StageOrder;
+        existing.ApproverRole = request.ApproverRole.Trim();
+        existing.AllowRollback = request.AllowRollback;
+        existing.IsActive = request.IsActive;
+    }
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { scope, stageCode });
+});
+
+api.MapPost("/payroll/approval-matrix/seed-default", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin)] async (
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var rows = await dbContext.PayrollApprovalMatrices
+        .Where(x => x.PayrollScope == "Default")
+        .ToListAsync(cancellationToken);
+
+    if (rows.Count > 0)
+    {
+        dbContext.RemoveEntities(rows);
+    }
+
+    dbContext.AddEntity(new PayrollApprovalMatrix { PayrollScope = "Default", StageCode = "REVIEWER", StageName = "Reviewer", StageOrder = 1, ApproverRole = RoleNames.Manager, AllowRollback = true, IsActive = true });
+    dbContext.AddEntity(new PayrollApprovalMatrix { PayrollScope = "Default", StageCode = "FINANCE", StageName = "Finance", StageOrder = 2, ApproverRole = RoleNames.Admin, AllowRollback = true, IsActive = true });
+    dbContext.AddEntity(new PayrollApprovalMatrix { PayrollScope = "Default", StageCode = "FINAL", StageName = "Final Approval", StageOrder = 3, ApproverRole = RoleNames.Owner, AllowRollback = true, IsActive = true });
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { seeded = true, scope = "Default", stages = 3 });
+});
+
+api.MapGet("/payroll/runs/{runId:guid}/workflow/actions", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    Guid runId,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var run = await dbContext.PayrollRuns.FirstOrDefaultAsync(x => x.Id == runId, cancellationToken);
+    if (run is null)
+    {
+        return Results.NotFound(new { error = "Payroll run not found." });
+    }
+
+    var items = await dbContext.PayrollApprovalActions
+        .Where(x => x.PayrollRunId == runId)
+        .OrderByDescending(x => x.ActionAtUtc)
+        .Select(x => new
+        {
+            x.Id,
+            x.StageCode,
+            x.ActionType,
+            x.ActionStatus,
+            x.ActorUserId,
+            x.ActionAtUtc,
+            x.Reason,
+            x.ReferenceId,
+            x.RolledBackActionId,
+            x.MetadataJson
+        })
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(new { runId, items });
+});
+
+api.MapPost("/payroll/runs/{runId:guid}/workflow/actions", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    Guid runId,
+    PayrollWorkflowActionRequest request,
+    HttpContext httpContext,
+    IApplicationDbContext dbContext,
+    IDateTimeProvider dateTimeProvider,
+    CancellationToken cancellationToken) =>
+{
+    var run = await dbContext.PayrollRuns.FirstOrDefaultAsync(x => x.Id == runId, cancellationToken);
+    if (run is null)
+    {
+        return Results.NotFound(new { error = "Payroll run not found." });
+    }
+
+    if (run.Status == PayrollRunStatus.Locked)
+    {
+        return Results.BadRequest(new { error = "Locked payroll cannot be changed." });
+    }
+
+    var stageCode = request.StageCode.Trim().ToUpperInvariant();
+    var stage = await dbContext.PayrollApprovalMatrices
+        .FirstOrDefaultAsync(x => x.PayrollScope == "Default" && x.StageCode == stageCode && x.IsActive, cancellationToken);
+    if (stage is null)
+    {
+        return Results.BadRequest(new { error = $"Stage '{stageCode}' is not configured." });
+    }
+
+    var allowedRoles = httpContext.User.Claims
+        .Where(x => x.Type == ClaimTypes.Role)
+        .Select(x => x.Value)
+        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    if (!allowedRoles.Contains(stage.ApproverRole) && !allowedRoles.Contains(RoleNames.Owner) && !allowedRoles.Contains(RoleNames.Admin))
+    {
+        return Results.Forbid();
+    }
+
+    var actionType = request.ActionType.Trim();
+    var nowUtc = dateTimeProvider.UtcNow;
+    var actorUserId = Guid.TryParse(httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier), out var parsedUserId)
+        ? parsedUserId
+        : (Guid?)null;
+
+    if (string.Equals(actionType, "Approve", StringComparison.OrdinalIgnoreCase))
+    {
+        var activeStages = await dbContext.PayrollApprovalMatrices
+            .Where(x => x.PayrollScope == "Default" && x.IsActive)
+            .OrderBy(x => x.StageOrder)
+            .ToListAsync(cancellationToken);
+        var currentStage = activeStages.FirstOrDefault(x => x.StageCode == stageCode);
+        if (currentStage is null)
+        {
+            return Results.BadRequest(new { error = "Invalid stage setup." });
+        }
+
+        var previousStages = activeStages.Where(x => x.StageOrder < currentStage.StageOrder).Select(x => x.StageCode).ToList();
+        if (previousStages.Count > 0)
+        {
+            var approvedStageCodes = await dbContext.PayrollApprovalActions
+                .Where(x => x.PayrollRunId == runId && x.ActionType == "Approve" && x.ActionStatus == "Completed")
+                .Select(x => x.StageCode)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+
+            var missing = previousStages.Where(x => !approvedStageCodes.Contains(x)).ToList();
+            if (missing.Count > 0)
+            {
+                return Results.BadRequest(new { error = "Approval sequence is invalid.", missingStages = missing });
+            }
+        }
+
+        dbContext.AddEntity(new PayrollApprovalAction
+        {
+            PayrollRunId = runId,
+            StageCode = stageCode,
+            ActionType = "Approve",
+            ActionStatus = "Completed",
+            ActorUserId = actorUserId,
+            ActionAtUtc = nowUtc,
+            Reason = request.Reason?.Trim() ?? string.Empty,
+            ReferenceId = request.ReferenceId?.Trim() ?? string.Empty,
+            MetadataJson = request.MetadataJson?.Trim() ?? "{}"
+        });
+
+        var lastStageOrder = activeStages.Max(x => x.StageOrder);
+        if (currentStage.StageOrder == lastStageOrder)
+        {
+            run.Status = PayrollRunStatus.Approved;
+            run.ApprovedAtUtc = nowUtc;
+            var period = await dbContext.PayrollPeriods.FirstOrDefaultAsync(x => x.Id == run.PayrollPeriodId, cancellationToken);
+            if (period is not null)
+            {
+                period.Status = PayrollRunStatus.Approved;
+            }
+        }
+    }
+    else if (string.Equals(actionType, "Reject", StringComparison.OrdinalIgnoreCase))
+    {
+        dbContext.AddEntity(new PayrollApprovalAction
+        {
+            PayrollRunId = runId,
+            StageCode = stageCode,
+            ActionType = "Reject",
+            ActionStatus = "Completed",
+            ActorUserId = actorUserId,
+            ActionAtUtc = nowUtc,
+            Reason = request.Reason?.Trim() ?? string.Empty,
+            ReferenceId = request.ReferenceId?.Trim() ?? string.Empty,
+            MetadataJson = request.MetadataJson?.Trim() ?? "{}"
+        });
+
+        run.Status = PayrollRunStatus.Calculated;
+        run.ApprovedAtUtc = null;
+        var period = await dbContext.PayrollPeriods.FirstOrDefaultAsync(x => x.Id == run.PayrollPeriodId, cancellationToken);
+        if (period is not null)
+        {
+            period.Status = PayrollRunStatus.Calculated;
+        }
+    }
+    else if (string.Equals(actionType, "Rollback", StringComparison.OrdinalIgnoreCase))
+    {
+        if (!stage.AllowRollback)
+        {
+            return Results.BadRequest(new { error = $"Rollback is disabled for stage '{stageCode}'." });
+        }
+
+        if (!request.RolledBackActionId.HasValue)
+        {
+            return Results.BadRequest(new { error = "RolledBackActionId is required for rollback." });
+        }
+
+        var rolledBackAction = await dbContext.PayrollApprovalActions
+            .FirstOrDefaultAsync(x => x.Id == request.RolledBackActionId.Value && x.PayrollRunId == runId, cancellationToken);
+        if (rolledBackAction is null)
+        {
+            return Results.BadRequest(new { error = "Referenced action was not found for this run." });
+        }
+
+        dbContext.AddEntity(new PayrollApprovalAction
+        {
+            PayrollRunId = runId,
+            StageCode = stageCode,
+            ActionType = "Rollback",
+            ActionStatus = "Completed",
+            ActorUserId = actorUserId,
+            ActionAtUtc = nowUtc,
+            Reason = request.Reason?.Trim() ?? string.Empty,
+            ReferenceId = request.ReferenceId?.Trim() ?? string.Empty,
+            RolledBackActionId = request.RolledBackActionId,
+            MetadataJson = request.MetadataJson?.Trim() ?? "{}"
+        });
+
+        run.Status = PayrollRunStatus.Calculated;
+        run.ApprovedAtUtc = null;
+        var period = await dbContext.PayrollPeriods.FirstOrDefaultAsync(x => x.Id == run.PayrollPeriodId, cancellationToken);
+        if (period is not null)
+        {
+            period.Status = PayrollRunStatus.Calculated;
+        }
+    }
+    else
+    {
+        return Results.BadRequest(new { error = "ActionType must be Approve, Reject, or Rollback." });
+    }
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { runId = run.Id, runStatus = run.Status, stageCode, actionType });
+});
+
+api.MapGet("/me/self-service/requests", [Authorize(Roles = RoleNames.Employee)] async (
+    HttpContext httpContext,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var userEmail = httpContext.User.Claims
+        .Where(x => x.Type is "email" or ClaimTypes.Email)
+        .Select(x => x.Value)
+        .FirstOrDefault();
+    if (string.IsNullOrWhiteSpace(userEmail))
+    {
+        return Results.BadRequest(new { error = "User email not found." });
+    }
+
+    var normalizedEmail = userEmail.Trim().ToUpperInvariant();
+    var employeeId = await dbContext.Employees
+        .Where(x => x.Email.ToUpper() == normalizedEmail)
+        .Select(x => (Guid?)x.Id)
+        .FirstOrDefaultAsync(cancellationToken);
+    if (!employeeId.HasValue)
+    {
+        return Results.NotFound(new { error = "Employee profile not found." });
+    }
+
+    var items = await dbContext.EmployeeSelfServiceRequests
+        .Where(x => x.EmployeeId == employeeId.Value)
+        .OrderByDescending(x => x.CreatedAtUtc)
+        .Select(x => new
+        {
+            x.Id,
+            x.RequestType,
+            x.Status,
+            x.PayloadJson,
+            x.ReviewerUserId,
+            x.ReviewedAtUtc,
+            x.ResolutionNotes,
+            x.CreatedAtUtc
+        })
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(new { items });
+});
+
+api.MapPost("/me/self-service/requests", [Authorize(Roles = RoleNames.Employee)] async (
+    CreateEmployeeSelfServiceRequest request,
+    HttpContext httpContext,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var userEmail = httpContext.User.Claims
+        .Where(x => x.Type is "email" or ClaimTypes.Email)
+        .Select(x => x.Value)
+        .FirstOrDefault();
+    if (string.IsNullOrWhiteSpace(userEmail))
+    {
+        return Results.BadRequest(new { error = "User email not found." });
+    }
+
+    var normalizedEmail = userEmail.Trim().ToUpperInvariant();
+    var employeeId = await dbContext.Employees
+        .Where(x => x.Email.ToUpper() == normalizedEmail)
+        .Select(x => (Guid?)x.Id)
+        .FirstOrDefaultAsync(cancellationToken);
+    if (!employeeId.HasValue)
+    {
+        return Results.NotFound(new { error = "Employee profile not found." });
+    }
+
+    var item = new EmployeeSelfServiceRequest
+    {
+        EmployeeId = employeeId.Value,
+        RequestType = request.RequestType.Trim(),
+        Status = "Submitted",
+        PayloadJson = string.IsNullOrWhiteSpace(request.PayloadJson) ? "{}" : request.PayloadJson.Trim()
+    };
+
+    dbContext.AddEntity(item);
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Created($"/api/me/self-service/requests/{item.Id}", new { item.Id, item.Status });
+});
+
+api.MapPost("/self-service/requests/{requestId:guid}/review", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    Guid requestId,
+    ReviewEmployeeSelfServiceRequest request,
+    HttpContext httpContext,
+    IApplicationDbContext dbContext,
+    IDateTimeProvider dateTimeProvider,
+    CancellationToken cancellationToken) =>
+{
+    var item = await dbContext.EmployeeSelfServiceRequests.FirstOrDefaultAsync(x => x.Id == requestId, cancellationToken);
+    if (item is null)
+    {
+        return Results.NotFound(new { error = "Self-service request not found." });
+    }
+
+    item.Status = request.Approved ? "Approved" : "Rejected";
+    item.ReviewedAtUtc = dateTimeProvider.UtcNow;
+    item.ReviewerUserId = Guid.TryParse(httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier), out var parsedUserId)
+        ? parsedUserId
+        : null;
+    item.ResolutionNotes = request.ResolutionNotes?.Trim() ?? string.Empty;
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { item.Id, item.Status, item.ReviewedAtUtc });
+});
+
+api.MapGet("/compliance/rules", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    bool? enabledOnly,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var query = dbContext.ComplianceRules.AsQueryable();
+    if (enabledOnly.GetValueOrDefault())
+    {
+        query = query.Where(x => x.IsEnabled);
+    }
+
+    var rows = await query
+        .OrderBy(x => x.RuleCategory)
+        .ThenBy(x => x.RuleCode)
+        .Select(x => new
+        {
+            x.Id,
+            x.RuleCode,
+            x.RuleName,
+            x.RuleCategory,
+            x.Severity,
+            x.IsEnabled,
+            x.RuleConfigJson
+        })
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(new { items = rows });
+});
+
+api.MapPost("/compliance/rules", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    UpsertComplianceRuleRequest request,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var ruleCode = request.RuleCode.Trim().ToUpperInvariant();
+    var existing = await dbContext.ComplianceRules.FirstOrDefaultAsync(x => x.RuleCode == ruleCode, cancellationToken);
+    if (existing is null)
+    {
+        dbContext.AddEntity(new ComplianceRule
+        {
+            RuleCode = ruleCode,
+            RuleName = request.RuleName.Trim(),
+            RuleCategory = request.RuleCategory.Trim(),
+            RuleConfigJson = string.IsNullOrWhiteSpace(request.RuleConfigJson) ? "{}" : request.RuleConfigJson.Trim(),
+            Severity = request.Severity.Trim(),
+            IsEnabled = request.IsEnabled
+        });
+    }
+    else
+    {
+        existing.RuleName = request.RuleName.Trim();
+        existing.RuleCategory = request.RuleCategory.Trim();
+        existing.RuleConfigJson = string.IsNullOrWhiteSpace(request.RuleConfigJson) ? "{}" : request.RuleConfigJson.Trim();
+        existing.Severity = request.Severity.Trim();
+        existing.IsEnabled = request.IsEnabled;
+    }
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { ruleCode });
+});
+
+api.MapGet("/compliance/rules/events", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    string? status,
+    int? take,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var safeTake = Math.Clamp(take ?? 200, 1, 1000);
+    var query = dbContext.ComplianceRuleEvents.AsQueryable();
+    if (!string.IsNullOrWhiteSpace(status))
+    {
+        var normalized = status.Trim();
+        query = query.Where(x => x.Status == normalized);
+    }
+
+    var items = await query
+        .OrderByDescending(x => x.TriggeredAtUtc)
+        .Take(safeTake)
+        .Select(x => new
+        {
+            x.Id,
+            x.RuleId,
+            x.EmployeeId,
+            x.EntityType,
+            x.EntityId,
+            x.Status,
+            x.TriggeredAtUtc,
+            x.ResolvedAtUtc,
+            x.Message,
+            x.MetadataJson
+        })
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(new { items });
+});
+
+api.MapPost("/compliance/rules/{ruleId:guid}/events", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    Guid ruleId,
+    CreateComplianceRuleEventRequest request,
+    IDateTimeProvider dateTimeProvider,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var rule = await dbContext.ComplianceRules.FirstOrDefaultAsync(x => x.Id == ruleId, cancellationToken);
+    if (rule is null)
+    {
+        return Results.NotFound(new { error = "Compliance rule not found." });
+    }
+
+    var item = new ComplianceRuleEvent
+    {
+        RuleId = ruleId,
+        EmployeeId = request.EmployeeId,
+        EntityType = request.EntityType.Trim(),
+        EntityId = request.EntityId,
+        Status = request.Status.Trim(),
+        TriggeredAtUtc = dateTimeProvider.UtcNow,
+        Message = request.Message.Trim(),
+        MetadataJson = string.IsNullOrWhiteSpace(request.MetadataJson) ? "{}" : request.MetadataJson.Trim()
+    };
+
+    dbContext.AddEntity(item);
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Created($"/api/compliance/rules/events/{item.Id}", new { item.Id, item.Status });
+});
+
+api.MapGet("/analytics/payroll-forecast/scenarios", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var items = await dbContext.PayrollForecastScenarios
+        .OrderByDescending(x => x.CreatedAtUtc)
+        .Select(x => new
+        {
+            x.Id,
+            x.ScenarioName,
+            x.BasePayrollRunId,
+            x.PlannedSaudiHires,
+            x.PlannedNonSaudiHires,
+            x.PlannedAttrition,
+            x.PlannedSalaryDeltaPercent,
+            x.AssumptionsJson,
+            x.CreatedByUserId,
+            x.CreatedAtUtc
+        })
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(new { items });
+});
+
+api.MapPost("/analytics/payroll-forecast/scenarios", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    CreatePayrollForecastScenarioRequest request,
+    HttpContext httpContext,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var actorUserId = Guid.TryParse(httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier), out var parsedUserId)
+        ? parsedUserId
+        : (Guid?)null;
+
+    var scenario = new PayrollForecastScenario
+    {
+        ScenarioName = request.ScenarioName.Trim(),
+        BasePayrollRunId = request.BasePayrollRunId,
+        PlannedSaudiHires = request.PlannedSaudiHires,
+        PlannedNonSaudiHires = request.PlannedNonSaudiHires,
+        PlannedAttrition = request.PlannedAttrition,
+        PlannedSalaryDeltaPercent = request.PlannedSalaryDeltaPercent,
+        AssumptionsJson = string.IsNullOrWhiteSpace(request.AssumptionsJson) ? "{}" : request.AssumptionsJson.Trim(),
+        CreatedByUserId = actorUserId
+    };
+
+    dbContext.AddEntity(scenario);
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Created($"/api/analytics/payroll-forecast/scenarios/{scenario.Id}", new { scenario.Id });
+});
+
+api.MapPost("/analytics/payroll-forecast/scenarios/{scenarioId:guid}/run", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    Guid scenarioId,
+    int? forecastYear,
+    int? forecastMonth,
+    IDateTimeProvider dateTimeProvider,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var scenario = await dbContext.PayrollForecastScenarios.FirstOrDefaultAsync(x => x.Id == scenarioId, cancellationToken);
+    if (scenario is null)
+    {
+        return Results.NotFound(new { error = "Scenario not found." });
+    }
+
+    var targetDate = new DateTime((forecastYear ?? dateTimeProvider.UtcNow.Year), (forecastMonth ?? dateTimeProvider.UtcNow.Month), 1);
+    var latestRun = await dbContext.PayrollRuns
+        .Where(x => x.Status == PayrollRunStatus.Approved || x.Status == PayrollRunStatus.Locked)
+        .OrderByDescending(x => x.CreatedAtUtc)
+        .FirstOrDefaultAsync(cancellationToken);
+    if (latestRun is null)
+    {
+        return Results.BadRequest(new { error = "No approved payroll baseline found." });
+    }
+
+    var baselineCost = await dbContext.PayrollLines
+        .Where(x => x.PayrollRunId == latestRun.Id)
+        .SumAsync(x => x.NetAmount, cancellationToken);
+    var baselineHeadcount = await dbContext.PayrollLines
+        .Where(x => x.PayrollRunId == latestRun.Id)
+        .Select(x => x.EmployeeId)
+        .Distinct()
+        .CountAsync(cancellationToken);
+    var baselineSaudiEmployees = await (from line in dbContext.PayrollLines
+                                        join employee in dbContext.Employees on line.EmployeeId equals employee.Id
+                                        where line.PayrollRunId == latestRun.Id && employee.IsSaudiNational
+                                        select line.EmployeeId)
+        .Distinct()
+        .CountAsync(cancellationToken);
+
+    var projectedHeadcount = Math.Max(0, baselineHeadcount + scenario.PlannedSaudiHires + scenario.PlannedNonSaudiHires - scenario.PlannedAttrition);
+    var projectedSaudiEmployees = Math.Max(0, baselineSaudiEmployees + scenario.PlannedSaudiHires - Math.Min(scenario.PlannedAttrition, baselineSaudiEmployees));
+    var projectedSaudizationPercent = projectedHeadcount == 0
+        ? 0m
+        : Math.Round(projectedSaudiEmployees * 100m / projectedHeadcount, 1);
+
+    var salaryFactor = 1m + (scenario.PlannedSalaryDeltaPercent / 100m);
+    var workforceFactor = baselineHeadcount == 0 ? 1m : projectedHeadcount / (decimal)Math.Max(1, baselineHeadcount);
+    var projectedPayrollCost = Math.Round(baselineCost * salaryFactor * workforceFactor, 2);
+    var riskScore = Math.Clamp(100 - (int)Math.Round(projectedSaudizationPercent), 1, 100);
+
+    var result = await dbContext.PayrollForecastResults
+        .FirstOrDefaultAsync(x =>
+            x.ScenarioId == scenarioId &&
+            x.ForecastYear == targetDate.Year &&
+            x.ForecastMonth == targetDate.Month,
+            cancellationToken);
+    if (result is null)
+    {
+        result = new PayrollForecastResult
+        {
+            ScenarioId = scenarioId,
+            ForecastYear = targetDate.Year,
+            ForecastMonth = targetDate.Month,
+            ProjectedPayrollCost = projectedPayrollCost,
+            ProjectedHeadcount = projectedHeadcount,
+            ProjectedSaudizationPercent = projectedSaudizationPercent,
+            ComplianceRiskScore = riskScore,
+            ResultJson = JsonSerializer.Serialize(new
+            {
+                baselineCost,
+                baselineHeadcount,
+                baselineSaudiEmployees,
+                projectedSaudiEmployees
+            })
+        };
+        dbContext.AddEntity(result);
+    }
+    else
+    {
+        result.ProjectedPayrollCost = projectedPayrollCost;
+        result.ProjectedHeadcount = projectedHeadcount;
+        result.ProjectedSaudizationPercent = projectedSaudizationPercent;
+        result.ComplianceRiskScore = riskScore;
+        result.ResultJson = JsonSerializer.Serialize(new
+        {
+            baselineCost,
+            baselineHeadcount,
+            baselineSaudiEmployees,
+            projectedSaudiEmployees
+        });
+    }
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new
+    {
+        result.Id,
+        result.ScenarioId,
+        result.ForecastYear,
+        result.ForecastMonth,
+        result.ProjectedPayrollCost,
+        result.ProjectedHeadcount,
+        result.ProjectedSaudizationPercent,
+        result.ComplianceRiskScore
+    });
+});
+
+api.MapGet("/analytics/payroll-forecast/scenarios/{scenarioId:guid}/results", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    Guid scenarioId,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var items = await dbContext.PayrollForecastResults
+        .Where(x => x.ScenarioId == scenarioId)
+        .OrderByDescending(x => x.ForecastYear)
+        .ThenByDescending(x => x.ForecastMonth)
+        .Select(x => new
+        {
+            x.Id,
+            x.ForecastYear,
+            x.ForecastMonth,
+            x.ProjectedPayrollCost,
+            x.ProjectedHeadcount,
+            x.ProjectedSaudizationPercent,
+            x.ComplianceRiskScore,
+            x.ResultJson
+        })
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(new { items });
+});
+
+api.MapGet("/notifications/templates", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var items = await dbContext.NotificationTemplates
+        .OrderBy(x => x.TemplateCode)
+        .ThenBy(x => x.Channel)
+        .Select(x => new
+        {
+            x.Id,
+            x.TemplateCode,
+            x.Channel,
+            x.Subject,
+            x.Body,
+            x.IsActive
+        })
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(new { items });
+});
+
+api.MapPost("/notifications/templates", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    UpsertNotificationTemplateRequest request,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var templateCode = request.TemplateCode.Trim().ToUpperInvariant();
+    var channel = request.Channel.Trim();
+    var existing = await dbContext.NotificationTemplates
+        .FirstOrDefaultAsync(x => x.TemplateCode == templateCode && x.Channel == channel, cancellationToken);
+
+    if (existing is null)
+    {
+        dbContext.AddEntity(new NotificationTemplate
+        {
+            TemplateCode = templateCode,
+            Channel = channel,
+            Subject = request.Subject.Trim(),
+            Body = request.Body.Trim(),
+            IsActive = request.IsActive
+        });
+    }
+    else
+    {
+        existing.Subject = request.Subject.Trim();
+        existing.Body = request.Body.Trim();
+        existing.IsActive = request.IsActive;
+    }
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { templateCode, channel });
+});
+
+api.MapGet("/notifications/queue", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    string? status,
+    int? take,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var safeTake = Math.Clamp(take ?? 200, 1, 1000);
+    var query = dbContext.NotificationQueueItems.AsQueryable();
+    if (!string.IsNullOrWhiteSpace(status))
+    {
+        var normalized = status.Trim();
+        query = query.Where(x => x.Status == normalized);
+    }
+
+    var items = await query
+        .OrderByDescending(x => x.ScheduledAtUtc)
+        .Take(safeTake)
+        .Select(x => new
+        {
+            x.Id,
+            x.RecipientType,
+            x.RecipientValue,
+            x.Channel,
+            x.TemplateCode,
+            x.RelatedEntityType,
+            x.RelatedEntityId,
+            x.Status,
+            x.ScheduledAtUtc,
+            x.SentAtUtc,
+            x.ProviderMessageId,
+            x.ErrorMessage
+        })
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(new { items });
+});
+
+api.MapPost("/notifications/queue", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    EnqueueNotificationRequest request,
+    IDateTimeProvider dateTimeProvider,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var item = new NotificationQueueItem
+    {
+        RecipientType = request.RecipientType.Trim(),
+        RecipientValue = request.RecipientValue.Trim(),
+        Channel = request.Channel.Trim(),
+        TemplateCode = request.TemplateCode.Trim().ToUpperInvariant(),
+        RelatedEntityType = request.RelatedEntityType.Trim(),
+        RelatedEntityId = request.RelatedEntityId,
+        PayloadJson = string.IsNullOrWhiteSpace(request.PayloadJson) ? "{}" : request.PayloadJson.Trim(),
+        Status = "Queued",
+        ScheduledAtUtc = request.ScheduledAtUtc ?? dateTimeProvider.UtcNow
+    };
+
+    dbContext.AddEntity(item);
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Created($"/api/notifications/queue/{item.Id}", new { item.Id, item.Status });
+});
+
+api.MapPost("/notifications/queue/{queueId:guid}/mark-sent", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    Guid queueId,
+    MarkNotificationSentRequest request,
+    IDateTimeProvider dateTimeProvider,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var item = await dbContext.NotificationQueueItems.FirstOrDefaultAsync(x => x.Id == queueId, cancellationToken);
+    if (item is null)
+    {
+        return Results.NotFound(new { error = "Notification queue item not found." });
+    }
+
+    item.Status = request.Success ? "Sent" : "Failed";
+    item.SentAtUtc = dateTimeProvider.UtcNow;
+    item.ProviderMessageId = request.ProviderMessageId?.Trim() ?? string.Empty;
+    item.ErrorMessage = request.ErrorMessage?.Trim() ?? string.Empty;
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { item.Id, item.Status });
+});
+
+api.MapPost("/payroll/data-quality/scan", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    IDateTimeProvider dateTimeProvider,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var nowUtc = dateTimeProvider.UtcNow;
+    var employees = await dbContext.Employees.ToListAsync(cancellationToken);
+    var existingOpen = await dbContext.DataQualityIssues
+        .Where(x => x.IssueStatus == "Open")
+        .ToListAsync(cancellationToken);
+    var existingLookup = existingOpen.ToDictionary(x => $"{x.IssueCode}:{x.EntityId}", StringComparer.OrdinalIgnoreCase);
+
+    var detected = 0;
+    foreach (var employee in employees)
+    {
+        var rawIban = employee.BankIban?.Trim() ?? string.Empty;
+        var normalizedIban = NormalizeIban(rawIban);
+        if (string.IsNullOrWhiteSpace(rawIban))
+        {
+            var key = $"MissingIban:{employee.Id}";
+            if (!existingLookup.ContainsKey(key))
+            {
+                detected++;
+                dbContext.AddEntity(new DataQualityIssue
+                {
+                    IssueCode = "MissingIban",
+                    Severity = "Critical",
+                    EntityType = "Employee",
+                    EntityId = employee.Id,
+                    IssueStatus = "Open",
+                    IssueMessage = "Employee IBAN is missing.",
+                    FixActionCode = "ManualUpdateRequired",
+                    FixPayloadJson = "{}",
+                    DetectedAtUtc = nowUtc
+                });
+            }
+        }
+        else if (!Regex.IsMatch(normalizedIban, "^[A-Z]{2}[0-9A-Z]{13,32}$"))
+        {
+            var key = $"InvalidIbanFormat:{employee.Id}";
+            if (!existingLookup.ContainsKey(key))
+            {
+                detected++;
+                dbContext.AddEntity(new DataQualityIssue
+                {
+                    IssueCode = "InvalidIbanFormat",
+                    Severity = "Warning",
+                    EntityType = "Employee",
+                    EntityId = employee.Id,
+                    IssueStatus = "Open",
+                    IssueMessage = "Employee IBAN format is invalid.",
+                    FixActionCode = "NormalizeIban",
+                    FixPayloadJson = JsonSerializer.Serialize(new { normalizedIban }),
+                    DetectedAtUtc = nowUtc
+                });
+            }
+        }
+
+        if (!employee.IsSaudiNational)
+        {
+            var iqamaDigits = NormalizeDigits(employee.IqamaNumber ?? string.Empty);
+            if (!string.IsNullOrWhiteSpace(employee.IqamaNumber) && iqamaDigits.Length != 10)
+            {
+                var key = $"InvalidIqamaFormat:{employee.Id}";
+                if (!existingLookup.ContainsKey(key))
+                {
+                    detected++;
+                    dbContext.AddEntity(new DataQualityIssue
+                    {
+                        IssueCode = "InvalidIqamaFormat",
+                        Severity = "Warning",
+                        EntityType = "Employee",
+                        EntityId = employee.Id,
+                        IssueStatus = "Open",
+                        IssueMessage = "Iqama number must be 10 digits.",
+                        FixActionCode = "NormalizeIqama",
+                        FixPayloadJson = JsonSerializer.Serialize(new { normalizedIqama = iqamaDigits }),
+                        DetectedAtUtc = nowUtc
+                    });
+                }
+            }
+
+            if (!employee.ContractEndDate.HasValue)
+            {
+                var key = $"MissingContractEndDateNonSaudi:{employee.Id}";
+                if (!existingLookup.ContainsKey(key))
+                {
+                    detected++;
+                    dbContext.AddEntity(new DataQualityIssue
+                    {
+                        IssueCode = "MissingContractEndDateNonSaudi",
+                        Severity = "Warning",
+                        EntityType = "Employee",
+                        EntityId = employee.Id,
+                        IssueStatus = "Open",
+                        IssueMessage = "Contract end date is missing for non-Saudi employee.",
+                        FixActionCode = "SetContractEndDefault",
+                        FixPayloadJson = JsonSerializer.Serialize(new { suggestedContractEndDate = DateOnly.FromDateTime(nowUtc.Date).AddYears(1) }),
+                        DetectedAtUtc = nowUtc
+                    });
+                }
+            }
+        }
+    }
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { detected });
+});
+
+api.MapGet("/payroll/data-quality/issues", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    string? status,
+    int? take,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var safeTake = Math.Clamp(take ?? 500, 1, 2000);
+    var query = dbContext.DataQualityIssues.AsQueryable();
+    if (!string.IsNullOrWhiteSpace(status))
+    {
+        var normalized = status.Trim();
+        query = query.Where(x => x.IssueStatus == normalized);
+    }
+
+    var items = await query
+        .OrderByDescending(x => x.DetectedAtUtc)
+        .Take(safeTake)
+        .Select(x => new
+        {
+            x.Id,
+            x.IssueCode,
+            x.Severity,
+            x.EntityType,
+            x.EntityId,
+            x.IssueStatus,
+            x.IssueMessage,
+            x.FixActionCode,
+            x.FixPayloadJson,
+            x.DetectedAtUtc,
+            x.ResolvedAtUtc
+        })
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(new { items });
+});
+
+api.MapPost("/payroll/data-quality/fix-batch", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    ApplyDataQualityFixBatchRequest request,
+    HttpContext httpContext,
+    IDateTimeProvider dateTimeProvider,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var issueIds = request.IssueIds?.Where(x => x != Guid.Empty).Distinct().ToList() ?? new List<Guid>();
+    if (issueIds.Count == 0)
+    {
+        return Results.BadRequest(new { error = "No issue ids provided." });
+    }
+
+    var nowUtc = dateTimeProvider.UtcNow;
+    var actorUserId = Guid.TryParse(httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier), out var parsedUserId)
+        ? parsedUserId
+        : (Guid?)null;
+
+    var issues = await dbContext.DataQualityIssues
+        .Where(x => issueIds.Contains(x.Id) && x.IssueStatus == "Open")
+        .ToListAsync(cancellationToken);
+
+    var entityIds = issues.Where(x => x.EntityId.HasValue).Select(x => x.EntityId!.Value).Distinct().ToList();
+    var employees = await dbContext.Employees.Where(x => entityIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, cancellationToken);
+
+    var successItems = 0;
+    var failedItems = 0;
+    var results = new List<object>();
+
+    foreach (var issue in issues)
+    {
+        if (!issue.EntityId.HasValue || !employees.TryGetValue(issue.EntityId.Value, out var employee))
+        {
+            failedItems++;
+            results.Add(new { issueId = issue.Id, success = false, reason = "Employee not found." });
+            continue;
+        }
+
+        var fixedOk = false;
+        switch (issue.FixActionCode)
+        {
+            case "NormalizeIban":
+                var normalizedIban = NormalizeIban(employee.BankIban);
+                if (Regex.IsMatch(normalizedIban, "^[A-Z]{2}[0-9A-Z]{13,32}$"))
+                {
+                    employee.BankIban = normalizedIban;
+                    fixedOk = true;
+                }
+                break;
+            case "NormalizeIqama":
+                var normalizedIqama = NormalizeDigits(employee.IqamaNumber);
+                if (normalizedIqama.Length == 10)
+                {
+                    employee.IqamaNumber = normalizedIqama;
+                    fixedOk = true;
+                }
+                break;
+            case "SetContractEndDefault":
+                if (!employee.ContractEndDate.HasValue)
+                {
+                    employee.ContractEndDate = DateOnly.FromDateTime(nowUtc.Date).AddYears(1);
+                    fixedOk = true;
+                }
+                break;
+        }
+
+        if (fixedOk)
+        {
+            successItems++;
+            issue.IssueStatus = "Resolved";
+            issue.ResolvedAtUtc = nowUtc;
+            issue.ResolvedByUserId = actorUserId;
+            results.Add(new { issueId = issue.Id, success = true });
+        }
+        else
+        {
+            failedItems++;
+            results.Add(new { issueId = issue.Id, success = false, reason = "Automatic fix failed validation." });
+        }
+    }
+
+    var batch = new DataQualityFixBatch
+    {
+        BatchReference = string.IsNullOrWhiteSpace(request.BatchReference) ? $"DQ-{nowUtc:yyyyMMddHHmmss}" : request.BatchReference.Trim(),
+        TriggeredByUserId = actorUserId,
+        TotalItems = issues.Count,
+        SuccessItems = successItems,
+        FailedItems = failedItems,
+        Status = failedItems == 0 ? "Completed" : successItems == 0 ? "Failed" : "Partial",
+        ResultJson = JsonSerializer.Serialize(results)
+    };
+    dbContext.AddEntity(batch);
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new
+    {
+        batch.Id,
+        batch.BatchReference,
+        batch.TotalItems,
+        batch.SuccessItems,
+        batch.FailedItems,
+        batch.Status
+    });
+});
 
 api.MapGet("/attendance-inputs", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] (
     int year,
@@ -8079,6 +9260,16 @@ static async Task<EmailSendResult> TrySendComplianceDigestEmailAsync(
 static string BuildLeaveAttachmentMetadata(Guid leaveRequestId) =>
     JsonSerializer.Serialize(new { leaveRequestId });
 
+static string NormalizeIban(string? value) =>
+    string.IsNullOrWhiteSpace(value)
+        ? string.Empty
+        : Regex.Replace(value.Trim().ToUpperInvariant(), "\\s+", string.Empty);
+
+static string NormalizeDigits(string? value) =>
+    string.IsNullOrWhiteSpace(value)
+        ? string.Empty
+        : new string(value.Where(char.IsDigit).ToArray());
+
 app.Run();
 
 public sealed record CreateTenantRequest(
@@ -8359,6 +9550,83 @@ public sealed record UpsertAllowancePolicyRequest(
     DateOnly? EffectiveTo,
     bool IsTaxable,
     bool IsActive);
+public sealed record UpsertAllowancePolicyMatrixRequest(
+    string PolicyName,
+    string GradeCode,
+    string LocationCode,
+    decimal HousingAmount,
+    decimal TransportAmount,
+    decimal MealAmount,
+    string ProrationMethod,
+    DateOnly EffectiveFrom,
+    DateOnly? EffectiveTo,
+    bool IsTaxable,
+    bool IsActive);
+public sealed record UpsertPayrollApprovalStageRequest(
+    string PayrollScope,
+    string StageCode,
+    string StageName,
+    int StageOrder,
+    string ApproverRole,
+    bool AllowRollback,
+    bool IsActive);
+public sealed record PayrollWorkflowActionRequest(
+    string StageCode,
+    string ActionType,
+    string? Reason,
+    string? ReferenceId,
+    Guid? RolledBackActionId,
+    string? MetadataJson);
+public sealed record CreateEmployeeSelfServiceRequest(
+    string RequestType,
+    string? PayloadJson);
+public sealed record ReviewEmployeeSelfServiceRequest(
+    bool Approved,
+    string? ResolutionNotes);
+public sealed record UpsertComplianceRuleRequest(
+    string RuleCode,
+    string RuleName,
+    string RuleCategory,
+    string Severity,
+    string? RuleConfigJson,
+    bool IsEnabled);
+public sealed record CreateComplianceRuleEventRequest(
+    Guid? EmployeeId,
+    string EntityType,
+    Guid? EntityId,
+    string Status,
+    string Message,
+    string? MetadataJson);
+public sealed record CreatePayrollForecastScenarioRequest(
+    string ScenarioName,
+    Guid? BasePayrollRunId,
+    int PlannedSaudiHires,
+    int PlannedNonSaudiHires,
+    int PlannedAttrition,
+    decimal PlannedSalaryDeltaPercent,
+    string? AssumptionsJson);
+public sealed record UpsertNotificationTemplateRequest(
+    string TemplateCode,
+    string Channel,
+    string Subject,
+    string Body,
+    bool IsActive);
+public sealed record EnqueueNotificationRequest(
+    string RecipientType,
+    string RecipientValue,
+    string Channel,
+    string TemplateCode,
+    string RelatedEntityType,
+    Guid? RelatedEntityId,
+    string? PayloadJson,
+    DateTime? ScheduledAtUtc);
+public sealed record MarkNotificationSentRequest(
+    bool Success,
+    string? ProviderMessageId,
+    string? ErrorMessage);
+public sealed record ApplyDataQualityFixBatchRequest(
+    IReadOnlyCollection<Guid> IssueIds,
+    string? BatchReference);
 public sealed record CreateEmployeeOffboardingRequest(
     Guid EmployeeId,
     DateOnly EffectiveDate,

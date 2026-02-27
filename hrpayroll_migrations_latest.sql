@@ -1162,6 +1162,491 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225220000_AddAllowancePolicyMatrixV3') THEN
+    CREATE TABLE "AllowancePolicyMatrixSet" (
+        "Id" uuid NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "PolicyName" text NOT NULL,
+        "GradeCode" text NOT NULL,
+        "LocationCode" text NOT NULL,
+        "HousingAmount" numeric NOT NULL,
+        "TransportAmount" numeric NOT NULL,
+        "MealAmount" numeric NOT NULL,
+        "ProrationMethod" text NOT NULL,
+        "EffectiveFrom" date NOT NULL,
+        "EffectiveTo" date,
+        "IsTaxable" boolean NOT NULL,
+        "IsActive" boolean NOT NULL,
+        "CreatedAtUtc" timestamp with time zone NOT NULL,
+        "UpdatedAtUtc" timestamp with time zone,
+        CONSTRAINT "PK_AllowancePolicyMatrixSet" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225220000_AddAllowancePolicyMatrixV3') THEN
+    CREATE UNIQUE INDEX "IX_AllowancePolicyMatrixSet_TenantId_GradeCode_LocationCode_EffectiveFrom"
+    ON "AllowancePolicyMatrixSet" ("TenantId", "GradeCode", "LocationCode", "EffectiveFrom");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225220000_AddAllowancePolicyMatrixV3') THEN
+    CREATE INDEX "IX_AllowancePolicyMatrixSet_TenantId_IsActive_GradeCode_LocationCode"
+    ON "AllowancePolicyMatrixSet" ("TenantId", "IsActive", "GradeCode", "LocationCode");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225220000_AddAllowancePolicyMatrixV3') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20260225220000_AddAllowancePolicyMatrixV3', '8.0.12');
+    END IF;
+END $EF$;
+
+COMMIT;
+
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225223000_AddPayrollApprovalMatrixV2') THEN
+    CREATE TABLE "PayrollApprovalMatrixSet" (
+        "Id" uuid NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "PayrollScope" text NOT NULL,
+        "StageCode" text NOT NULL,
+        "StageName" text NOT NULL,
+        "StageOrder" integer NOT NULL,
+        "ApproverRole" text NOT NULL,
+        "AllowRollback" boolean NOT NULL,
+        "IsActive" boolean NOT NULL,
+        "CreatedAtUtc" timestamp with time zone NOT NULL,
+        "UpdatedAtUtc" timestamp with time zone,
+        CONSTRAINT "PK_PayrollApprovalMatrixSet" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225223000_AddPayrollApprovalMatrixV2') THEN
+    CREATE TABLE "PayrollApprovalActionSet" (
+        "Id" uuid NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "PayrollRunId" uuid NOT NULL,
+        "StageCode" text NOT NULL,
+        "ActionType" text NOT NULL,
+        "ActionStatus" text NOT NULL,
+        "ActorUserId" uuid,
+        "ActionAtUtc" timestamp with time zone NOT NULL,
+        "Reason" text NOT NULL,
+        "ReferenceId" text NOT NULL,
+        "RolledBackActionId" uuid,
+        "MetadataJson" text NOT NULL,
+        "CreatedAtUtc" timestamp with time zone NOT NULL,
+        "UpdatedAtUtc" timestamp with time zone,
+        CONSTRAINT "PK_PayrollApprovalActionSet" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225223000_AddPayrollApprovalMatrixV2') THEN
+    CREATE UNIQUE INDEX "IX_PayrollApprovalMatrixSet_TenantId_PayrollScope_StageCode"
+    ON "PayrollApprovalMatrixSet" ("TenantId", "PayrollScope", "StageCode");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225223000_AddPayrollApprovalMatrixV2') THEN
+    CREATE INDEX "IX_PayrollApprovalActionSet_TenantId_PayrollRunId_ActionAtUtc"
+    ON "PayrollApprovalActionSet" ("TenantId", "PayrollRunId", "ActionAtUtc");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225223000_AddPayrollApprovalMatrixV2') THEN
+    CREATE INDEX "IX_PayrollApprovalActionSet_TenantId_StageCode_ActionStatus"
+    ON "PayrollApprovalActionSet" ("TenantId", "StageCode", "ActionStatus");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225223000_AddPayrollApprovalMatrixV2') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20260225223000_AddPayrollApprovalMatrixV2', '8.0.12');
+    END IF;
+END $EF$;
+
+COMMIT;
+
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225224500_AddEmployeeSelfServicePortalV1') THEN
+    CREATE TABLE "EmployeeSelfServiceRequestSet" (
+        "Id" uuid NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "EmployeeId" uuid NOT NULL,
+        "RequestType" text NOT NULL,
+        "Status" text NOT NULL,
+        "PayloadJson" text NOT NULL,
+        "ReviewerUserId" uuid,
+        "ReviewedAtUtc" timestamp with time zone,
+        "ResolutionNotes" text NOT NULL,
+        "CreatedAtUtc" timestamp with time zone NOT NULL,
+        "UpdatedAtUtc" timestamp with time zone,
+        CONSTRAINT "PK_EmployeeSelfServiceRequestSet" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225224500_AddEmployeeSelfServicePortalV1') THEN
+    CREATE INDEX "IX_EmployeeSelfServiceRequestSet_TenantId_EmployeeId_RequestType_Status"
+    ON "EmployeeSelfServiceRequestSet" ("TenantId", "EmployeeId", "RequestType", "Status");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225224500_AddEmployeeSelfServicePortalV1') THEN
+    CREATE INDEX "IX_EmployeeSelfServiceRequestSet_TenantId_Status_CreatedAtUtc"
+    ON "EmployeeSelfServiceRequestSet" ("TenantId", "Status", "CreatedAtUtc");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225224500_AddEmployeeSelfServicePortalV1') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20260225224500_AddEmployeeSelfServicePortalV1', '8.0.12');
+    END IF;
+END $EF$;
+
+COMMIT;
+
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225230000_AddComplianceRulesStudioV1') THEN
+    CREATE TABLE "ComplianceRuleSet" (
+        "Id" uuid NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "RuleCode" text NOT NULL,
+        "RuleName" text NOT NULL,
+        "RuleCategory" text NOT NULL,
+        "RuleConfigJson" text NOT NULL,
+        "Severity" text NOT NULL,
+        "IsEnabled" boolean NOT NULL,
+        "CreatedAtUtc" timestamp with time zone NOT NULL,
+        "UpdatedAtUtc" timestamp with time zone,
+        CONSTRAINT "PK_ComplianceRuleSet" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225230000_AddComplianceRulesStudioV1') THEN
+    CREATE TABLE "ComplianceRuleEventSet" (
+        "Id" uuid NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "RuleId" uuid NOT NULL,
+        "EmployeeId" uuid,
+        "EntityType" text NOT NULL,
+        "EntityId" uuid,
+        "Status" text NOT NULL,
+        "TriggeredAtUtc" timestamp with time zone NOT NULL,
+        "ResolvedAtUtc" timestamp with time zone,
+        "Message" text NOT NULL,
+        "MetadataJson" text NOT NULL,
+        "CreatedAtUtc" timestamp with time zone NOT NULL,
+        "UpdatedAtUtc" timestamp with time zone,
+        CONSTRAINT "PK_ComplianceRuleEventSet" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225230000_AddComplianceRulesStudioV1') THEN
+    CREATE UNIQUE INDEX "IX_ComplianceRuleSet_TenantId_RuleCode"
+    ON "ComplianceRuleSet" ("TenantId", "RuleCode");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225230000_AddComplianceRulesStudioV1') THEN
+    CREATE INDEX "IX_ComplianceRuleEventSet_TenantId_Status_TriggeredAtUtc"
+    ON "ComplianceRuleEventSet" ("TenantId", "Status", "TriggeredAtUtc");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225230000_AddComplianceRulesStudioV1') THEN
+    CREATE INDEX "IX_ComplianceRuleEventSet_TenantId_RuleId_Status"
+    ON "ComplianceRuleEventSet" ("TenantId", "RuleId", "Status");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225230000_AddComplianceRulesStudioV1') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20260225230000_AddComplianceRulesStudioV1', '8.0.12');
+    END IF;
+END $EF$;
+
+COMMIT;
+
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225231500_AddAnalyticsForecastingV1') THEN
+    CREATE TABLE "PayrollForecastScenarioSet" (
+        "Id" uuid NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "ScenarioName" text NOT NULL,
+        "BasePayrollRunId" uuid,
+        "PlannedSaudiHires" integer NOT NULL,
+        "PlannedNonSaudiHires" integer NOT NULL,
+        "PlannedAttrition" integer NOT NULL,
+        "PlannedSalaryDeltaPercent" numeric NOT NULL,
+        "AssumptionsJson" text NOT NULL,
+        "CreatedByUserId" uuid,
+        "CreatedAtUtc" timestamp with time zone NOT NULL,
+        "UpdatedAtUtc" timestamp with time zone,
+        CONSTRAINT "PK_PayrollForecastScenarioSet" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225231500_AddAnalyticsForecastingV1') THEN
+    CREATE TABLE "PayrollForecastResultSet" (
+        "Id" uuid NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "ScenarioId" uuid NOT NULL,
+        "ForecastYear" integer NOT NULL,
+        "ForecastMonth" integer NOT NULL,
+        "ProjectedPayrollCost" numeric NOT NULL,
+        "ProjectedHeadcount" integer NOT NULL,
+        "ProjectedSaudizationPercent" numeric NOT NULL,
+        "ComplianceRiskScore" integer NOT NULL,
+        "ResultJson" text NOT NULL,
+        "CreatedAtUtc" timestamp with time zone NOT NULL,
+        "UpdatedAtUtc" timestamp with time zone,
+        CONSTRAINT "PK_PayrollForecastResultSet" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225231500_AddAnalyticsForecastingV1') THEN
+    CREATE INDEX "IX_PayrollForecastScenarioSet_TenantId_CreatedAtUtc"
+    ON "PayrollForecastScenarioSet" ("TenantId", "CreatedAtUtc");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225231500_AddAnalyticsForecastingV1') THEN
+    CREATE UNIQUE INDEX "IX_PayrollForecastResultSet_TenantId_ScenarioId_ForecastYear_ForecastMonth"
+    ON "PayrollForecastResultSet" ("TenantId", "ScenarioId", "ForecastYear", "ForecastMonth");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225231500_AddAnalyticsForecastingV1') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20260225231500_AddAnalyticsForecastingV1', '8.0.12');
+    END IF;
+END $EF$;
+
+COMMIT;
+
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225233000_AddNotificationCenterV1') THEN
+    CREATE TABLE "NotificationTemplateSet" (
+        "Id" uuid NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "TemplateCode" text NOT NULL,
+        "Channel" text NOT NULL,
+        "Subject" text NOT NULL,
+        "Body" text NOT NULL,
+        "IsActive" boolean NOT NULL,
+        "CreatedAtUtc" timestamp with time zone NOT NULL,
+        "UpdatedAtUtc" timestamp with time zone,
+        CONSTRAINT "PK_NotificationTemplateSet" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225233000_AddNotificationCenterV1') THEN
+    CREATE TABLE "NotificationQueueSet" (
+        "Id" uuid NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "RecipientType" text NOT NULL,
+        "RecipientValue" text NOT NULL,
+        "Channel" text NOT NULL,
+        "TemplateCode" text NOT NULL,
+        "RelatedEntityType" text NOT NULL,
+        "RelatedEntityId" uuid,
+        "PayloadJson" text NOT NULL,
+        "Status" text NOT NULL,
+        "ScheduledAtUtc" timestamp with time zone NOT NULL,
+        "SentAtUtc" timestamp with time zone,
+        "ProviderMessageId" text NOT NULL,
+        "ErrorMessage" text NOT NULL,
+        "CreatedAtUtc" timestamp with time zone NOT NULL,
+        "UpdatedAtUtc" timestamp with time zone,
+        CONSTRAINT "PK_NotificationQueueSet" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225233000_AddNotificationCenterV1') THEN
+    CREATE UNIQUE INDEX "IX_NotificationTemplateSet_TenantId_TemplateCode_Channel"
+    ON "NotificationTemplateSet" ("TenantId", "TemplateCode", "Channel");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225233000_AddNotificationCenterV1') THEN
+    CREATE INDEX "IX_NotificationQueueSet_TenantId_Status_ScheduledAtUtc"
+    ON "NotificationQueueSet" ("TenantId", "Status", "ScheduledAtUtc");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225233000_AddNotificationCenterV1') THEN
+    CREATE INDEX "IX_NotificationQueueSet_TenantId_Channel_Status"
+    ON "NotificationQueueSet" ("TenantId", "Channel", "Status");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225233000_AddNotificationCenterV1') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20260225233000_AddNotificationCenterV1', '8.0.12');
+    END IF;
+END $EF$;
+
+COMMIT;
+
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225234500_AddDataQualityReconciliationV1') THEN
+    CREATE TABLE "DataQualityIssueSet" (
+        "Id" uuid NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "IssueCode" text NOT NULL,
+        "Severity" text NOT NULL,
+        "EntityType" text NOT NULL,
+        "EntityId" uuid,
+        "IssueStatus" text NOT NULL,
+        "IssueMessage" text NOT NULL,
+        "FixActionCode" text NOT NULL,
+        "FixPayloadJson" text NOT NULL,
+        "DetectedAtUtc" timestamp with time zone NOT NULL,
+        "ResolvedAtUtc" timestamp with time zone,
+        "ResolvedByUserId" uuid,
+        "CreatedAtUtc" timestamp with time zone NOT NULL,
+        "UpdatedAtUtc" timestamp with time zone,
+        CONSTRAINT "PK_DataQualityIssueSet" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225234500_AddDataQualityReconciliationV1') THEN
+    CREATE TABLE "DataQualityFixBatchSet" (
+        "Id" uuid NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "BatchReference" text NOT NULL,
+        "TriggeredByUserId" uuid,
+        "TotalItems" integer NOT NULL,
+        "SuccessItems" integer NOT NULL,
+        "FailedItems" integer NOT NULL,
+        "Status" text NOT NULL,
+        "ResultJson" text NOT NULL,
+        "CreatedAtUtc" timestamp with time zone NOT NULL,
+        "UpdatedAtUtc" timestamp with time zone,
+        CONSTRAINT "PK_DataQualityFixBatchSet" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225234500_AddDataQualityReconciliationV1') THEN
+    CREATE INDEX "IX_DataQualityIssueSet_TenantId_IssueStatus_Severity_DetectedAtUtc"
+    ON "DataQualityIssueSet" ("TenantId", "IssueStatus", "Severity", "DetectedAtUtc");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225234500_AddDataQualityReconciliationV1') THEN
+    CREATE INDEX "IX_DataQualityIssueSet_TenantId_EntityType_EntityId"
+    ON "DataQualityIssueSet" ("TenantId", "EntityType", "EntityId");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225234500_AddDataQualityReconciliationV1') THEN
+    CREATE UNIQUE INDEX "IX_DataQualityFixBatchSet_TenantId_BatchReference"
+    ON "DataQualityFixBatchSet" ("TenantId", "BatchReference");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225234500_AddDataQualityReconciliationV1') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20260225234500_AddDataQualityReconciliationV1', '8.0.12');
+    END IF;
+END $EF$;
+
+COMMIT;
+
+START TRANSACTION;
+
+DO $EF$
+BEGIN
     IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225203000_AddOffboardingWorkflowV2') THEN
     CREATE TABLE "OffboardingChecklistTemplateSet" (
         "Id" uuid NOT NULL,
