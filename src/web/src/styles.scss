@@ -4,8 +4,12 @@
 
 html,
 body {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
   margin: 0;
   padding: 0;
+  overflow-x: hidden;
 }
 
 body {
@@ -13,6 +17,11 @@ body {
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   color: #1c2b3a;
   line-height: 1.4;
+}
+
+app-root {
+  display: block;
+  min-width: 0;
 }
 
 :root {
@@ -98,6 +107,15 @@ canvas {
 table {
   width: 100%;
   border-collapse: collapse;
+  max-width: 100%;
+}
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
+  max-width: 100%;
 }
 
 @media (max-width: 900px) {

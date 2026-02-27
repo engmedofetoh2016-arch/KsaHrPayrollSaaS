@@ -3,6 +3,7 @@
   grid-template-columns: 240px 1fr;
   min-height: 100vh;
   position: relative;
+  min-width: 0;
 }
 
 aside {
@@ -36,6 +37,7 @@ a:hover {
 
 main {
   background: #f5f8fc;
+  min-width: 0;
 }
 
 header {
@@ -47,6 +49,17 @@ header {
   justify-content: space-between;
   gap: 10px;
   background: #fff;
+}
+
+.user-summary {
+  min-width: 0;
+}
+
+.user-summary strong,
+.user-summary span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 header span {
@@ -75,6 +88,7 @@ button {
 
 .content {
   padding: 16px;
+  min-width: 0;
 }
 
 .menu-toggle {
@@ -122,6 +136,8 @@ button {
 
   .header-actions {
     margin-inline-start: auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 
   .content {
@@ -133,6 +149,10 @@ button {
   header {
     flex-wrap: wrap;
     align-items: flex-start;
+  }
+
+  .user-summary {
+    width: 100%;
   }
 
   .header-actions {

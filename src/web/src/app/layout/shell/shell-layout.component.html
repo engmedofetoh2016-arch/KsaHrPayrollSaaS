@@ -61,7 +61,7 @@
   <main>
     <header>
       <button class="menu-toggle" type="button" (click)="toggleMobileNav()" aria-label="Open menu">{{ i18n.text('Menu', 'القائمة') }}</button>
-      <div>
+      <div class="user-summary">
         <strong>{{ session()?.firstName }} {{ session()?.lastName }}</strong>
         <span>{{ session()?.email }}</span>
       </div>
