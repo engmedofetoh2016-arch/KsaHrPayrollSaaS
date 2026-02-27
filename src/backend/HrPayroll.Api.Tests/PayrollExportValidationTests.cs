@@ -35,6 +35,13 @@ public class PayrollExportValidationTests : IClassFixture<TestWebApplicationFact
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
         Assert.Contains("WPS export validation failed", body, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("WPS_CSV_COMPANY_IBAN_MISSING", body, StringComparison.OrdinalIgnoreCase);
+
+        var latestAuditPath = await GetLatestPayrollExportAuditPathAsync(client, "/exports/wps-csv");
+        Assert.NotNull(latestAuditPath);
+        Assert.Contains("status=Blocked", latestAuditPath, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("spec=WPS_CSV", latestAuditPath, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("reasonCodes=", latestAuditPath, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -55,6 +62,11 @@ public class PayrollExportValidationTests : IClassFixture<TestWebApplicationFact
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
         Assert.Contains("id", body, StringComparison.OrdinalIgnoreCase);
+
+        var latestAuditPath = await GetLatestPayrollExportAuditPathAsync(client, "/exports/wps-csv");
+        Assert.NotNull(latestAuditPath);
+        Assert.Contains("status=Queued", latestAuditPath, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("spec=WPS_CSV", latestAuditPath, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -80,6 +92,13 @@ public class PayrollExportValidationTests : IClassFixture<TestWebApplicationFact
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
         Assert.Contains("GOSI export validation failed", body, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("GOSI_CSV_WAGE_BASE_MISMATCH", body, StringComparison.OrdinalIgnoreCase);
+
+        var latestAuditPath = await GetLatestPayrollExportAuditPathAsync(client, "/exports/gosi-csv");
+        Assert.NotNull(latestAuditPath);
+        Assert.Contains("status=Blocked", latestAuditPath, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("spec=GOSI_CSV", latestAuditPath, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("reasonCodes=", latestAuditPath, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -99,6 +118,11 @@ public class PayrollExportValidationTests : IClassFixture<TestWebApplicationFact
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
         Assert.Contains("id", body, StringComparison.OrdinalIgnoreCase);
+
+        var latestAuditPath = await GetLatestPayrollExportAuditPathAsync(client, "/exports/gosi-csv");
+        Assert.NotNull(latestAuditPath);
+        Assert.Contains("status=Queued", latestAuditPath, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("spec=GOSI_CSV", latestAuditPath, StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task<(HttpClient Client, Guid TenantId)> CreateAuthenticatedOwnerClientAsync()
@@ -243,6 +267,42 @@ public class PayrollExportValidationTests : IClassFixture<TestWebApplicationFact
 
     private static T? Deserialize<T>(string json)
         => JsonSerializer.Deserialize<T>(json, JsonOptions);
+
+    private async Task<string?> GetLatestPayrollExportAuditPathAsync(HttpClient client, string pathContains)
+    {
+        var response = await client.GetAsync($"/api/audit-logs?page=1&pageSize=200&pathContains={Uri.EscapeDataString(pathContains)}");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var payload = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(payload);
+        if (!doc.RootElement.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        foreach (var item in items.EnumerateArray())
+        {
+            if (!item.TryGetProperty("method", out var methodElement) || methodElement.GetString() != "PAYROLL_EXPORT_REQUEST")
+            {
+                continue;
+            }
+
+            if (!item.TryGetProperty("path", out var pathElement))
+            {
+                continue;
+            }
+
+            var path = pathElement.GetString();
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                continue;
+            }
+
+            return path;
+        }
+
+        return null;
+    }
 
     private sealed record CreatedTenantResponse(Guid Id);
 

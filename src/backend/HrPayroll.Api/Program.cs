@@ -8,10 +8,12 @@ using HrPayroll.Domain.Entities;
 using HrPayroll.Domain.Enums;
 using HrPayroll.Infrastructure;
 using HrPayroll.Infrastructure.Auth;
+using HrPayroll.Infrastructure.Integrations;
 using HrPayroll.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
@@ -27,6 +29,7 @@ using Npgsql;
 using Microsoft.Extensions.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
+const string ExportSpecVersion = "v1";
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
@@ -4308,6 +4311,213 @@ api.MapGet("/integrations/sync-jobs", [Authorize(Roles = RoleNames.Owner + "," +
     return Results.Ok(new { items });
 });
 
+api.MapGet("/integrations/providers/status", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    IConfiguration configuration,
+    IOptions<QiwaOptions> qiwaOptionsAccessor,
+    IOptions<MudadOptions> mudadOptionsAccessor,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    static string[] BuildMissingFields(bool enabled, bool hasBaseUrl, bool hasApiKey)
+    {
+        var missing = new List<string>();
+        if (!enabled)
+        {
+            missing.Add("enabled");
+        }
+
+        if (!hasBaseUrl)
+        {
+            missing.Add("baseUrl");
+        }
+
+        if (!hasApiKey)
+        {
+            missing.Add("apiKey");
+        }
+
+        return missing.ToArray();
+    }
+
+    var primaryProvider = NormalizeIntegrationProviderName(configuration["Integrations:PrimaryProvider"]) ?? "Qiwa";
+
+    var providerStats = await dbContext.IntegrationSyncJobs
+        .GroupBy(x => x.Provider)
+        .Select(g => new
+        {
+            Provider = g.Key,
+            Total = g.Count(),
+            Queued = g.Count(x => x.Status == "Queued"),
+            RetryScheduled = g.Count(x => x.Status == "RetryScheduled"),
+            DeadLetter = g.Count(x => x.Status == "DeadLetter"),
+            Succeeded = g.Count(x => x.Status == "Succeeded"),
+            LastAttemptAtUtc = g.Max(x => x.LastAttemptAtUtc)
+        })
+        .ToListAsync(cancellationToken);
+    var statsByProvider = providerStats.ToDictionary(x => x.Provider, StringComparer.OrdinalIgnoreCase);
+
+    var qiwaOptions = qiwaOptionsAccessor.Value ?? new QiwaOptions();
+    var qiwaHasBaseUrl = !string.IsNullOrWhiteSpace(qiwaOptions.BaseUrl);
+    var qiwaHasApiKey = !string.IsNullOrWhiteSpace(qiwaOptions.ApiKey);
+    var qiwaReady = qiwaOptions.Enabled && qiwaHasBaseUrl && qiwaHasApiKey;
+    statsByProvider.TryGetValue("Qiwa", out var qiwaStats);
+
+    var mudadOptions = mudadOptionsAccessor.Value ?? new MudadOptions();
+    var mudadHasBaseUrl = !string.IsNullOrWhiteSpace(mudadOptions.BaseUrl);
+    var mudadHasApiKey = !string.IsNullOrWhiteSpace(mudadOptions.ApiKey);
+    var mudadReady = mudadOptions.Enabled && mudadHasBaseUrl && mudadHasApiKey;
+    statsByProvider.TryGetValue("Mudad", out var mudadStats);
+
+    return Results.Ok(new
+    {
+        primaryProvider,
+        providers = new object[]
+        {
+            new
+            {
+                provider = "Qiwa",
+                isPrimary = string.Equals(primaryProvider, "Qiwa", StringComparison.OrdinalIgnoreCase),
+                isEnabled = qiwaOptions.Enabled,
+                isReady = qiwaReady,
+                timeoutSeconds = Math.Clamp(qiwaOptions.TimeoutSeconds, 5, 120),
+                missingConfig = BuildMissingFields(qiwaOptions.Enabled, qiwaHasBaseUrl, qiwaHasApiKey),
+                stats = new
+                {
+                    total = qiwaStats?.Total ?? 0,
+                    queued = qiwaStats?.Queued ?? 0,
+                    retryScheduled = qiwaStats?.RetryScheduled ?? 0,
+                    deadLetter = qiwaStats?.DeadLetter ?? 0,
+                    succeeded = qiwaStats?.Succeeded ?? 0,
+                    lastAttemptAtUtc = qiwaStats?.LastAttemptAtUtc
+                }
+            },
+            new
+            {
+                provider = "Mudad",
+                isPrimary = string.Equals(primaryProvider, "Mudad", StringComparison.OrdinalIgnoreCase),
+                isEnabled = mudadOptions.Enabled,
+                isReady = mudadReady,
+                timeoutSeconds = Math.Clamp(mudadOptions.TimeoutSeconds, 5, 120),
+                missingConfig = BuildMissingFields(mudadOptions.Enabled, mudadHasBaseUrl, mudadHasApiKey),
+                stats = new
+                {
+                    total = mudadStats?.Total ?? 0,
+                    queued = mudadStats?.Queued ?? 0,
+                    retryScheduled = mudadStats?.RetryScheduled ?? 0,
+                    deadLetter = mudadStats?.DeadLetter ?? 0,
+                    succeeded = mudadStats?.Succeeded ?? 0,
+                    lastAttemptAtUtc = mudadStats?.LastAttemptAtUtc
+                }
+            }
+        }
+    });
+});
+
+api.MapPost("/integrations/providers/{provider}/health", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    string provider,
+    bool dryRun,
+    ITenantContext tenantContext,
+    IGovernmentConnectorResolver connectorResolver,
+    IDateTimeProvider dateTimeProvider,
+    IOptions<QiwaOptions> qiwaOptionsAccessor,
+    IOptions<MudadOptions> mudadOptionsAccessor,
+    CancellationToken cancellationToken) =>
+{
+    static string[] BuildMissingFields(bool enabled, bool hasBaseUrl, bool hasApiKey)
+    {
+        var missing = new List<string>();
+        if (!enabled)
+        {
+            missing.Add("enabled");
+        }
+
+        if (!hasBaseUrl)
+        {
+            missing.Add("baseUrl");
+        }
+
+        if (!hasApiKey)
+        {
+            missing.Add("apiKey");
+        }
+
+        return missing.ToArray();
+    }
+
+    var providerName = NormalizeIntegrationProviderName(provider);
+    if (providerName is null)
+    {
+        return Results.BadRequest(new { error = "Unsupported provider. Supported providers: Qiwa, Mudad." });
+    }
+
+    var connector = connectorResolver.Resolve(providerName);
+    if (connector is null)
+    {
+        return Results.BadRequest(new { error = $"No connector registered for provider '{providerName}'." });
+    }
+
+    bool isEnabled;
+    bool hasBaseUrl;
+    bool hasApiKey;
+    int timeoutSeconds;
+    if (string.Equals(providerName, "Qiwa", StringComparison.OrdinalIgnoreCase))
+    {
+        var options = qiwaOptionsAccessor.Value ?? new QiwaOptions();
+        isEnabled = options.Enabled;
+        hasBaseUrl = !string.IsNullOrWhiteSpace(options.BaseUrl);
+        hasApiKey = !string.IsNullOrWhiteSpace(options.ApiKey);
+        timeoutSeconds = Math.Clamp(options.TimeoutSeconds, 5, 120);
+    }
+    else
+    {
+        var options = mudadOptionsAccessor.Value ?? new MudadOptions();
+        isEnabled = options.Enabled;
+        hasBaseUrl = !string.IsNullOrWhiteSpace(options.BaseUrl);
+        hasApiKey = !string.IsNullOrWhiteSpace(options.ApiKey);
+        timeoutSeconds = Math.Clamp(options.TimeoutSeconds, 5, 120);
+    }
+
+    var isReady = isEnabled && hasBaseUrl && hasApiKey;
+    var missingConfig = BuildMissingFields(isEnabled, hasBaseUrl, hasApiKey);
+    if (!isReady || !dryRun)
+    {
+        return Results.Ok(new
+        {
+            provider = providerName,
+            isReady,
+            dryRunExecuted = false,
+            timeoutSeconds,
+            missingConfig,
+            message = isReady
+                ? "Configuration is ready. Pass dryRun=true to execute live connector health check."
+                : "Configuration is incomplete. Complete missingConfig fields before dry run."
+        });
+    }
+
+    var request = new GovernmentSyncRequest(
+        tenantContext.TenantId,
+        providerName,
+        "HealthCheck",
+        "IntegrationProvider",
+        null,
+        "{\"healthCheck\":true}",
+        $"{providerName}:health:{dateTimeProvider.UtcNow:yyyyMMddHHmmss}:{Guid.NewGuid():N}");
+
+    var result = await connector.SyncAsync(request, cancellationToken);
+    return Results.Ok(new
+    {
+        provider = providerName,
+        isReady,
+        dryRunExecuted = true,
+        dryRunSuccess = result.Success,
+        externalReference = result.ExternalReference,
+        error = result.ErrorMessage,
+        response = string.IsNullOrWhiteSpace(result.ResponseJson) ? "{}" : result.ResponseJson,
+        timeoutSeconds,
+        missingConfig
+    });
+});
+
 api.MapGet("/integrations/sync-jobs/dashboard", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
     IDateTimeProvider dateTimeProvider,
     IApplicationDbContext dbContext,
@@ -6298,10 +6508,17 @@ api.MapPost("/payroll/periods", [Authorize(Roles = RoleNames.Owner + "," + RoleN
         return Results.BadRequest(new { error = "Month must be between 1 and 12." });
     }
 
-    var exists = await dbContext.PayrollPeriods.AnyAsync(x => x.Year == request.Year && x.Month == request.Month, cancellationToken);
-    if (exists)
+    var existingPeriod = await dbContext.PayrollPeriods
+        .FirstOrDefaultAsync(x => x.Year == request.Year && x.Month == request.Month, cancellationToken);
+    if (existingPeriod is not null)
     {
-        return Results.BadRequest(new { error = "Payroll period already exists." });
+        return Results.BadRequest(new
+        {
+            error = "Payroll period already exists.",
+            existingPeriodId = existingPeriod.Id,
+            request.Year,
+            request.Month
+        });
     }
 
     var period = new PayrollPeriod
@@ -6984,6 +7201,32 @@ api.MapPost("/payroll/runs/calculate", [Authorize(Roles = RoleNames.Owner + "," 
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
+    var employees = await dbContext.Employees.OrderBy(x => x.FirstName).ThenBy(x => x.LastName).ToListAsync(cancellationToken);
+    var employeeDataBlockingFindings = employees
+        .Where(x => string.IsNullOrWhiteSpace(x.JobTitle) || x.BaseSalary <= 0m)
+        .Select(x => new
+        {
+            x.Id,
+            employeeName = string.Join(" ", new[] { x.FirstName, x.LastName }.Where(v => !string.IsNullOrWhiteSpace(v))).Trim(),
+            reasonCodes = new[]
+            {
+                string.IsNullOrWhiteSpace(x.JobTitle) ? "EMPLOYEE_JOB_TITLE_MISSING" : null,
+                x.BaseSalary <= 0m ? "EMPLOYEE_BASE_SALARY_INVALID" : null
+            }.Where(v => v is not null).ToArray()
+        })
+        .ToList();
+    if (employeeDataBlockingFindings.Count > 0)
+    {
+        return Results.BadRequest(new
+        {
+            error = "Payroll calculation blocked due invalid employee master data.",
+            details = employeeDataBlockingFindings
+                .Take(50)
+                .Select(x => $"{(string.IsNullOrWhiteSpace(x.employeeName) ? x.Id.ToString() : x.employeeName)}: {string.Join(", ", x.reasonCodes)}")
+                .ToArray()
+        });
+    }
+
     var existingLines = await dbContext.PayrollLines.Where(x => x.PayrollRunId == run.Id).ToListAsync(cancellationToken);
     if (existingLines.Count > 0)
     {
@@ -6991,7 +7234,6 @@ api.MapPost("/payroll/runs/calculate", [Authorize(Roles = RoleNames.Owner + "," 
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    var employees = await dbContext.Employees.OrderBy(x => x.FirstName).ThenBy(x => x.LastName).ToListAsync(cancellationToken);
     var attendance = await dbContext.AttendanceInputs.Where(x => x.Year == period.Year && x.Month == period.Month).ToListAsync(cancellationToken);
     var adjustments = await dbContext.PayrollAdjustments.Where(x => x.Year == period.Year && x.Month == period.Month).ToListAsync(cancellationToken);
     var shiftRules = await dbContext.ShiftRules.Where(x => x.IsActive).ToListAsync(cancellationToken);
@@ -7038,11 +7280,12 @@ api.MapPost("/payroll/runs/calculate", [Authorize(Roles = RoleNames.Owner + "," 
         var overtimeHours = approvedTimesheets.Count > 0
             ? approvedTimesheets.Sum(x => x.ApprovedOvertimeHours)
             : (employeeAttendance?.OvertimeHours ?? 0m);
+        var employeeJobTitle = string.IsNullOrWhiteSpace(employee.JobTitle) ? string.Empty : employee.JobTitle.Trim();
 
         var policyAllowance = allowancePolicies
             .Where(x =>
                 string.IsNullOrWhiteSpace(x.JobTitle) ||
-                string.Equals(x.JobTitle.Trim(), employee.JobTitle.Trim(), StringComparison.OrdinalIgnoreCase))
+                string.Equals(x.JobTitle.Trim(), employeeJobTitle, StringComparison.OrdinalIgnoreCase))
             .Sum(x => x.MonthlyAmount);
 
         var employeeGradeCode = string.IsNullOrWhiteSpace(employee.GradeCode)
@@ -8327,7 +8570,7 @@ api.MapPost("/payroll/runs/{runId:guid}/exports/register-csv", [Authorize(Roles 
         userId = parsedUserId;
     }
 
-    var metadataJson = BuildExportMetadataJson("PAYROLL_REGISTER", "v1");
+    var metadataJson = BuildExportMetadataJson("PAYROLL_REGISTER", ExportSpecVersion);
     var exportJob = new ExportArtifact
     {
         PayrollRunId = runId,
@@ -8345,7 +8588,7 @@ api.MapPost("/payroll/runs/{runId:guid}/exports/register-csv", [Authorize(Roles 
         TenantId = run.TenantId,
         UserId = userId,
         Method = "PAYROLL_EXPORT_REQUEST",
-        Path = $"/api/payroll/runs/{runId}/exports/register-csv?status=Queued&exportId={exportJob.Id}&spec=PAYROLL_REGISTER&version=v1",
+        Path = $"/api/payroll/runs/{runId}/exports/register-csv?status=Queued&exportId={exportJob.Id}&spec=PAYROLL_REGISTER&version={ExportSpecVersion}",
         StatusCode = StatusCodes.Status202Accepted,
         IpAddress = httpContext.Connection.RemoteIpAddress?.ToString(),
         DurationMs = 0
@@ -8373,10 +8616,38 @@ api.MapPost("/payroll/runs/{runId:guid}/exports/gosi-csv", [Authorize(Roles = Ro
 
     if (run.Status is not PayrollRunStatus.Approved and not PayrollRunStatus.Locked)
     {
+        Guid? invalidStatusUserId = null;
+        var invalidStatusUserIdClaim = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (Guid.TryParse(invalidStatusUserIdClaim, out var parsedInvalidStatusUserId))
+        {
+            invalidStatusUserId = parsedInvalidStatusUserId;
+        }
+
+        await WritePayrollExportComplianceAuditAsync(
+            dbContext,
+            httpContext,
+            run.TenantId,
+            invalidStatusUserId,
+            runId,
+            endpointSlug: "gosi-csv",
+            specCode: "GOSI_CSV",
+            status: "Rejected",
+            statusCode: StatusCodes.Status400BadRequest,
+            reason: "InvalidRunStatus",
+            cancellationToken: cancellationToken);
+
         return Results.BadRequest(new
         {
             error = "GOSI export requires payroll run status Approved or Locked.",
-            runStatus = run.Status.ToString()
+            runStatus = run.Status.ToString(),
+            rejectionReasons = new[]
+            {
+                new
+                {
+                    code = "GOSI_CSV_INVALID_RUN_STATUS",
+                    message = "GOSI export requires payroll run status Approved or Locked."
+                }
+            }
         });
     }
 
@@ -8391,34 +8662,52 @@ api.MapPost("/payroll/runs/{runId:guid}/exports/gosi-csv", [Authorize(Roles = Ro
     var gosiBlockingFindings = gosiFindings
         .Where(x => string.Equals(x.Severity, "Critical", StringComparison.OrdinalIgnoreCase))
         .ToList();
+    var gosiRejectionReasons = BuildExportRejectionReasons("GOSI_CSV", gosiBlockingFindings);
     if (gosiBlockingFindings.Count > 0)
     {
-        dbContext.AddEntity(new AuditLog
-        {
-            TenantId = run.TenantId,
-            UserId = userId,
-            Method = "PAYROLL_EXPORT_REQUEST",
-            Path = $"/api/payroll/runs/{runId}/exports/gosi-csv?status=Blocked&critical={gosiBlockingFindings.Count}&spec=GOSI_CSV&version=v1",
-            StatusCode = StatusCodes.Status400BadRequest,
-            IpAddress = httpContext.Connection.RemoteIpAddress?.ToString(),
-            DurationMs = 0
-        });
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await WritePayrollExportComplianceAuditAsync(
+            dbContext,
+            httpContext,
+            run.TenantId,
+            userId,
+            runId,
+            endpointSlug: "gosi-csv",
+            specCode: "GOSI_CSV",
+            status: "Blocked",
+            statusCode: StatusCodes.Status400BadRequest,
+            criticalCount: gosiBlockingFindings.Count,
+            reason: "CriticalValidationFailed",
+            reasonCodes: gosiRejectionReasons.Select(x => x.Code),
+            cancellationToken: cancellationToken);
 
         return Results.BadRequest(new
         {
             error = "GOSI export validation failed.",
-            details = gosiBlockingFindings.Select(x => x.Message).Distinct().Take(50).ToArray()
+            details = gosiBlockingFindings.Select(x => x.Message).Distinct().Take(50).ToArray(),
+            rejectionReasons = gosiRejectionReasons
         });
     }
 
     var period = await dbContext.PayrollPeriods.FirstOrDefaultAsync(x => x.Id == run.PayrollPeriodId, cancellationToken);
     if (period is null)
     {
+        await WritePayrollExportComplianceAuditAsync(
+            dbContext,
+            httpContext,
+            run.TenantId,
+            userId,
+            runId,
+            endpointSlug: "gosi-csv",
+            specCode: "GOSI_CSV",
+            status: "Rejected",
+            statusCode: StatusCodes.Status404NotFound,
+            reason: "PayrollPeriodNotFound",
+            cancellationToken: cancellationToken);
+
         return Results.NotFound();
     }
 
-    var metadataJson = BuildExportMetadataJson("GOSI_CSV", "v1");
+    var metadataJson = BuildExportMetadataJson("GOSI_CSV", ExportSpecVersion);
     var exportJob = new ExportArtifact
     {
         PayrollRunId = runId,
@@ -8431,17 +8720,18 @@ api.MapPost("/payroll/runs/{runId:guid}/exports/gosi-csv", [Authorize(Roles = Ro
     };
 
     dbContext.AddEntity(exportJob);
-    dbContext.AddEntity(new AuditLog
-    {
-        TenantId = run.TenantId,
-        UserId = userId,
-        Method = "PAYROLL_EXPORT_REQUEST",
-        Path = $"/api/payroll/runs/{runId}/exports/gosi-csv?status=Queued&exportId={exportJob.Id}&spec=GOSI_CSV&version=v1",
-        StatusCode = StatusCodes.Status202Accepted,
-        IpAddress = httpContext.Connection.RemoteIpAddress?.ToString(),
-        DurationMs = 0
-    });
-    await dbContext.SaveChangesAsync(cancellationToken);
+    await WritePayrollExportComplianceAuditAsync(
+        dbContext,
+        httpContext,
+        run.TenantId,
+        userId,
+        runId,
+        endpointSlug: "gosi-csv",
+        specCode: "GOSI_CSV",
+        status: "Queued",
+        statusCode: StatusCodes.Status202Accepted,
+        exportId: exportJob.Id,
+        cancellationToken: cancellationToken);
 
     return Results.Accepted($"/api/payroll/exports/{exportJob.Id}", new
     {
@@ -8464,10 +8754,38 @@ api.MapPost("/payroll/runs/{runId:guid}/exports/wps-csv", [Authorize(Roles = Rol
 
     if (run.Status is not PayrollRunStatus.Approved and not PayrollRunStatus.Locked)
     {
+        Guid? invalidStatusUserId = null;
+        var invalidStatusUserIdClaim = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (Guid.TryParse(invalidStatusUserIdClaim, out var parsedInvalidStatusUserId))
+        {
+            invalidStatusUserId = parsedInvalidStatusUserId;
+        }
+
+        await WritePayrollExportComplianceAuditAsync(
+            dbContext,
+            httpContext,
+            run.TenantId,
+            invalidStatusUserId,
+            runId,
+            endpointSlug: "wps-csv",
+            specCode: "WPS_CSV",
+            status: "Rejected",
+            statusCode: StatusCodes.Status400BadRequest,
+            reason: "InvalidRunStatus",
+            cancellationToken: cancellationToken);
+
         return Results.BadRequest(new
         {
             error = "WPS export requires payroll run status Approved or Locked.",
-            runStatus = run.Status.ToString()
+            runStatus = run.Status.ToString(),
+            rejectionReasons = new[]
+            {
+                new
+                {
+                    code = "WPS_CSV_INVALID_RUN_STATUS",
+                    message = "WPS export requires payroll run status Approved or Locked."
+                }
+            }
         });
     }
 
@@ -8482,34 +8800,52 @@ api.MapPost("/payroll/runs/{runId:guid}/exports/wps-csv", [Authorize(Roles = Rol
     var wpsBlockingFindings = wpsFindings
         .Where(x => string.Equals(x.Severity, "Critical", StringComparison.OrdinalIgnoreCase))
         .ToList();
+    var wpsRejectionReasons = BuildExportRejectionReasons("WPS_CSV", wpsBlockingFindings);
     if (wpsBlockingFindings.Count > 0)
     {
-        dbContext.AddEntity(new AuditLog
-        {
-            TenantId = run.TenantId,
-            UserId = userId,
-            Method = "PAYROLL_EXPORT_REQUEST",
-            Path = $"/api/payroll/runs/{runId}/exports/wps-csv?status=Blocked&critical={wpsBlockingFindings.Count}&spec=WPS_CSV&version=v1",
-            StatusCode = StatusCodes.Status400BadRequest,
-            IpAddress = httpContext.Connection.RemoteIpAddress?.ToString(),
-            DurationMs = 0
-        });
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await WritePayrollExportComplianceAuditAsync(
+            dbContext,
+            httpContext,
+            run.TenantId,
+            userId,
+            runId,
+            endpointSlug: "wps-csv",
+            specCode: "WPS_CSV",
+            status: "Blocked",
+            statusCode: StatusCodes.Status400BadRequest,
+            criticalCount: wpsBlockingFindings.Count,
+            reason: "CriticalValidationFailed",
+            reasonCodes: wpsRejectionReasons.Select(x => x.Code),
+            cancellationToken: cancellationToken);
 
         return Results.BadRequest(new
         {
             error = "WPS export validation failed.",
-            details = wpsBlockingFindings.Select(x => x.Message).Distinct().Take(50).ToArray()
+            details = wpsBlockingFindings.Select(x => x.Message).Distinct().Take(50).ToArray(),
+            rejectionReasons = wpsRejectionReasons
         });
     }
 
     var period = await dbContext.PayrollPeriods.FirstOrDefaultAsync(x => x.Id == run.PayrollPeriodId, cancellationToken);
     if (period is null)
     {
+        await WritePayrollExportComplianceAuditAsync(
+            dbContext,
+            httpContext,
+            run.TenantId,
+            userId,
+            runId,
+            endpointSlug: "wps-csv",
+            specCode: "WPS_CSV",
+            status: "Rejected",
+            statusCode: StatusCodes.Status404NotFound,
+            reason: "PayrollPeriodNotFound",
+            cancellationToken: cancellationToken);
+
         return Results.NotFound();
     }
 
-    var metadataJson = BuildExportMetadataJson("WPS_CSV", "v1");
+    var metadataJson = BuildExportMetadataJson("WPS_CSV", ExportSpecVersion);
     var exportJob = new ExportArtifact
     {
         PayrollRunId = runId,
@@ -8522,17 +8858,18 @@ api.MapPost("/payroll/runs/{runId:guid}/exports/wps-csv", [Authorize(Roles = Rol
     };
 
     dbContext.AddEntity(exportJob);
-    dbContext.AddEntity(new AuditLog
-    {
-        TenantId = run.TenantId,
-        UserId = userId,
-        Method = "PAYROLL_EXPORT_REQUEST",
-        Path = $"/api/payroll/runs/{runId}/exports/wps-csv?status=Queued&exportId={exportJob.Id}&spec=WPS_CSV&version=v1",
-        StatusCode = StatusCodes.Status202Accepted,
-        IpAddress = httpContext.Connection.RemoteIpAddress?.ToString(),
-        DurationMs = 0
-    });
-    await dbContext.SaveChangesAsync(cancellationToken);
+    await WritePayrollExportComplianceAuditAsync(
+        dbContext,
+        httpContext,
+        run.TenantId,
+        userId,
+        runId,
+        endpointSlug: "wps-csv",
+        specCode: "WPS_CSV",
+        status: "Queued",
+        statusCode: StatusCodes.Status202Accepted,
+        exportId: exportJob.Id,
+        cancellationToken: cancellationToken);
 
     return Results.Accepted($"/api/payroll/exports/{exportJob.Id}", new
     {
@@ -8588,7 +8925,7 @@ api.MapPost("/payroll/runs/{runId:guid}/exports/payslip/{employeeId:guid}/pdf", 
         userId = parsedUserId;
     }
 
-    var metadataJson = BuildExportMetadataJson("PAYSLIP_PDF", "v1");
+    var metadataJson = BuildExportMetadataJson("PAYSLIP_PDF", ExportSpecVersion);
     var exportJob = new ExportArtifact
     {
         PayrollRunId = runId,
@@ -9653,6 +9990,112 @@ static string BuildExportMetadataJson(string specCode, string specVersion)
             version = specVersion
         }
     });
+}
+
+static IReadOnlyList<ExportRejectionReasonResponse> BuildExportRejectionReasons(
+    string specCode,
+    IEnumerable<PayrollPreApprovalFindingResponse> findings)
+{
+    return findings
+        .Where(x => !string.IsNullOrWhiteSpace(x.Code) && !string.IsNullOrWhiteSpace(x.Message))
+        .Select(x => new ExportRejectionReasonResponse(MapExportRejectionReasonCode(specCode, x.Code), x.Message))
+        .GroupBy(x => x.Code, StringComparer.OrdinalIgnoreCase)
+        .Select(x => x.First())
+        .Take(50)
+        .ToList();
+}
+
+static string MapExportRejectionReasonCode(string specCode, string findingCode)
+{
+    if (string.IsNullOrWhiteSpace(findingCode))
+    {
+        return $"{specCode}_VALIDATION_FAILED";
+    }
+
+    var trimmed = findingCode.Trim();
+    if (specCode.StartsWith("WPS", StringComparison.OrdinalIgnoreCase) && trimmed.StartsWith("Wps", StringComparison.Ordinal))
+    {
+        trimmed = trimmed[3..];
+    }
+    else if (specCode.StartsWith("GOSI", StringComparison.OrdinalIgnoreCase) && trimmed.StartsWith("Gosi", StringComparison.Ordinal))
+    {
+        trimmed = trimmed[4..];
+    }
+
+    if (string.IsNullOrWhiteSpace(trimmed))
+    {
+        trimmed = "ValidationFailed";
+    }
+
+    var snake = Regex.Replace(trimmed, "([a-z0-9])([A-Z])", "$1_$2").ToUpperInvariant();
+    return $"{specCode}_{snake}";
+}
+
+static async Task WritePayrollExportComplianceAuditAsync(
+    IApplicationDbContext dbContext,
+    HttpContext httpContext,
+    Guid tenantId,
+    Guid? userId,
+    Guid runId,
+    string endpointSlug,
+    string specCode,
+    string status,
+    int statusCode,
+    Guid? exportId = null,
+    int? criticalCount = null,
+    string? reason = null,
+    IEnumerable<string>? reasonCodes = null,
+    CancellationToken cancellationToken = default)
+{
+    var query = new List<string>
+    {
+        $"status={Uri.EscapeDataString(status)}",
+        $"spec={Uri.EscapeDataString(specCode)}",
+        "version=v1"
+    };
+
+    if (exportId.HasValue)
+    {
+        query.Add($"exportId={exportId.Value}");
+    }
+
+    if (criticalCount.HasValue)
+    {
+        query.Add($"critical={criticalCount.Value}");
+    }
+
+    if (!string.IsNullOrWhiteSpace(reason))
+    {
+        query.Add($"reason={Uri.EscapeDataString(reason)}");
+    }
+
+    if (reasonCodes is not null)
+    {
+        var compactReasonCodes = reasonCodes
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(10)
+            .ToArray();
+
+        if (compactReasonCodes.Length > 0)
+        {
+            query.Add($"reasonCodes={Uri.EscapeDataString(string.Join(",", compactReasonCodes))}");
+        }
+    }
+
+    dbContext.AddEntity(new AuditLog
+    {
+        TenantId = tenantId,
+        UserId = userId,
+        Method = "PAYROLL_EXPORT_REQUEST",
+        Path = $"/api/payroll/runs/{runId}/exports/{endpointSlug}?{string.Join("&", query)}",
+        StatusCode = statusCode,
+        IpAddress = httpContext.Connection.RemoteIpAddress?.ToString(),
+        DurationMs = 0
+    });
+
+    await dbContext.SaveChangesAsync(cancellationToken);
 }
 
 static string ReadAuditQueryValue(string path, string key)
@@ -10790,6 +11233,10 @@ public sealed record PayrollPreApprovalFindingResponse(
     string Message,
     string? MetricName,
     decimal? MetricValue);
+
+public sealed record ExportRejectionReasonResponse(
+    string Code,
+    string Message);
 
 public sealed record LoginRequest(Guid? TenantId, string? TenantSlug, string Email, string Password);
 public sealed record ForgotPasswordRequest(string TenantSlug, string Email);

@@ -22,7 +22,8 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>
             var inMemoryConfig = new Dictionary<string, string?>
             {
                 ["ConnectionStrings:DefaultConnection"] = string.Empty,
-                ["Database:InMemoryName"] = databaseName
+                ["Database:InMemoryName"] = databaseName,
+                ["Database:RunMigrationsOnStartup"] = "false"
             };
 
             configBuilder.AddInMemoryCollection(inMemoryConfig);

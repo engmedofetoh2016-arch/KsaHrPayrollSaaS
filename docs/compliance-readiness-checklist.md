@@ -30,15 +30,20 @@ Owner: Engineering
 3. Add compliance audit record for every export attempt
 - Status: Done
 - Evidence:
-  - Audit method `PAYROLL_EXPORT_REQUEST` added for blocked and queued GOSI/WPS export requests.
-  - Captures run path and attempt status.
+  - Audit method `PAYROLL_EXPORT_REQUEST` added for rejected, blocked, and queued GOSI/WPS export requests.
+  - Captures run path, attempt status, spec/version, and compact reason codes for blocked requests.
 
 4. Security baseline: secrets management, DB encryption-at-rest policy, backup/restore drill
-- Status: Not Started
+- Status: In Progress
 - Required evidence:
   - Secrets management policy doc + rotation cadence
   - DB encryption-at-rest control verification
   - Backup/restore drill runbook + drill report with timestamp and recovery duration
+- Artifacts added:
+  - `docs/mvp-phase1-security-checklist.md`
+  - `docs/backup-restore-drill-runbook.md`
+  - `docs/backup-restore-drill-report-template.md`
+  - `docs/security-signoff-evidence-template.md`
 
 ## Exit Criteria Tracking
 
@@ -52,12 +57,10 @@ Owner: Engineering
     - GOSI queue when data valid
 
 2. Every export has full traceability (who, when, version, status)
-- Status: In Progress
+- Status: Done (WPS/GOSI request attempts)
 - Evidence:
-  - Export request audit records present.
+  - Export request audit records present for WPS/GOSI rejected, blocked, and queued attempts.
   - Export artifact status lifecycle present.
-- Gap:
-  - Add versioned compliance spec reference to export metadata (future enhancement).
 
 3. Security checklist signed by DevOps + QA
 - Status: Not Started
