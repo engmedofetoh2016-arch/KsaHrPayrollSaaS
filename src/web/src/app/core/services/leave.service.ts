@@ -7,7 +7,8 @@ import {
   LeaveBalance,
   LeaveBalancePreviewRequest,
   LeaveBalancePreviewResult,
-  LeaveRequest
+  LeaveRequest,
+  UpsertLeaveBalanceRequest
 } from '../models/leave.models';
 
 @Injectable({ providedIn: 'root' })
@@ -44,6 +45,10 @@ export class LeaveService {
       params = params.set('employeeId', employeeId);
     }
     return this.http.get<LeaveBalance[]>(`${this.base}/balances`, { params });
+  }
+
+  upsertBalance(payload: UpsertLeaveBalanceRequest) {
+    return this.http.post<LeaveBalance>(`${this.base}/balances/upsert`, payload);
   }
 
   previewBalance(payload: LeaveBalancePreviewRequest) {

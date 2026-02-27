@@ -62,3 +62,11 @@ export interface LeaveBalance {
   usedDays: number;
   remainingDays: number;
 }
+
+export interface UpsertLeaveBalanceRequest {
+  employeeId: string;
+  year: number;
+  leaveType: number;
+  allocatedDays: number;
+  usedDays: number;
+}

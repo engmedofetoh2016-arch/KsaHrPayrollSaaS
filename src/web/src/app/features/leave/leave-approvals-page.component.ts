@@ -1,30 +1,53 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { LeaveRequest } from '../../core/models/leave.models';
 import { I18nService } from '../../core/services/i18n.service';
 import { LeaveService } from '../../core/services/leave.service';
 import { getApiErrorMessage } from '../../core/utils/api-error.util';
+import { EmployeesService } from '../../core/services/employees.service';
+import { Employee } from '../../core/models/employee.models';
 
 @Component({
   selector: 'app-leave-approvals-page',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FormsModule],
   templateUrl: './leave-approvals-page.component.html',
   styleUrl: './leave-approvals-page.component.scss'
 })
 export class LeaveApprovalsPageComponent implements OnInit {
   private readonly leaveService = inject(LeaveService);
+  private readonly employeesService = inject(EmployeesService);
   readonly i18n = inject(I18nService);
 
   readonly requests = signal<LeaveRequest[]>([]);
+  readonly employees = signal<Employee[]>([]);
   readonly loading = signal(false);
   readonly busy = signal(false);
   readonly message = signal('');
   readonly error = signal('');
   readonly statusFilter = signal(1);
+  readonly selectedEmployeeId = signal('');
+  readonly balanceYear = signal(new Date().getFullYear());
+  readonly balanceLeaveType = signal(1);
+  readonly allocatedDays = signal(21);
+  readonly usedDays = signal(0);
 
   ngOnInit(): void {
+    this.loadEmployees();
     this.loadRequests();
+  }
+
+  loadEmployees() {
+    this.employeesService.list(1, 500).subscribe({
+      next: (rows) => {
+        this.employees.set(rows);
+        if (!this.selectedEmployeeId() && rows.length > 0) {
+          this.selectedEmployeeId.set(rows[0].id);
+        }
+      },
+      error: (err) => this.error.set(getApiErrorMessage(err, 'Failed to load employees.'))
+    });
   }
 
   loadRequests() {
@@ -85,6 +108,36 @@ export class LeaveApprovalsPageComponent implements OnInit {
       error: (err) => {
         this.busy.set(false);
         this.error.set(getApiErrorMessage(err, 'Failed to reject leave request.'));
+      }
+    });
+  }
+
+  upsertBalance() {
+    if (this.busy()) return;
+    const employeeId = this.selectedEmployeeId();
+    if (!employeeId) {
+      this.error.set(this.i18n.text('Select employee first.', 'اختر الموظف أولاً.'));
+      return;
+    }
+
+    this.busy.set(true);
+    this.message.set('');
+    this.error.set('');
+
+    this.leaveService.upsertBalance({
+      employeeId,
+      year: Number(this.balanceYear()),
+      leaveType: Number(this.balanceLeaveType()),
+      allocatedDays: Number(this.allocatedDays()),
+      usedDays: Number(this.usedDays())
+    }).subscribe({
+      next: () => {
+        this.busy.set(false);
+        this.message.set(this.i18n.text('Leave balance saved.', 'تم حفظ رصيد الإجازة.'));
+      },
+      error: (err) => {
+        this.busy.set(false);
+        this.error.set(getApiErrorMessage(err, 'Failed to save leave balance.'));
       }
     });
   }

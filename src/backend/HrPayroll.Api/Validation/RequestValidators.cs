@@ -317,6 +317,21 @@ public class LeaveBalancePreviewRequestValidator : AbstractValidator<LeaveBalanc
     }
 }
 
+public class UpsertLeaveBalanceRequestValidator : AbstractValidator<UpsertLeaveBalanceRequest>
+{
+    public UpsertLeaveBalanceRequestValidator()
+    {
+        RuleFor(x => x.EmployeeId).NotEmpty();
+        RuleFor(x => x.Year).InclusiveBetween(2000, 2100);
+        RuleFor(x => x.LeaveType).Must(t => t is LeaveType.Annual or LeaveType.Sick or LeaveType.Unpaid);
+        RuleFor(x => x.AllocatedDays).GreaterThanOrEqualTo(0m);
+        RuleFor(x => x.UsedDays).GreaterThanOrEqualTo(0m);
+        RuleFor(x => x)
+            .Must(x => x.UsedDays <= x.AllocatedDays)
+            .WithMessage("usedDays cannot exceed allocatedDays.");
+    }
+}
+
 public class ApproveLeaveRequestRequestValidator : AbstractValidator<ApproveLeaveRequestRequest>
 {
     public ApproveLeaveRequestRequestValidator()

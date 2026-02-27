@@ -5458,6 +5458,56 @@ api.MapGet("/leave/balances", [Authorize(Roles = RoleNames.Owner + "," + RoleNam
     }
 });
 
+api.MapPost("/leave/balances/upsert", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    UpsertLeaveBalanceRequest request,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var employeeExists = await dbContext.Employees.AnyAsync(x => x.Id == request.EmployeeId, cancellationToken);
+    if (!employeeExists)
+    {
+        return Results.NotFound(new { error = "Employee not found." });
+    }
+
+    var balance = await dbContext.LeaveBalances.FirstOrDefaultAsync(
+        x => x.EmployeeId == request.EmployeeId &&
+             x.Year == request.Year &&
+             x.LeaveType == request.LeaveType,
+        cancellationToken);
+
+    if (balance is null)
+    {
+        balance = new LeaveBalance
+        {
+            EmployeeId = request.EmployeeId,
+            Year = request.Year,
+            LeaveType = request.LeaveType,
+            AllocatedDays = request.AllocatedDays,
+            UsedDays = request.UsedDays
+        };
+        dbContext.AddEntity(balance);
+    }
+    else
+    {
+        balance.AllocatedDays = request.AllocatedDays;
+        balance.UsedDays = request.UsedDays;
+    }
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+
+    return Results.Ok(new
+    {
+        balance.Id,
+        balance.EmployeeId,
+        balance.Year,
+        balance.LeaveType,
+        balance.AllocatedDays,
+        balance.UsedDays,
+        remainingDays = balance.AllocatedDays - balance.UsedDays
+    });
+})
+    .AddEndpointFilter<ValidationFilter<UpsertLeaveBalanceRequest>>();
+
 api.MapPost("/leave/requests", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager + "," + RoleNames.Employee)] async (
     CreateLeaveRequestRequest request,
     IApplicationDbContext dbContext,
@@ -10148,6 +10198,12 @@ public sealed record LeaveBalancePreviewRequest(
     LeaveType LeaveType,
     DateOnly StartDate,
     DateOnly EndDate);
+public sealed record UpsertLeaveBalanceRequest(
+    Guid EmployeeId,
+    int Year,
+    LeaveType LeaveType,
+    decimal AllocatedDays,
+    decimal UsedDays);
 
 public sealed record ApproveLeaveRequestRequest(string? Comment);
 
