@@ -1,5 +1,11 @@
 .panel { background: #fff; border: 1px solid #d9e3ef; border-radius: 12px; padding: 16px; overflow-x: auto; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.balance-editor { border: 1px solid #d9e3ef; border-radius: 10px; padding: 12px; margin-bottom: 12px; }
+.balance-editor h3 { margin: 0 0 10px; font-size: 1rem; }
+.editor-grid { display: grid; grid-template-columns: repeat(3, minmax(180px, 1fr)); gap: 8px; align-items: end; }
+.editor-grid label { display: grid; gap: 4px; font-size: 0.92rem; color: #31455a; }
+.editor-grid input,
+.editor-grid select { border: 1px solid #cfdceb; border-radius: 8px; padding: 8px; font: inherit; }
 button { border: 0; background: #0a4ea1; color: #fff; border-radius: 8px; padding: 9px 12px; cursor: pointer; }
 button.active { background: #083a77; }
 table { width: 100%; border-collapse: collapse; margin-top: 8px; }
@@ -17,6 +23,10 @@ th, td { border-bottom: 1px solid #e2eaf3; text-align: left; padding: 8px; verti
   .actions,
   .row-actions {
     display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .editor-grid {
     grid-template-columns: 1fr;
   }
 

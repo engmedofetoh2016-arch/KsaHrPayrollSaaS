@@ -1,11 +1,48 @@
 <section class="panel">
-  <h2>{{ i18n.text('Leave Approvals', 'موافقات الإجازات') }}</h2>
+  <h2>{{ i18n.text('Leave Approvals', '??????? ????????') }}</h2>
+
+  <div class="balance-editor">
+    <h3>{{ i18n.text('Adjust Leave Balance', '????? ???? ???????') }}</h3>
+    <div class="editor-grid">
+      <label>
+        {{ i18n.text('Employee', '??????') }}
+        <select [ngModel]="selectedEmployeeId()" (ngModelChange)="selectedEmployeeId.set($event)">
+          @for (employee of employees(); track employee.id) {
+            <option [value]="employee.id">{{ employee.firstName }} {{ employee.lastName }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        {{ i18n.text('Year', '?????') }}
+        <input type="number" [ngModel]="balanceYear()" (ngModelChange)="balanceYear.set($event)" min="2000" max="2100" />
+      </label>
+      <label>
+        {{ i18n.text('Type', '?????') }}
+        <select [ngModel]="balanceLeaveType()" (ngModelChange)="balanceLeaveType.set($event)">
+          <option [ngValue]="1">{{ i18n.text('Annual', '?????') }}</option>
+          <option [ngValue]="2">{{ i18n.text('Sick', '?????') }}</option>
+          <option [ngValue]="3">{{ i18n.text('Unpaid', '??? ??????') }}</option>
+        </select>
+      </label>
+      <label>
+        {{ i18n.text('Allocated Days', '?????? ???????') }}
+        <input type="number" [ngModel]="allocatedDays()" (ngModelChange)="allocatedDays.set($event)" min="0" step="0.5" />
+      </label>
+      <label>
+        {{ i18n.text('Used Days', '?????? ?????????') }}
+        <input type="number" [ngModel]="usedDays()" (ngModelChange)="usedDays.set($event)" min="0" step="0.5" />
+      </label>
+      <button type="button" (click)="upsertBalance()" [disabled]="busy()">
+        {{ i18n.text('Save Balance', '??? ??????') }}
+      </button>
+    </div>
+  </div>
 
   <div class="actions">
-    <button type="button" [class.active]="statusFilter() === 1" (click)="setStatusFilter(1)">{{ i18n.text('Pending', 'معلق') }}</button>
-    <button type="button" [class.active]="statusFilter() === 2" (click)="setStatusFilter(2)">{{ i18n.text('Approved', 'معتمد') }}</button>
-    <button type="button" [class.active]="statusFilter() === 3" (click)="setStatusFilter(3)">{{ i18n.text('Rejected', 'مرفوض') }}</button>
-    <button type="button" [class.active]="statusFilter() === 0" (click)="setStatusFilter(0)">{{ i18n.text('All', 'الكل') }}</button>
+    <button type="button" [class.active]="statusFilter() === 1" (click)="setStatusFilter(1)">{{ i18n.text('Pending', '????') }}</button>
+    <button type="button" [class.active]="statusFilter() === 2" (click)="setStatusFilter(2)">{{ i18n.text('Approved', '?????') }}</button>
+    <button type="button" [class.active]="statusFilter() === 3" (click)="setStatusFilter(3)">{{ i18n.text('Rejected', '?????') }}</button>
+    <button type="button" [class.active]="statusFilter() === 0" (click)="setStatusFilter(0)">{{ i18n.text('All', '????') }}</button>
   </div>
 
   @if (message()) { <p class="ok">{{ message() }}</p> }
@@ -14,14 +51,14 @@
   <table>
     <thead>
       <tr>
-        <th>{{ i18n.text('Employee', 'الموظف') }}</th>
-        <th>{{ i18n.text('Type', 'النوع') }}</th>
-        <th>{{ i18n.text('Start', 'البداية') }}</th>
-        <th>{{ i18n.text('End', 'النهاية') }}</th>
-        <th>{{ i18n.text('Days', 'الأيام') }}</th>
-        <th>{{ i18n.text('Status', 'الحالة') }}</th>
-        <th>{{ i18n.text('Reason', 'السبب') }}</th>
-        <th>{{ i18n.text('Actions', 'الإجراءات') }}</th>
+        <th>{{ i18n.text('Employee', '??????') }}</th>
+        <th>{{ i18n.text('Type', '?????') }}</th>
+        <th>{{ i18n.text('Start', '???????') }}</th>
+        <th>{{ i18n.text('End', '???????') }}</th>
+        <th>{{ i18n.text('Days', '??????') }}</th>
+        <th>{{ i18n.text('Status', '??????') }}</th>
+        <th>{{ i18n.text('Reason', '?????') }}</th>
+        <th>{{ i18n.text('Actions', '?????????') }}</th>
       </tr>
     </thead>
     <tbody>
@@ -36,16 +73,16 @@
           <td>
             {{ request.reason }}
             @if (request.status === 3 && request.rejectionReason) {
-              <div class="reject">{{ i18n.text('Rejected:', 'مرفوض:') }} {{ request.rejectionReason }}</div>
+              <div class="reject">{{ i18n.text('Rejected:', '?????:') }} {{ request.rejectionReason }}</div>
             } @else if (request.status === 2 && request.rejectionReason) {
-              <div class="reject">{{ i18n.text('Review Comment:', 'تعليق المراجعة:') }} {{ request.rejectionReason }}</div>
+              <div class="reject">{{ i18n.text('Review Comment:', '????? ????????:') }} {{ request.rejectionReason }}</div>
             }
           </td>
           <td>
             @if (request.status === 1) {
               <div class="row-actions">
-                <button type="button" (click)="approve(request.id)" [disabled]="busy()">{{ i18n.text('Approve', 'اعتماد') }}</button>
-                <button type="button" (click)="reject(request.id)" [disabled]="busy()">{{ i18n.text('Reject', 'رفض') }}</button>
+                <button type="button" (click)="approve(request.id)" [disabled]="busy()">{{ i18n.text('Approve', '??????') }}</button>
+                <button type="button" (click)="reject(request.id)" [disabled]="busy()">{{ i18n.text('Reject', '???') }}</button>
               </div>
             } @else {
               <span>-</span>
