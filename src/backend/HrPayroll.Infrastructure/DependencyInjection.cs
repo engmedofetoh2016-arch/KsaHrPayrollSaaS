@@ -2,6 +2,7 @@ using System.Text;
 using HrPayroll.Application.Abstractions;
 using HrPayroll.Infrastructure.AI;
 using HrPayroll.Infrastructure.Auth;
+using HrPayroll.Infrastructure.Integrations;
 using HrPayroll.Infrastructure.Persistence;
 using HrPayroll.Infrastructure.Tenancy;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -75,9 +76,30 @@ public static class DependencyInjection
 
         services.AddAuthorization();
         services.AddHttpClient("ClaudeCompliance");
+        services.AddHttpClient("QiwaConnector", (provider, client) =>
+        {
+            var options = provider.GetRequiredService<IConfiguration>().GetSection(QiwaOptions.SectionName).Get<QiwaOptions>() ?? new QiwaOptions();
+            if (!string.IsNullOrWhiteSpace(options.BaseUrl) && Uri.TryCreate(options.BaseUrl, UriKind.Absolute, out var baseUri))
+            {
+                client.BaseAddress = baseUri;
+            }
+        });
+        services.AddHttpClient("MudadConnector", (provider, client) =>
+        {
+            var options = provider.GetRequiredService<IConfiguration>().GetSection(MudadOptions.SectionName).Get<MudadOptions>() ?? new MudadOptions();
+            if (!string.IsNullOrWhiteSpace(options.BaseUrl) && Uri.TryCreate(options.BaseUrl, UriKind.Absolute, out var baseUri))
+            {
+                client.BaseAddress = baseUri;
+            }
+        });
         services.Configure<ClaudeOptions>(configuration.GetSection(ClaudeOptions.SectionName));
+        services.Configure<QiwaOptions>(configuration.GetSection(QiwaOptions.SectionName));
+        services.Configure<MudadOptions>(configuration.GetSection(MudadOptions.SectionName));
         services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
         services.AddScoped<IComplianceAiService, ClaudeComplianceAiService>();
+        services.AddScoped<IGovernmentConnector, QiwaConnector>();
+        services.AddScoped<IGovernmentConnector, MudadConnector>();
+        services.AddScoped<IGovernmentConnectorResolver, GovernmentConnectorResolver>();
         services.AddScoped<IApplicationDbContext>(provider => provider.GetRequiredService<ApplicationDbContext>());
         services.AddScoped<ITenantContextAccessor, TenantContextAccessor>();
         services.AddScoped<ITenantContext>(provider => provider.GetRequiredService<ITenantContextAccessor>());

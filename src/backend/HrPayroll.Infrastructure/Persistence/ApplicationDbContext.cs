@@ -59,6 +59,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
     public DbSet<PayrollForecastResult> PayrollForecastResultSet => Set<PayrollForecastResult>();
     public DbSet<NotificationTemplate> NotificationTemplateSet => Set<NotificationTemplate>();
     public DbSet<NotificationQueueItem> NotificationQueueSet => Set<NotificationQueueItem>();
+    public DbSet<IntegrationSyncJob> IntegrationSyncJobSet => Set<IntegrationSyncJob>();
     public DbSet<DataQualityIssue> DataQualityIssueSet => Set<DataQualityIssue>();
     public DbSet<DataQualityFixBatch> DataQualityFixBatchSet => Set<DataQualityFixBatch>();
 
@@ -98,6 +99,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
     public IQueryable<PayrollForecastResult> PayrollForecastResults => PayrollForecastResultSet.AsQueryable();
     public IQueryable<NotificationTemplate> NotificationTemplates => NotificationTemplateSet.AsQueryable();
     public IQueryable<NotificationQueueItem> NotificationQueueItems => NotificationQueueSet.AsQueryable();
+    public IQueryable<IntegrationSyncJob> IntegrationSyncJobs => IntegrationSyncJobSet.AsQueryable();
     public IQueryable<DataQualityIssue> DataQualityIssues => DataQualityIssueSet.AsQueryable();
     public IQueryable<DataQualityFixBatch> DataQualityFixBatches => DataQualityFixBatchSet.AsQueryable();
 
@@ -165,6 +167,9 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
         modelBuilder.Entity<NotificationTemplate>().HasIndex(x => new { x.TenantId, x.TemplateCode, x.Channel }).IsUnique();
         modelBuilder.Entity<NotificationQueueItem>().HasIndex(x => new { x.TenantId, x.Status, x.ScheduledAtUtc });
         modelBuilder.Entity<NotificationQueueItem>().HasIndex(x => new { x.TenantId, x.Channel, x.Status });
+        modelBuilder.Entity<IntegrationSyncJob>().HasIndex(x => new { x.TenantId, x.IdempotencyKey }).IsUnique();
+        modelBuilder.Entity<IntegrationSyncJob>().HasIndex(x => new { x.TenantId, x.Provider, x.Status, x.NextAttemptAtUtc });
+        modelBuilder.Entity<IntegrationSyncJob>().HasIndex(x => new { x.TenantId, x.DeadlineAtUtc, x.Status });
         modelBuilder.Entity<DataQualityIssue>().HasIndex(x => new { x.TenantId, x.IssueStatus, x.Severity, x.DetectedAtUtc });
         modelBuilder.Entity<DataQualityIssue>().HasIndex(x => new { x.TenantId, x.EntityType, x.EntityId });
         modelBuilder.Entity<DataQualityFixBatch>().HasIndex(x => new { x.TenantId, x.BatchReference }).IsUnique();
@@ -204,6 +209,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
         modelBuilder.Entity<PayrollForecastResult>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
         modelBuilder.Entity<NotificationTemplate>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
         modelBuilder.Entity<NotificationQueueItem>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
+        modelBuilder.Entity<IntegrationSyncJob>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
         modelBuilder.Entity<DataQualityIssue>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
         modelBuilder.Entity<DataQualityFixBatch>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
     }

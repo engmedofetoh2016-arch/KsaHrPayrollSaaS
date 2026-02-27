@@ -8,6 +8,7 @@ import {
   ExportJob,
   PayrollAdjustment,
   PayrollApprovalDecision,
+  PayrollComplianceReadinessResult,
   PayrollExecutiveSummary,
   PayrollPreApprovalChecksResult,
   PayrollPeriod,
@@ -58,6 +59,10 @@ export class PayrollService {
 
   getPreApprovalChecks(runId: string) {
     return this.http.get<PayrollPreApprovalChecksResult>(`${this.base}/runs/${runId}/pre-approval-checks`);
+  }
+
+  getComplianceReadiness(runId: string) {
+    return this.http.get<PayrollComplianceReadinessResult>(`${this.base}/runs/${runId}/compliance-readiness`);
   }
 
   getApprovalDecisions(runId: string) {

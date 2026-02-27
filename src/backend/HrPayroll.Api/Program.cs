@@ -23,6 +23,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.RateLimiting;
 using Npgsql;
+using Microsoft.Extensions.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -88,6 +89,7 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 await IdentitySeeder.SeedRolesAsync(app.Services);
+await EnsureIntegrationNotificationTemplatesAsync(app.Services, app.Logger, CancellationToken.None);
 
 if (app.Environment.IsDevelopment())
 {
@@ -3306,6 +3308,9 @@ api.MapGet("/payroll/approval-matrix", [Authorize(Roles = RoleNames.Owner + "," 
             x.StageOrder,
             x.ApproverRole,
             x.AllowRollback,
+            x.AutoApproveEnabled,
+            x.SlaEscalationHours,
+            x.EscalationRole,
             x.IsActive
         })
         .ToListAsync(cancellationToken);
@@ -3334,6 +3339,9 @@ api.MapPost("/payroll/approval-matrix", [Authorize(Roles = RoleNames.Owner + ","
             StageOrder = request.StageOrder,
             ApproverRole = request.ApproverRole.Trim(),
             AllowRollback = request.AllowRollback,
+            AutoApproveEnabled = request.AutoApproveEnabled,
+            SlaEscalationHours = Math.Clamp(request.SlaEscalationHours, 0, 720),
+            EscalationRole = string.IsNullOrWhiteSpace(request.EscalationRole) ? string.Empty : request.EscalationRole.Trim(),
             IsActive = request.IsActive
         });
     }
@@ -3343,6 +3351,9 @@ api.MapPost("/payroll/approval-matrix", [Authorize(Roles = RoleNames.Owner + ","
         existing.StageOrder = request.StageOrder;
         existing.ApproverRole = request.ApproverRole.Trim();
         existing.AllowRollback = request.AllowRollback;
+        existing.AutoApproveEnabled = request.AutoApproveEnabled;
+        existing.SlaEscalationHours = Math.Clamp(request.SlaEscalationHours, 0, 720);
+        existing.EscalationRole = string.IsNullOrWhiteSpace(request.EscalationRole) ? string.Empty : request.EscalationRole.Trim();
         existing.IsActive = request.IsActive;
     }
 
@@ -3363,9 +3374,45 @@ api.MapPost("/payroll/approval-matrix/seed-default", [Authorize(Roles = RoleName
         dbContext.RemoveEntities(rows);
     }
 
-    dbContext.AddEntity(new PayrollApprovalMatrix { PayrollScope = "Default", StageCode = "REVIEWER", StageName = "Reviewer", StageOrder = 1, ApproverRole = RoleNames.Manager, AllowRollback = true, IsActive = true });
-    dbContext.AddEntity(new PayrollApprovalMatrix { PayrollScope = "Default", StageCode = "FINANCE", StageName = "Finance", StageOrder = 2, ApproverRole = RoleNames.Admin, AllowRollback = true, IsActive = true });
-    dbContext.AddEntity(new PayrollApprovalMatrix { PayrollScope = "Default", StageCode = "FINAL", StageName = "Final Approval", StageOrder = 3, ApproverRole = RoleNames.Owner, AllowRollback = true, IsActive = true });
+    dbContext.AddEntity(new PayrollApprovalMatrix
+    {
+        PayrollScope = "Default",
+        StageCode = "REVIEWER",
+        StageName = "Reviewer",
+        StageOrder = 1,
+        ApproverRole = RoleNames.Manager,
+        AllowRollback = true,
+        AutoApproveEnabled = true,
+        SlaEscalationHours = 0,
+        EscalationRole = RoleNames.Admin,
+        IsActive = true
+    });
+    dbContext.AddEntity(new PayrollApprovalMatrix
+    {
+        PayrollScope = "Default",
+        StageCode = "FINANCE",
+        StageName = "Finance",
+        StageOrder = 2,
+        ApproverRole = RoleNames.Admin,
+        AllowRollback = true,
+        AutoApproveEnabled = false,
+        SlaEscalationHours = 24,
+        EscalationRole = RoleNames.Owner,
+        IsActive = true
+    });
+    dbContext.AddEntity(new PayrollApprovalMatrix
+    {
+        PayrollScope = "Default",
+        StageCode = "FINAL",
+        StageName = "Final Approval",
+        StageOrder = 3,
+        ApproverRole = RoleNames.Owner,
+        AllowRollback = true,
+        AutoApproveEnabled = false,
+        SlaEscalationHours = 12,
+        EscalationRole = RoleNames.Owner,
+        IsActive = true
+    });
 
     await dbContext.SaveChangesAsync(cancellationToken);
     return Results.Ok(new { seeded = true, scope = "Default", stages = 3 });
@@ -3434,7 +3481,14 @@ api.MapPost("/payroll/runs/{runId:guid}/workflow/actions", [Authorize(Roles = Ro
         .Where(x => x.Type == ClaimTypes.Role)
         .Select(x => x.Value)
         .ToHashSet(StringComparer.OrdinalIgnoreCase);
-    if (!allowedRoles.Contains(stage.ApproverRole) && !allowedRoles.Contains(RoleNames.Owner) && !allowedRoles.Contains(RoleNames.Admin))
+
+    var escalatedApproverRole = await GetActiveEscalatedApproverRoleAsync(dbContext, runId, stageCode, cancellationToken);
+    var canAct =
+        allowedRoles.Contains(stage.ApproverRole) ||
+        (!string.IsNullOrWhiteSpace(escalatedApproverRole) && allowedRoles.Contains(escalatedApproverRole)) ||
+        allowedRoles.Contains(RoleNames.Owner) ||
+        allowedRoles.Contains(RoleNames.Admin);
+    if (!canAct)
     {
         return Results.Forbid();
     }
@@ -4139,6 +4193,7 @@ api.MapGet("/notifications/queue", [Authorize(Roles = RoleNames.Owner + "," + Ro
             x.TemplateCode,
             x.RelatedEntityType,
             x.RelatedEntityId,
+            x.PayloadJson,
             x.Status,
             x.ScheduledAtUtc,
             x.SentAtUtc,
@@ -4200,6 +4255,222 @@ api.MapPost("/notifications/queue/{queueId:guid}/mark-sent", [Authorize(Roles = 
 
     await dbContext.SaveChangesAsync(cancellationToken);
     return Results.Ok(new { item.Id, item.Status });
+});
+
+api.MapGet("/integrations/sync-jobs", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    string? provider,
+    string? status,
+    int? take,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var safeTake = Math.Clamp(take ?? 200, 1, 1000);
+    var providerFilter = string.IsNullOrWhiteSpace(provider) ? null : provider.Trim();
+    var statusFilter = string.IsNullOrWhiteSpace(status) ? null : status.Trim();
+
+    var query = dbContext.IntegrationSyncJobs.AsQueryable();
+    if (!string.IsNullOrWhiteSpace(providerFilter))
+    {
+        query = query.Where(x => x.Provider == providerFilter);
+    }
+
+    if (!string.IsNullOrWhiteSpace(statusFilter))
+    {
+        query = query.Where(x => x.Status == statusFilter);
+    }
+
+    var items = await query
+        .OrderByDescending(x => x.CreatedAtUtc)
+        .Take(safeTake)
+        .Select(x => new
+        {
+            x.Id,
+            x.Provider,
+            x.Operation,
+            x.EntityType,
+            x.EntityId,
+            x.IdempotencyKey,
+            x.Status,
+            x.AttemptCount,
+            x.MaxAttempts,
+            x.NextAttemptAtUtc,
+            x.LastAttemptAtUtc,
+            x.DeadlineAtUtc,
+            x.CompletedAtUtc,
+            x.LastError,
+            x.ExternalReference,
+            x.CreatedAtUtc
+        })
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(new { items });
+});
+
+api.MapGet("/integrations/sync-jobs/dashboard", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    IDateTimeProvider dateTimeProvider,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var nowUtc = dateTimeProvider.UtcNow;
+    var baseQuery = dbContext.IntegrationSyncJobs;
+
+    var total = await baseQuery.CountAsync(cancellationToken);
+    var queued = await baseQuery.CountAsync(x => x.Status == "Queued", cancellationToken);
+    var processing = await baseQuery.CountAsync(x => x.Status == "Processing", cancellationToken);
+    var retryScheduled = await baseQuery.CountAsync(x => x.Status == "RetryScheduled", cancellationToken);
+    var deadLetter = await baseQuery.CountAsync(x => x.Status == "DeadLetter", cancellationToken);
+    var succeeded = await baseQuery.CountAsync(x => x.Status == "Succeeded", cancellationToken);
+    var deadlinesMissed = await baseQuery.CountAsync(
+        x => x.DeadlineAtUtc.HasValue && x.DeadlineAtUtc < nowUtc && x.Status != "Succeeded",
+        cancellationToken);
+
+    var recentFailures = await baseQuery
+        .Where(x => x.Status == "DeadLetter" || (x.Status == "RetryScheduled" && !string.IsNullOrWhiteSpace(x.LastError)))
+        .OrderByDescending(x => x.LastAttemptAtUtc ?? x.CreatedAtUtc)
+        .Take(10)
+        .Select(x => new
+        {
+            x.Id,
+            x.Provider,
+            x.Operation,
+            x.EntityType,
+            x.EntityId,
+            x.Status,
+            x.AttemptCount,
+            x.MaxAttempts,
+            x.DeadlineAtUtc,
+            x.LastAttemptAtUtc,
+            x.LastError
+        })
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(new
+    {
+        total,
+        queued,
+        processing,
+        retryScheduled,
+        deadLetter,
+        succeeded,
+        deadlinesMissed,
+        recentFailures
+    });
+});
+
+api.MapPost("/integrations/sync-jobs", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    CreateIntegrationSyncJobRequest request,
+    ITenantContext tenantContext,
+    IDateTimeProvider dateTimeProvider,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    if (tenantContext.TenantId == Guid.Empty)
+    {
+        return Results.BadRequest(new { error = "Tenant context is missing." });
+    }
+
+    var providerName = NormalizeIntegrationProviderName(request.Provider);
+    if (providerName is null)
+    {
+        return Results.BadRequest(new { error = "Unsupported provider. Supported providers: Qiwa, Mudad." });
+    }
+    var idempotencyKey = string.IsNullOrWhiteSpace(request.IdempotencyKey)
+        ? $"{providerName}:{request.Operation.Trim()}:{request.EntityType.Trim()}:{request.EntityId?.ToString("N") ?? "none"}:{Guid.NewGuid():N}"
+        : request.IdempotencyKey.Trim();
+
+    var existing = await dbContext.IntegrationSyncJobs
+        .FirstOrDefaultAsync(x => x.IdempotencyKey == idempotencyKey, cancellationToken);
+    if (existing is not null)
+    {
+        return Results.Ok(new
+        {
+            existing.Id,
+            existing.Provider,
+            existing.Operation,
+            existing.EntityType,
+            existing.EntityId,
+            existing.IdempotencyKey,
+            existing.Status,
+            existing.AttemptCount,
+            existing.MaxAttempts,
+            existing.NextAttemptAtUtc,
+            existing.DeadlineAtUtc
+        });
+    }
+
+    var nowUtc = dateTimeProvider.UtcNow;
+    var payloadJson = string.IsNullOrWhiteSpace(request.RequestPayloadJson) ? "{}" : request.RequestPayloadJson.Trim();
+
+    var job = new IntegrationSyncJob
+    {
+        TenantId = tenantContext.TenantId,
+        Provider = providerName,
+        Operation = request.Operation.Trim(),
+        EntityType = request.EntityType.Trim(),
+        EntityId = request.EntityId,
+        IdempotencyKey = idempotencyKey,
+        RequestPayloadJson = payloadJson,
+        Status = "Queued",
+        AttemptCount = 0,
+        MaxAttempts = Math.Clamp(request.MaxAttempts ?? 3, 1, 10),
+        NextAttemptAtUtc = nowUtc,
+        DeadlineAtUtc = request.DeadlineAtUtc
+    };
+
+    dbContext.AddEntity(job);
+    await dbContext.SaveChangesAsync(cancellationToken);
+
+    return Results.Created($"/api/integrations/sync-jobs/{job.Id}", new
+    {
+        job.Id,
+        job.Provider,
+        job.Operation,
+        job.EntityType,
+        job.EntityId,
+        job.IdempotencyKey,
+        job.Status,
+        job.AttemptCount,
+        job.MaxAttempts,
+        job.NextAttemptAtUtc,
+        job.DeadlineAtUtc
+    });
+})
+    .AddEndpointFilter<ValidationFilter<CreateIntegrationSyncJobRequest>>();
+
+api.MapPost("/integrations/sync-jobs/{jobId:guid}/retry", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    Guid jobId,
+    IDateTimeProvider dateTimeProvider,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var job = await dbContext.IntegrationSyncJobs.FirstOrDefaultAsync(x => x.Id == jobId, cancellationToken);
+    if (job is null)
+    {
+        return Results.NotFound(new { error = "Integration sync job not found." });
+    }
+
+    if (job.Status != "DeadLetter" && job.Status != "RetryScheduled")
+    {
+        return Results.BadRequest(new { error = "Only dead-letter or retry-scheduled jobs can be retried." });
+    }
+
+    job.Status = "Queued";
+    job.AttemptCount = 0;
+    job.NextAttemptAtUtc = dateTimeProvider.UtcNow;
+    job.LastError = string.Empty;
+    job.CompletedAtUtc = null;
+    job.ResponsePayloadJson = "{}";
+    job.ExternalReference = string.Empty;
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+
+    return Results.Ok(new
+    {
+        job.Id,
+        job.Status,
+        job.AttemptCount,
+        job.NextAttemptAtUtc
+    });
 });
 
 api.MapPost("/payroll/data-quality/scan", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
@@ -7108,6 +7379,30 @@ api.MapGet("/payroll/runs/{runId:guid}/pre-approval-checks", [Authorize(Roles = 
     });
 });
 
+api.MapGet("/payroll/runs/{runId:guid}/compliance-readiness", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    Guid runId,
+    IApplicationDbContext dbContext,
+    IDateTimeProvider dateTimeProvider,
+    CancellationToken cancellationToken) =>
+{
+    var run = await dbContext.PayrollRuns.FirstOrDefaultAsync(x => x.Id == runId, cancellationToken);
+    if (run is null)
+    {
+        return Results.NotFound();
+    }
+
+    var findings = await BuildPayrollComplianceReadinessFindingsAsync(dbContext, run, cancellationToken);
+    var hasBlockingFindings = findings.Any(x => string.Equals(x.Severity, "Critical", StringComparison.OrdinalIgnoreCase));
+
+    return Results.Ok(new
+    {
+        runId = run.Id,
+        hasBlockingFindings,
+        generatedAtUtc = dateTimeProvider.UtcNow,
+        findings
+    });
+});
+
 api.MapPost("/payroll/runs/{runId:guid}/approve", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin)] async (
     Guid runId,
     HttpContext httpContext,
@@ -8030,10 +8325,12 @@ api.MapPost("/payroll/runs/{runId:guid}/exports/register-csv", [Authorize(Roles 
         userId = parsedUserId;
     }
 
+    var metadataJson = BuildExportMetadataJson("PAYROLL_REGISTER", "v1");
     var exportJob = new ExportArtifact
     {
         PayrollRunId = runId,
         ArtifactType = "PayrollRegisterCsv",
+        MetadataJson = metadataJson,
         Status = ExportArtifactStatus.Pending,
         FileName = $"payroll-register-{period.Year}-{period.Month:00}-run-{runId.ToString()[..8]}.csv",
         ContentType = "text/csv",
@@ -8041,6 +8338,16 @@ api.MapPost("/payroll/runs/{runId:guid}/exports/register-csv", [Authorize(Roles 
     };
 
     dbContext.AddEntity(exportJob);
+    dbContext.AddEntity(new AuditLog
+    {
+        TenantId = run.TenantId,
+        UserId = userId,
+        Method = "PAYROLL_EXPORT_REQUEST",
+        Path = $"/api/payroll/runs/{runId}/exports/register-csv?status=Queued&exportId={exportJob.Id}&spec=PAYROLL_REGISTER&version=v1",
+        StatusCode = StatusCodes.Status202Accepted,
+        IpAddress = httpContext.Connection.RemoteIpAddress?.ToString(),
+        DurationMs = 0
+    });
     await dbContext.SaveChangesAsync(cancellationToken);
 
     return Results.Accepted($"/api/payroll/exports/{exportJob.Id}", new
@@ -8071,12 +8378,6 @@ api.MapPost("/payroll/runs/{runId:guid}/exports/gosi-csv", [Authorize(Roles = Ro
         });
     }
 
-    var period = await dbContext.PayrollPeriods.FirstOrDefaultAsync(x => x.Id == run.PayrollPeriodId, cancellationToken);
-    if (period is null)
-    {
-        return Results.NotFound();
-    }
-
     Guid? userId = null;
     var userIdClaim = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
     if (Guid.TryParse(userIdClaim, out var parsedUserId))
@@ -8084,10 +8385,43 @@ api.MapPost("/payroll/runs/{runId:guid}/exports/gosi-csv", [Authorize(Roles = Ro
         userId = parsedUserId;
     }
 
+    var gosiFindings = await BuildGosiExportComplianceFindingsAsync(dbContext, runId, cancellationToken);
+    var gosiBlockingFindings = gosiFindings
+        .Where(x => string.Equals(x.Severity, "Critical", StringComparison.OrdinalIgnoreCase))
+        .ToList();
+    if (gosiBlockingFindings.Count > 0)
+    {
+        dbContext.AddEntity(new AuditLog
+        {
+            TenantId = run.TenantId,
+            UserId = userId,
+            Method = "PAYROLL_EXPORT_REQUEST",
+            Path = $"/api/payroll/runs/{runId}/exports/gosi-csv?status=Blocked&critical={gosiBlockingFindings.Count}&spec=GOSI_CSV&version=v1",
+            StatusCode = StatusCodes.Status400BadRequest,
+            IpAddress = httpContext.Connection.RemoteIpAddress?.ToString(),
+            DurationMs = 0
+        });
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return Results.BadRequest(new
+        {
+            error = "GOSI export validation failed.",
+            details = gosiBlockingFindings.Select(x => x.Message).Distinct().Take(50).ToArray()
+        });
+    }
+
+    var period = await dbContext.PayrollPeriods.FirstOrDefaultAsync(x => x.Id == run.PayrollPeriodId, cancellationToken);
+    if (period is null)
+    {
+        return Results.NotFound();
+    }
+
+    var metadataJson = BuildExportMetadataJson("GOSI_CSV", "v1");
     var exportJob = new ExportArtifact
     {
         PayrollRunId = runId,
         ArtifactType = "GosiCsv",
+        MetadataJson = metadataJson,
         Status = ExportArtifactStatus.Pending,
         FileName = $"gosi-{period.Year}-{period.Month:00}-run-{runId.ToString()[..8]}.csv",
         ContentType = "text/csv",
@@ -8095,6 +8429,16 @@ api.MapPost("/payroll/runs/{runId:guid}/exports/gosi-csv", [Authorize(Roles = Ro
     };
 
     dbContext.AddEntity(exportJob);
+    dbContext.AddEntity(new AuditLog
+    {
+        TenantId = run.TenantId,
+        UserId = userId,
+        Method = "PAYROLL_EXPORT_REQUEST",
+        Path = $"/api/payroll/runs/{runId}/exports/gosi-csv?status=Queued&exportId={exportJob.Id}&spec=GOSI_CSV&version=v1",
+        StatusCode = StatusCodes.Status202Accepted,
+        IpAddress = httpContext.Connection.RemoteIpAddress?.ToString(),
+        DurationMs = 0
+    });
     await dbContext.SaveChangesAsync(cancellationToken);
 
     return Results.Accepted($"/api/payroll/exports/{exportJob.Id}", new
@@ -8125,77 +8469,6 @@ api.MapPost("/payroll/runs/{runId:guid}/exports/wps-csv", [Authorize(Roles = Rol
         });
     }
 
-    var period = await dbContext.PayrollPeriods.FirstOrDefaultAsync(x => x.Id == run.PayrollPeriodId, cancellationToken);
-    if (period is null)
-    {
-        return Results.NotFound();
-    }
-
-    var company = await dbContext.CompanyProfiles.FirstOrDefaultAsync(cancellationToken);
-    if (company is null)
-    {
-        return Results.NotFound(new { error = "Company profile not found." });
-    }
-
-    var missing = new List<string>();
-    if (string.IsNullOrWhiteSpace(company.WpsCompanyBankName))
-    {
-        missing.Add("Company WPS bank name is missing.");
-    }
-
-    if (string.IsNullOrWhiteSpace(company.WpsCompanyBankCode))
-    {
-        missing.Add("Company WPS bank code is missing.");
-    }
-
-    if (string.IsNullOrWhiteSpace(company.WpsCompanyIban))
-    {
-        missing.Add("Company WPS IBAN is missing.");
-    }
-
-    var lineEmployees = await (from line in dbContext.PayrollLines
-                               join employee in dbContext.Employees on line.EmployeeId equals employee.Id
-                               where line.PayrollRunId == runId
-                               select new
-                               {
-                                   EmployeeName = employee.FirstName + " " + employee.LastName,
-                                   employee.EmployeeNumber,
-                                   employee.BankName,
-                                   employee.BankIban
-                               }).ToListAsync(cancellationToken);
-
-    if (lineEmployees.Count == 0)
-    {
-        missing.Add("No payroll lines found for selected run.");
-    }
-
-    foreach (var row in lineEmployees)
-    {
-        if (string.IsNullOrWhiteSpace(row.EmployeeNumber))
-        {
-            missing.Add($"Employee number missing for: {row.EmployeeName}");
-        }
-
-        if (string.IsNullOrWhiteSpace(row.BankName))
-        {
-            missing.Add($"Bank name missing for: {row.EmployeeName}");
-        }
-
-        if (string.IsNullOrWhiteSpace(row.BankIban))
-        {
-            missing.Add($"IBAN missing for: {row.EmployeeName}");
-        }
-    }
-
-    if (missing.Count > 0)
-    {
-        return Results.BadRequest(new
-        {
-            error = "WPS export validation failed.",
-            details = missing.Distinct().Take(30).ToArray()
-        });
-    }
-
     Guid? userId = null;
     var userIdClaim = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
     if (Guid.TryParse(userIdClaim, out var parsedUserId))
@@ -8203,10 +8476,43 @@ api.MapPost("/payroll/runs/{runId:guid}/exports/wps-csv", [Authorize(Roles = Rol
         userId = parsedUserId;
     }
 
+    var wpsFindings = await BuildWpsExportComplianceFindingsAsync(dbContext, runId, cancellationToken);
+    var wpsBlockingFindings = wpsFindings
+        .Where(x => string.Equals(x.Severity, "Critical", StringComparison.OrdinalIgnoreCase))
+        .ToList();
+    if (wpsBlockingFindings.Count > 0)
+    {
+        dbContext.AddEntity(new AuditLog
+        {
+            TenantId = run.TenantId,
+            UserId = userId,
+            Method = "PAYROLL_EXPORT_REQUEST",
+            Path = $"/api/payroll/runs/{runId}/exports/wps-csv?status=Blocked&critical={wpsBlockingFindings.Count}&spec=WPS_CSV&version=v1",
+            StatusCode = StatusCodes.Status400BadRequest,
+            IpAddress = httpContext.Connection.RemoteIpAddress?.ToString(),
+            DurationMs = 0
+        });
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return Results.BadRequest(new
+        {
+            error = "WPS export validation failed.",
+            details = wpsBlockingFindings.Select(x => x.Message).Distinct().Take(50).ToArray()
+        });
+    }
+
+    var period = await dbContext.PayrollPeriods.FirstOrDefaultAsync(x => x.Id == run.PayrollPeriodId, cancellationToken);
+    if (period is null)
+    {
+        return Results.NotFound();
+    }
+
+    var metadataJson = BuildExportMetadataJson("WPS_CSV", "v1");
     var exportJob = new ExportArtifact
     {
         PayrollRunId = runId,
         ArtifactType = "WpsCsv",
+        MetadataJson = metadataJson,
         Status = ExportArtifactStatus.Pending,
         FileName = $"wps-{period.Year}-{period.Month:00}-run-{runId.ToString()[..8]}.csv",
         ContentType = "text/csv",
@@ -8214,6 +8520,16 @@ api.MapPost("/payroll/runs/{runId:guid}/exports/wps-csv", [Authorize(Roles = Rol
     };
 
     dbContext.AddEntity(exportJob);
+    dbContext.AddEntity(new AuditLog
+    {
+        TenantId = run.TenantId,
+        UserId = userId,
+        Method = "PAYROLL_EXPORT_REQUEST",
+        Path = $"/api/payroll/runs/{runId}/exports/wps-csv?status=Queued&exportId={exportJob.Id}&spec=WPS_CSV&version=v1",
+        StatusCode = StatusCodes.Status202Accepted,
+        IpAddress = httpContext.Connection.RemoteIpAddress?.ToString(),
+        DurationMs = 0
+    });
     await dbContext.SaveChangesAsync(cancellationToken);
 
     return Results.Accepted($"/api/payroll/exports/{exportJob.Id}", new
@@ -8270,11 +8586,13 @@ api.MapPost("/payroll/runs/{runId:guid}/exports/payslip/{employeeId:guid}/pdf", 
         userId = parsedUserId;
     }
 
+    var metadataJson = BuildExportMetadataJson("PAYSLIP_PDF", "v1");
     var exportJob = new ExportArtifact
     {
         PayrollRunId = runId,
         EmployeeId = employeeId,
         ArtifactType = "PayslipPdf",
+        MetadataJson = metadataJson,
         Status = ExportArtifactStatus.Pending,
         FileName = $"payslip-{employee.FirstName}-{employee.LastName}-{period.Year}-{period.Month:00}.pdf".Replace(" ", "-"),
         ContentType = "application/pdf",
@@ -8282,6 +8600,16 @@ api.MapPost("/payroll/runs/{runId:guid}/exports/payslip/{employeeId:guid}/pdf", 
     };
 
     dbContext.AddEntity(exportJob);
+    dbContext.AddEntity(new AuditLog
+    {
+        TenantId = run.TenantId,
+        UserId = userId,
+        Method = "PAYROLL_EXPORT_REQUEST",
+        Path = $"/api/payroll/runs/{runId}/exports/payslip/{employeeId}/pdf?status=Queued&exportId={exportJob.Id}&spec=PAYSLIP_PDF&version=v1",
+        StatusCode = StatusCodes.Status202Accepted,
+        IpAddress = httpContext.Connection.RemoteIpAddress?.ToString(),
+        DurationMs = 0
+    });
     await dbContext.SaveChangesAsync(cancellationToken);
 
     return Results.Accepted($"/api/payroll/exports/{exportJob.Id}", new
@@ -8308,6 +8636,7 @@ api.MapGet("/payroll/runs/{runId:guid}/exports", [Authorize(Roles = RoleNames.Ow
             x.ContentType,
             x.SizeBytes,
             x.EmployeeId,
+            x.MetadataJson,
             x.CreatedAtUtc,
             x.CompletedAtUtc,
             x.CreatedByUserId
@@ -8339,6 +8668,8 @@ api.MapGet("/payroll/exports/{exportId:guid}", [Authorize(Roles = RoleNames.Owne
         export.FileName,
         export.ContentType,
         export.SizeBytes,
+        export.MetadataJson,
+        export.CreatedByUserId,
         export.CreatedAtUtc,
         export.CompletedAtUtc
     });
@@ -9020,6 +9351,308 @@ static async Task<List<PayrollPreApprovalFindingResponse>> BuildPayrollPreApprov
     return findings;
 }
 
+static async Task<List<PayrollPreApprovalFindingResponse>> BuildPayrollComplianceReadinessFindingsAsync(
+    IApplicationDbContext dbContext,
+    PayrollRun run,
+    CancellationToken cancellationToken)
+{
+    var findings = new List<PayrollPreApprovalFindingResponse>();
+    findings.AddRange(await BuildWpsExportComplianceFindingsAsync(dbContext, run.Id, cancellationToken));
+    findings.AddRange(await BuildGosiExportComplianceFindingsAsync(dbContext, run.Id, cancellationToken));
+    return findings;
+}
+
+static async Task<List<PayrollPreApprovalFindingResponse>> BuildWpsExportComplianceFindingsAsync(
+    IApplicationDbContext dbContext,
+    Guid runId,
+    CancellationToken cancellationToken)
+{
+    var findings = new List<PayrollPreApprovalFindingResponse>();
+    var company = await dbContext.CompanyProfiles.FirstOrDefaultAsync(cancellationToken);
+    if (company is null)
+    {
+        findings.Add(new PayrollPreApprovalFindingResponse(
+            "WpsCompanyProfileMissing",
+            "Critical",
+            null,
+            null,
+            "Company profile not found.",
+            null,
+            null));
+        return findings;
+    }
+
+    if (string.IsNullOrWhiteSpace(company.WpsCompanyBankName))
+    {
+        findings.Add(new PayrollPreApprovalFindingResponse(
+            "WpsCompanyBankNameMissing",
+            "Critical",
+            null,
+            null,
+            "Company WPS bank name is missing.",
+            null,
+            null));
+    }
+
+    if (string.IsNullOrWhiteSpace(company.WpsCompanyBankCode))
+    {
+        findings.Add(new PayrollPreApprovalFindingResponse(
+            "WpsCompanyBankCodeMissing",
+            "Critical",
+            null,
+            null,
+            "Company WPS bank code is missing.",
+            null,
+            null));
+    }
+
+    if (string.IsNullOrWhiteSpace(company.WpsCompanyIban))
+    {
+        findings.Add(new PayrollPreApprovalFindingResponse(
+            "WpsCompanyIbanMissing",
+            "Critical",
+            null,
+            null,
+            "Company WPS IBAN is missing.",
+            null,
+            null));
+    }
+
+    var lineEmployees = await (from line in dbContext.PayrollLines
+                               join employee in dbContext.Employees on line.EmployeeId equals employee.Id
+                               where line.PayrollRunId == runId
+                               select new
+                               {
+                                   line.EmployeeId,
+                                   EmployeeName = employee.FirstName + " " + employee.LastName,
+                                   employee.EmployeeNumber,
+                                   employee.BankName,
+                                   employee.BankIban
+                               }).ToListAsync(cancellationToken);
+
+    if (lineEmployees.Count == 0)
+    {
+        findings.Add(new PayrollPreApprovalFindingResponse(
+            "WpsPayrollLinesMissing",
+            "Critical",
+            null,
+            null,
+            "No payroll lines found for selected run.",
+            null,
+            null));
+        return findings;
+    }
+
+    foreach (var row in lineEmployees)
+    {
+        if (string.IsNullOrWhiteSpace(row.EmployeeNumber))
+        {
+            findings.Add(new PayrollPreApprovalFindingResponse(
+                "WpsEmployeeNumberMissing",
+                "Critical",
+                row.EmployeeId,
+                row.EmployeeName,
+                $"Employee number missing for: {row.EmployeeName}",
+                null,
+                null));
+        }
+
+        if (string.IsNullOrWhiteSpace(row.BankName))
+        {
+            findings.Add(new PayrollPreApprovalFindingResponse(
+                "WpsEmployeeBankNameMissing",
+                "Critical",
+                row.EmployeeId,
+                row.EmployeeName,
+                $"Bank name missing for: {row.EmployeeName}",
+                null,
+                null));
+        }
+
+        if (string.IsNullOrWhiteSpace(row.BankIban))
+        {
+            findings.Add(new PayrollPreApprovalFindingResponse(
+                "WpsEmployeeIbanMissing",
+                "Critical",
+                row.EmployeeId,
+                row.EmployeeName,
+                $"IBAN missing for: {row.EmployeeName}",
+                null,
+                null));
+        }
+    }
+
+    return findings;
+}
+
+static async Task<List<PayrollPreApprovalFindingResponse>> BuildGosiExportComplianceFindingsAsync(
+    IApplicationDbContext dbContext,
+    Guid runId,
+    CancellationToken cancellationToken)
+{
+    var findings = new List<PayrollPreApprovalFindingResponse>();
+    var rows = await (from line in dbContext.PayrollLines
+                      join employee in dbContext.Employees on line.EmployeeId equals employee.Id
+                      where line.PayrollRunId == runId
+                      select new
+                      {
+                          line.EmployeeId,
+                          EmployeeName = employee.FirstName + " " + employee.LastName,
+                          employee.IsSaudiNational,
+                          employee.IsGosiEligible,
+                          employee.GosiBasicWage,
+                          employee.GosiHousingAllowance,
+                          line.GosiWageBase,
+                          line.GosiEmployeeContribution,
+                          line.GosiEmployerContribution
+                      }).ToListAsync(cancellationToken);
+
+    if (rows.Count == 0)
+    {
+        findings.Add(new PayrollPreApprovalFindingResponse(
+            "GosiPayrollLinesMissing",
+            "Critical",
+            null,
+            null,
+            "No payroll lines found for selected run.",
+            null,
+            null));
+        return findings;
+    }
+
+    foreach (var row in rows)
+    {
+        if (row.IsGosiEligible)
+        {
+            if (row.GosiBasicWage <= 0m)
+            {
+                findings.Add(new PayrollPreApprovalFindingResponse(
+                    "GosiBasicWageMissing",
+                    "Critical",
+                    row.EmployeeId,
+                    row.EmployeeName,
+                    $"GOSI basic wage must be greater than zero for eligible employee: {row.EmployeeName}",
+                    "GosiBasicWage",
+                    row.GosiBasicWage));
+            }
+
+            var expectedWageBase = Math.Round(row.GosiBasicWage + row.GosiHousingAllowance, 2);
+            if (Math.Abs(row.GosiWageBase - expectedWageBase) > 0.05m)
+            {
+                findings.Add(new PayrollPreApprovalFindingResponse(
+                    "GosiWageBaseMismatch",
+                    "Critical",
+                    row.EmployeeId,
+                    row.EmployeeName,
+                    $"GOSI wage base mismatch for {row.EmployeeName}. Expected {expectedWageBase:F2}, found {row.GosiWageBase:F2}.",
+                    "GosiWageBase",
+                    row.GosiWageBase));
+            }
+
+            var expectedEmployeeRate = row.IsSaudiNational ? 0.09m : 0m;
+            var expectedEmployerRate = row.IsSaudiNational ? 0.11m : 0.02m;
+            var expectedEmployeeContribution = Math.Round(expectedWageBase * expectedEmployeeRate, 2);
+            var expectedEmployerContribution = Math.Round(expectedWageBase * expectedEmployerRate, 2);
+
+            if (Math.Abs(row.GosiEmployeeContribution - expectedEmployeeContribution) > 0.05m)
+            {
+                findings.Add(new PayrollPreApprovalFindingResponse(
+                    "GosiEmployeeContributionMismatch",
+                    "Critical",
+                    row.EmployeeId,
+                    row.EmployeeName,
+                    $"GOSI employee contribution mismatch for {row.EmployeeName}. Expected {expectedEmployeeContribution:F2}, found {row.GosiEmployeeContribution:F2}.",
+                    "GosiEmployeeContribution",
+                    row.GosiEmployeeContribution));
+            }
+
+            if (Math.Abs(row.GosiEmployerContribution - expectedEmployerContribution) > 0.05m)
+            {
+                findings.Add(new PayrollPreApprovalFindingResponse(
+                    "GosiEmployerContributionMismatch",
+                    "Critical",
+                    row.EmployeeId,
+                    row.EmployeeName,
+                    $"GOSI employer contribution mismatch for {row.EmployeeName}. Expected {expectedEmployerContribution:F2}, found {row.GosiEmployerContribution:F2}.",
+                    "GosiEmployerContribution",
+                    row.GosiEmployerContribution));
+            }
+        }
+        else
+        {
+            if (Math.Abs(row.GosiWageBase) > 0.05m || Math.Abs(row.GosiEmployeeContribution) > 0.05m || Math.Abs(row.GosiEmployerContribution) > 0.05m)
+            {
+                findings.Add(new PayrollPreApprovalFindingResponse(
+                    "GosiIneligibleEmployeeHasContributions",
+                    "Critical",
+                    row.EmployeeId,
+                    row.EmployeeName,
+                    $"Ineligible employee has non-zero GOSI values: {row.EmployeeName}.",
+                    "GosiWageBase",
+                    row.GosiWageBase));
+            }
+        }
+    }
+
+    return findings;
+}
+
+static async Task<string?> GetActiveEscalatedApproverRoleAsync(
+    IApplicationDbContext dbContext,
+    Guid runId,
+    string stageCode,
+    CancellationToken cancellationToken)
+{
+    var latestEscalationMetadata = await dbContext.PayrollApprovalActions
+        .Where(x =>
+            x.PayrollRunId == runId &&
+            x.StageCode == stageCode &&
+            x.ActionType == "Escalate" &&
+            x.ActionStatus == "Completed")
+        .OrderByDescending(x => x.ActionAtUtc)
+        .Select(x => x.MetadataJson)
+        .FirstOrDefaultAsync(cancellationToken);
+
+    if (string.IsNullOrWhiteSpace(latestEscalationMetadata))
+    {
+        return null;
+    }
+
+    try
+    {
+        using var doc = JsonDocument.Parse(latestEscalationMetadata);
+        if (!doc.RootElement.TryGetProperty("escalatedToRole", out var roleElement))
+        {
+            return null;
+        }
+
+        if (roleElement.ValueKind != JsonValueKind.String)
+        {
+            return null;
+        }
+
+        var role = roleElement.GetString();
+        return string.IsNullOrWhiteSpace(role) ? null : role.Trim();
+    }
+    catch
+    {
+        return null;
+    }
+}
+
+static string BuildExportMetadataJson(string specCode, string specVersion)
+{
+    return JsonSerializer.Serialize(new
+    {
+        traceVersion = "2026.02.v1",
+        exportSpec = new
+        {
+            code = specCode,
+            version = specVersion
+        }
+    });
+}
+
 static string ReadAuditQueryValue(string path, string key)
 {
     if (string.IsNullOrWhiteSpace(path))
@@ -9635,6 +10268,120 @@ static string NormalizeDigits(string? value) =>
     string.IsNullOrWhiteSpace(value)
         ? string.Empty
         : new string(value.Where(char.IsDigit).ToArray());
+
+static string? NormalizeIntegrationProviderName(string? rawProvider)
+{
+    if (string.IsNullOrWhiteSpace(rawProvider))
+    {
+        return null;
+    }
+
+    var provider = rawProvider.Trim();
+    if (string.Equals(provider, "Qiwa", StringComparison.OrdinalIgnoreCase))
+    {
+        return "Qiwa";
+    }
+
+    if (string.Equals(provider, "Mudad", StringComparison.OrdinalIgnoreCase))
+    {
+        return "Mudad";
+    }
+
+    return null;
+}
+
+static async Task EnsureIntegrationNotificationTemplatesAsync(
+    IServiceProvider services,
+    ILogger logger,
+    CancellationToken cancellationToken)
+{
+    try
+    {
+        using var scope = services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
+
+        var tenantIds = await dbContext.Tenants.Select(x => x.Id).ToListAsync(cancellationToken);
+        if (tenantIds.Count == 0)
+        {
+            return;
+        }
+
+        var requiredTemplates = new (string TemplateCode, string Channel, string Subject, string Body)[]
+        {
+            (
+                "INTEGRATION_SYNC_FAILED",
+                "Email",
+                "Government Sync Failed: {{provider}} {{operation}}",
+                "Government sync job failed after {{attemptCount}}/{{maxAttempts}} attempts. Provider={{provider}}, operation={{operation}}, entity={{entityType}}, status={{status}}, error={{lastError}}."
+            ),
+            (
+                "INTEGRATION_SYNC_FAILED",
+                "InApp",
+                "Integration Sync Failed",
+                "Integration sync failed: provider={{provider}}, operation={{operation}}, status={{status}}, attempts={{attemptCount}}/{{maxAttempts}}, error={{lastError}}."
+            ),
+            (
+                "INTEGRATION_DEADLINE_MISSED",
+                "Email",
+                "Government Deadline Missed: {{provider}} {{operation}}",
+                "Integration deadline missed. Provider={{provider}}, operation={{operation}}, entity={{entityType}}, deadline={{deadlineAtUtc}}, status={{status}}, error={{lastError}}."
+            ),
+            (
+                "INTEGRATION_DEADLINE_MISSED",
+                "InApp",
+                "Integration Deadline Missed",
+                "Integration deadline missed for {{provider}}/{{operation}} at {{deadlineAtUtc}}. Current status={{status}}."
+            )
+        };
+
+        var existingKeys = await dbContext.NotificationTemplates
+            .Select(x => new
+            {
+                x.TenantId,
+                Key = x.TemplateCode.ToUpper() + "|" + x.Channel.ToUpper()
+            })
+            .ToListAsync(cancellationToken);
+
+        var existingLookup = existingKeys
+            .GroupBy(x => (x.TenantId, x.Key))
+            .ToDictionary(x => x.Key, _ => true);
+
+        var created = 0;
+        foreach (var tenantId in tenantIds)
+        {
+            foreach (var template in requiredTemplates)
+            {
+                var key = (tenantId, template.TemplateCode.ToUpperInvariant() + "|" + template.Channel.ToUpperInvariant());
+                if (existingLookup.ContainsKey(key))
+                {
+                    continue;
+                }
+
+                dbContext.AddEntity(new NotificationTemplate
+                {
+                    TenantId = tenantId,
+                    TemplateCode = template.TemplateCode,
+                    Channel = template.Channel,
+                    Subject = template.Subject,
+                    Body = template.Body,
+                    IsActive = true
+                });
+                existingLookup[key] = true;
+                created++;
+            }
+        }
+
+        if (created > 0)
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+            logger.LogInformation("Seeded {Count} integration notification templates.", created);
+        }
+    }
+    catch (Exception ex) when (IsDbSchemaMismatch(ex))
+    {
+        logger.LogWarning(ex, "Skipping integration template seeding due to schema mismatch.");
+    }
+}
 
 static int ReadQueryInt(IQueryCollection query, string key, int fallback)
 {
@@ -10297,6 +11044,9 @@ public sealed record UpsertPayrollApprovalStageRequest(
     int StageOrder,
     string ApproverRole,
     bool AllowRollback,
+    bool AutoApproveEnabled,
+    int SlaEscalationHours,
+    string? EscalationRole,
     bool IsActive);
 public sealed record PayrollWorkflowActionRequest(
     string StageCode,
@@ -10352,6 +11102,15 @@ public sealed record MarkNotificationSentRequest(
     bool Success,
     string? ProviderMessageId,
     string? ErrorMessage);
+public sealed record CreateIntegrationSyncJobRequest(
+    string Provider,
+    string Operation,
+    string EntityType,
+    Guid? EntityId,
+    string? RequestPayloadJson,
+    string? IdempotencyKey,
+    DateTime? DeadlineAtUtc,
+    int? MaxAttempts);
 public sealed record ApplyDataQualityFixBatchRequest(
     IReadOnlyCollection<Guid> IssueIds,
     string? BatchReference);

@@ -40,6 +40,7 @@ public interface IApplicationDbContext
     IQueryable<PayrollForecastResult> PayrollForecastResults { get; }
     IQueryable<NotificationTemplate> NotificationTemplates { get; }
     IQueryable<NotificationQueueItem> NotificationQueueItems { get; }
+    IQueryable<IntegrationSyncJob> IntegrationSyncJobs { get; }
     IQueryable<DataQualityIssue> DataQualityIssues { get; }
     IQueryable<DataQualityFixBatch> DataQualityFixBatches { get; }
 

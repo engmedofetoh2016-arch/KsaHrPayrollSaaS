@@ -565,3 +565,24 @@ public class ApprovePayrollRunOverrideRequestValidator : AbstractValidator<Appro
             .WithMessage("Reference id must match OVR-YYYYMM-####.");
     }
 }
+
+public class CreateIntegrationSyncJobRequestValidator : AbstractValidator<CreateIntegrationSyncJobRequest>
+{
+    public CreateIntegrationSyncJobRequestValidator()
+    {
+        RuleFor(x => x.Provider)
+            .NotEmpty()
+            .MaximumLength(50)
+            .Must(x =>
+                string.Equals(x, "Qiwa", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(x, "Mudad", StringComparison.OrdinalIgnoreCase))
+            .WithMessage("provider must be Qiwa or Mudad.");
+        RuleFor(x => x.Operation).NotEmpty().MaximumLength(80);
+        RuleFor(x => x.EntityType).NotEmpty().MaximumLength(80);
+        RuleFor(x => x.RequestPayloadJson).MaximumLength(20000);
+        RuleFor(x => x.IdempotencyKey).MaximumLength(200);
+        RuleFor(x => x.MaxAttempts)
+            .InclusiveBetween(1, 10)
+            .When(x => x.MaxAttempts.HasValue);
+    }
+}

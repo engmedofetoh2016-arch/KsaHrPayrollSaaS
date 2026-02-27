@@ -7,6 +7,7 @@ import { Employee } from '../../core/models/employee.models';
 import {
   ExportJob,
   PayrollApprovalDecision,
+  PayrollComplianceReadinessResult,
   PayrollExecutiveSummary,
   PayrollApprovalFindingSnapshot,
   PayrollPeriod,
@@ -46,12 +47,14 @@ export class PayrollPageComponent implements OnInit, OnDestroy {
     findings: PayrollApprovalFindingSnapshot[];
   } | null>(null);
   readonly preApprovalChecks = signal<PayrollPreApprovalChecksResult | null>(null);
+  readonly complianceReadiness = signal<PayrollComplianceReadinessResult | null>(null);
   readonly activeRunId = signal('');
   readonly loading = signal(false);
   readonly busy = signal(false);
   readonly exportBusy = signal(false);
   readonly pollingExports = signal(false);
   readonly loadingChecks = signal(false);
+  readonly loadingComplianceReadiness = signal(false);
   readonly loadingApprovalDecisions = signal(false);
   readonly loadingExecutiveSummary = signal(false);
   readonly loadingReferenceId = signal(false);
@@ -67,6 +70,20 @@ export class PayrollPageComponent implements OnInit, OnDestroy {
   readonly warningChecksCount = computed(
     () => this.preApprovalChecks()?.findings.filter((x) => x.severity === 'Warning').length ?? 0
   );
+  readonly wpsReadinessCriticalCount = computed(
+    () =>
+      this.complianceReadiness()?.findings.filter(
+        (x) => x.severity === 'Critical' && (x.code ?? '').toLowerCase().startsWith('wps')
+      ).length ?? 0
+  );
+  readonly gosiReadinessCriticalCount = computed(
+    () =>
+      this.complianceReadiness()?.findings.filter(
+        (x) => x.severity === 'Critical' && (x.code ?? '').toLowerCase().startsWith('gosi')
+      ).length ?? 0
+  );
+  readonly hasWpsReadinessBlockers = computed(() => this.wpsReadinessCriticalCount() > 0);
+  readonly hasGosiReadinessBlockers = computed(() => this.gosiReadinessCriticalCount() > 0);
   readonly snapshotCriticalCount = computed(
     () => this.activeDecisionSnapshot()?.findings.filter((x) => (x.severity ?? '').toLowerCase() === 'critical').length ?? 0
   );
@@ -282,6 +299,7 @@ export class PayrollPageComponent implements OnInit, OnDestroy {
         this.run.set(run);
         this.loadExecutiveSummary(run.id);
         this.loadPreApprovalChecks(run.id);
+        this.loadComplianceReadiness(run.id);
         this.loadApprovalDecisions(run.id);
         this.loadExports(true);
         this.busy.set(false);
@@ -441,6 +459,10 @@ export class PayrollPageComponent implements OnInit, OnDestroy {
   downloadGosiCsv() {
     const runId = this.activeRunId();
     if (!runId || this.exportBusy()) return;
+    if (this.hasGosiReadinessBlockers()) {
+      this.error.set(this.i18n.text('GOSI export is blocked by compliance readiness findings.', 'GOSI export is blocked by compliance readiness findings.'));
+      return;
+    }
 
     this.exportBusy.set(true);
     this.error.set('');
@@ -460,6 +482,10 @@ export class PayrollPageComponent implements OnInit, OnDestroy {
   downloadWpsCsv() {
     const runId = this.activeRunId();
     if (!runId || this.exportBusy()) return;
+    if (this.hasWpsReadinessBlockers()) {
+      this.error.set(this.i18n.text('WPS export is blocked by compliance readiness findings.', 'WPS export is blocked by compliance readiness findings.'));
+      return;
+    }
 
     this.exportBusy.set(true);
     this.error.set('');
@@ -654,6 +680,36 @@ export class PayrollPageComponent implements OnInit, OnDestroy {
       },
       complete: () => this.loadingChecks.set(false)
     });
+  }
+
+  private loadComplianceReadiness(runId: string) {
+    if (!runId) {
+      this.complianceReadiness.set(null);
+      return;
+    }
+
+    this.loadingComplianceReadiness.set(true);
+    this.payrollService.getComplianceReadiness(runId).subscribe({
+      next: (result) => this.complianceReadiness.set(result),
+      error: (err) => {
+        this.complianceReadiness.set(null);
+        this.error.set(getApiErrorMessage(err, 'Failed to load payroll compliance readiness checks.'));
+      },
+      complete: () => this.loadingComplianceReadiness.set(false)
+    });
+  }
+
+  readinessScope(code: string | undefined): string {
+    const normalized = String(code ?? '').toLowerCase();
+    if (normalized.startsWith('wps')) {
+      return 'WPS';
+    }
+
+    if (normalized.startsWith('gosi')) {
+      return 'GOSI';
+    }
+
+    return 'General';
   }
 
   private loadApprovalDecisions(runId: string) {

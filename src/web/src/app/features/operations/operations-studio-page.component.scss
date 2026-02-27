@@ -55,12 +55,14 @@ article h2 {
 }
 
 input,
+select,
 textarea,
 button {
   font: inherit;
 }
 
 input,
+select,
 textarea {
   padding: 0.45rem 0.55rem;
   border: 1px solid #c8d3e1;
@@ -104,4 +106,23 @@ li {
   color: #6f7f96;
   font-size: 0.78rem;
   margin-inline-start: 0.3rem;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.45rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+th,
+td {
+  border: 1px solid #dce3ec;
+  padding: 0.35rem 0.45rem;
+  text-align: start;
 }

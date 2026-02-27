@@ -97,6 +97,13 @@ export interface PayrollPreApprovalChecksResult {
   findings: PayrollPreApprovalCheck[];
 }
 
+export interface PayrollComplianceReadinessResult {
+  runId: string;
+  hasBlockingFindings: boolean;
+  generatedAtUtc: string;
+  findings: PayrollPreApprovalCheck[];
+}
+
 export interface PayrollApprovalDecision {
   id: string;
   createdAtUtc: string;

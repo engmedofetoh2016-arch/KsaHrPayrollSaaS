@@ -45,6 +45,16 @@
         <input [(ngModel)]="stageForm.stageName" [placeholder]="i18n.text('Stage Name', 'اسم المرحلة')" />
         <input [(ngModel)]="stageForm.stageOrder" type="number" [placeholder]="i18n.text('Order', 'الترتيب')" />
         <input [(ngModel)]="stageForm.approverRole" [placeholder]="i18n.text('Approver Role', 'دور المعتمد')" />
+        <label>
+          <input type="checkbox" [(ngModel)]="stageForm.autoApproveEnabled" />
+          {{ i18n.text('Auto-Approve Stage', 'اعتماد المرحلة تلقائيا') }}
+        </label>
+        <input
+          [(ngModel)]="stageForm.slaEscalationHours"
+          type="number"
+          min="0"
+          [placeholder]="i18n.text('SLA Escalation Hours', 'ساعات تصعيد SLA')" />
+        <input [(ngModel)]="stageForm.escalationRole" [placeholder]="i18n.text('Escalation Role', 'دور التصعيد')" />
         <button type="button" (click)="saveApprovalStage()" [disabled]="saving()">{{ i18n.text('Save Stage', 'حفظ المرحلة') }}</button>
       </div>
       <small>{{ approvalMatrix().length }} {{ i18n.text('active stages', 'مرحلة نشطة') }}</small>
@@ -52,6 +62,13 @@
         @for (item of approvalMatrix(); track item.id) {
           <li>
             <span>{{ item.stageName || codeLabel(item.stageCode) }}</span>
+            <small>
+              {{
+                i18n.text('Auto', 'تلقائي')
+              }}: {{ item.autoApproveEnabled ? i18n.text('Yes', 'نعم') : i18n.text('No', 'لا') }} |
+              SLA: {{ item.slaEscalationHours ?? 0 }}h |
+              {{ i18n.text('Escalate To', 'التصعيد إلى') }}: {{ item.escalationRole || '-' }}
+            </small>
             @if (showTechnicalCodes()) {
               <small class="code-tech">{{ item.stageCode }}</small>
             }
@@ -154,6 +171,132 @@
           </li>
         }
       </ul>
+    </article>
+
+    <article>
+      <h2>{{ i18n.text('Escalations', 'التصعيدات') }}</h2>
+      <small>{{ filteredEscalationNotifications().length }} {{ i18n.text('SLA escalation notifications', 'إشعار تصعيد SLA') }}</small>
+      <div class="form">
+        <button type="button" (click)="escalationStatusFilter.set('All')" [disabled]="saving()">{{ i18n.text('All', 'الكل') }}</button>
+        <button type="button" (click)="escalationStatusFilter.set('Queued')" [disabled]="saving()">{{ i18n.text('Queued', 'في الانتظار') }}</button>
+        <button type="button" (click)="escalationStatusFilter.set('Sent')" [disabled]="saving()">{{ i18n.text('Sent', 'تم الإرسال') }}</button>
+        <button type="button" (click)="escalationStatusFilter.set('Failed')" [disabled]="saving()">{{ i18n.text('Failed', 'فشل') }}</button>
+      </div>
+      @if (filteredEscalationNotifications().length === 0) {
+        <p>{{ i18n.text('No escalation notifications yet.', 'لا توجد إشعارات تصعيد حتى الآن.') }}</p>
+      } @else {
+        <table>
+          <thead>
+            <tr>
+              <th>{{ i18n.text('Period', 'الفترة') }}</th>
+              <th>{{ i18n.text('Run', 'التشغيل') }}</th>
+              <th>{{ i18n.text('Stage', 'المرحلة') }}</th>
+              <th>{{ i18n.text('Escalated To', 'مُصعّد إلى') }}</th>
+              <th>{{ i18n.text('Channel', 'القناة') }}</th>
+              <th>{{ i18n.text('Recipient', 'المستلم') }}</th>
+              <th>{{ i18n.text('Status', 'الحالة') }}</th>
+              <th>{{ i18n.text('Scheduled', 'وقت الجدولة') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (item of filteredEscalationNotifications(); track item.id) {
+              <tr>
+                <td>{{ item.period || '-' }}</td>
+                <td>{{ item.runId || item.relatedEntityId || '-' }}</td>
+                <td>{{ item.stageName || item.stageCode || '-' }}</td>
+                <td>{{ item.escalatedToRole || '-' }}</td>
+                <td>{{ item.channel }}</td>
+                <td>{{ item.recipientValue }}</td>
+                <td>{{ item.status }}</td>
+                <td>{{ item.scheduledAtUtc | date: 'short' }}</td>
+              </tr>
+              @if (item.errorMessage) {
+                <tr>
+                  <td colspan="8">{{ i18n.text('Error', 'خطأ') }}: {{ item.errorMessage }}</td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      }
+    </article>
+
+    <article>
+      <h2>{{ i18n.text('Government Integration Sync', 'مزامنة التكامل الحكومي') }}</h2>
+      <div class="form">
+        <select [(ngModel)]="integrationForm.provider">
+          <option value="Qiwa">Qiwa</option>
+          <option value="Mudad">Mudad</option>
+        </select>
+        <input [(ngModel)]="integrationForm.operation" [placeholder]="i18n.text('Operation', 'العملية')" />
+        <input [(ngModel)]="integrationForm.entityType" [placeholder]="i18n.text('Entity Type', 'نوع الكيان')" />
+        <input [(ngModel)]="integrationForm.entityId" [placeholder]="i18n.text('Entity Id (optional)', 'معرّف الكيان (اختياري)')" />
+        <input [(ngModel)]="integrationForm.deadlineAtUtc" type="datetime-local" [placeholder]="i18n.text('Deadline (optional)', 'الموعد النهائي (اختياري)')" />
+        <textarea [(ngModel)]="integrationForm.requestPayloadJson" rows="2" [placeholder]="i18n.text('Request JSON', 'طلب JSON')"></textarea>
+        <button type="button" (click)="queueIntegrationSyncJob()" [disabled]="saving()">{{ i18n.text('Queue Sync Job', 'إضافة مهمة مزامنة') }}</button>
+      </div>
+
+      <div class="stat-grid">
+        <small>{{ i18n.text('Total', 'الإجمالي') }}: {{ integrationDashboard().total || 0 }}</small>
+        <small>{{ i18n.text('Queued', 'في الانتظار') }}: {{ integrationDashboard().queued || 0 }}</small>
+        <small>{{ i18n.text('Processing', 'قيد المعالجة') }}: {{ integrationDashboard().processing || 0 }}</small>
+        <small>{{ i18n.text('Retry', 'إعادة المحاولة') }}: {{ integrationDashboard().retryScheduled || 0 }}</small>
+        <small>{{ i18n.text('Dead Letter', 'فشل نهائي') }}: {{ integrationDashboard().deadLetter || 0 }}</small>
+        <small>{{ i18n.text('Deadlines Missed', 'مواعيد فائتة') }}: {{ integrationDashboard().deadlinesMissed || 0 }}</small>
+      </div>
+
+      <div class="form">
+        <button type="button" (click)="integrationStatusFilter.set('All')" [disabled]="saving()">{{ i18n.text('All', 'الكل') }}</button>
+        <button type="button" (click)="integrationStatusFilter.set('Queued')" [disabled]="saving()">{{ i18n.text('Queued', 'في الانتظار') }}</button>
+        <button type="button" (click)="integrationStatusFilter.set('RetryScheduled')" [disabled]="saving()">{{ i18n.text('Retry', 'إعادة المحاولة') }}</button>
+        <button type="button" (click)="integrationStatusFilter.set('DeadLetter')" [disabled]="saving()">{{ i18n.text('Dead Letter', 'فشل نهائي') }}</button>
+        <button type="button" (click)="integrationStatusFilter.set('Succeeded')" [disabled]="saving()">{{ i18n.text('Succeeded', 'ناجح') }}</button>
+      </div>
+
+      @if (filteredIntegrationJobs().length === 0) {
+        <p>{{ i18n.text('No integration sync jobs found.', 'لا توجد مهام مزامنة تكامل.') }}</p>
+      } @else {
+        <table>
+          <thead>
+            <tr>
+              <th>{{ i18n.text('Provider', 'المزوّد') }}</th>
+              <th>{{ i18n.text('Operation', 'العملية') }}</th>
+              <th>{{ i18n.text('Entity', 'الكيان') }}</th>
+              <th>{{ i18n.text('Status', 'الحالة') }}</th>
+              <th>{{ i18n.text('Attempts', 'المحاولات') }}</th>
+              <th>{{ i18n.text('Next Attempt', 'المحاولة القادمة') }}</th>
+              <th>{{ i18n.text('Deadline', 'الموعد النهائي') }}</th>
+              <th>{{ i18n.text('Action', 'الإجراء') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (item of filteredIntegrationJobs(); track item.id) {
+              <tr>
+                <td>{{ item.provider }}</td>
+                <td>{{ item.operation }}</td>
+                <td>{{ item.entityType }} {{ item.entityId || '' }}</td>
+                <td>{{ item.status }}</td>
+                <td>{{ item.attemptCount }}/{{ item.maxAttempts }}</td>
+                <td>{{ item.nextAttemptAtUtc | date: 'short' }}</td>
+                <td>{{ item.deadlineAtUtc ? (item.deadlineAtUtc | date: 'short') : '-' }}</td>
+                <td>
+                  <button
+                    type="button"
+                    (click)="retryIntegrationJob(item.id)"
+                    [disabled]="saving() || (item.status !== 'DeadLetter' && item.status !== 'RetryScheduled')">
+                    {{ i18n.text('Retry', 'إعادة') }}
+                  </button>
+                </td>
+              </tr>
+              @if (item.lastError) {
+                <tr>
+                  <td colspan="8">{{ i18n.text('Error', 'خطأ') }}: {{ item.lastError }}</td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      }
     </article>
 
     <article>

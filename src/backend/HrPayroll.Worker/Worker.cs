@@ -32,12 +32,15 @@ public class Worker : BackgroundService
         var nextComplianceDigestCheckUtc = DateTime.MinValue;
         var nextNotificationDispatchUtc = DateTime.MinValue;
         var nextComplianceRuleEngineUtc = DateTime.MinValue;
+        var nextPayrollWorkflowAutomationUtc = DateTime.MinValue;
+        var nextIntegrationSyncUtc = DateTime.MinValue;
 
         while (!stoppingToken.IsCancellationRequested)
         {
             using var scope = _scopeFactory.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
             var dateTimeProvider = scope.ServiceProvider.GetRequiredService<IDateTimeProvider>();
+            var connectorResolver = scope.ServiceProvider.GetRequiredService<IGovernmentConnectorResolver>();
             var nowUtc = dateTimeProvider.UtcNow;
 
             if (nowUtc >= nextComplianceScanUtc)
@@ -70,6 +73,18 @@ public class Worker : BackgroundService
                 var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
                 await ProcessNotificationQueueAsync(dbContext, configuration, nowUtc, stoppingToken);
                 nextNotificationDispatchUtc = nowUtc.AddMinutes(1);
+            }
+
+            if (nowUtc >= nextPayrollWorkflowAutomationUtc)
+            {
+                await ProcessPayrollWorkflowAutomationAsync(dbContext, nowUtc, stoppingToken);
+                nextPayrollWorkflowAutomationUtc = nowUtc.AddMinutes(5);
+            }
+
+            if (nowUtc >= nextIntegrationSyncUtc)
+            {
+                await ProcessIntegrationSyncJobsAsync(dbContext, connectorResolver, nowUtc, stoppingToken);
+                nextIntegrationSyncUtc = nowUtc.AddMinutes(1);
             }
 
             var exportJob = await dbContext.ExportArtifacts
@@ -781,8 +796,14 @@ public class Worker : BackgroundService
                 string.Equals(x.Channel, item.Channel, StringComparison.OrdinalIgnoreCase));
 
             var payload = ParseJsonDictionary(item.PayloadJson);
-            var subject = RenderTemplate(template?.Subject ?? item.TemplateCode, payload);
-            var body = RenderTemplate(template?.Body ?? string.Empty, payload);
+            var fallbackSubject = payload.TryGetValue("subject", out var fallbackSubjectValue) && !string.IsNullOrWhiteSpace(fallbackSubjectValue)
+                ? fallbackSubjectValue
+                : item.TemplateCode;
+            var fallbackBody = payload.TryGetValue("message", out var fallbackMessage) && !string.IsNullOrWhiteSpace(fallbackMessage)
+                ? fallbackMessage
+                : string.Empty;
+            var subject = RenderTemplate(template?.Subject ?? fallbackSubject, payload);
+            var body = RenderTemplate(template?.Body ?? fallbackBody, payload);
 
             try
             {
@@ -814,9 +835,16 @@ public class Worker : BackgroundService
                         item.ErrorMessage = string.Empty;
                         break;
 
+                    case "INAPP":
+                        item.Status = "Sent";
+                        item.ProviderMessageId = $"INAPP-{nowUtc:yyyyMMddHHmmss}";
+                        item.SentAtUtc = nowUtc;
+                        item.ErrorMessage = string.Empty;
+                        break;
+
                     default:
                         item.Status = "Failed";
-                        item.ErrorMessage = $"Channel '{item.Channel}' is not supported. Only Email is enabled.";
+                        item.ErrorMessage = $"Channel '{item.Channel}' is not supported. Supported channels: Email, InApp.";
                         item.SentAtUtc = nowUtc;
                         break;
                 }
@@ -1397,6 +1425,431 @@ public class Worker : BackgroundService
 
     private static string BuildAlertKey(Guid tenantId, Guid employeeId, string documentType, DateOnly expiryDate)
         => $"{tenantId:N}:{employeeId:N}:{documentType}:{expiryDate:yyyyMMdd}";
+
+    private async Task ProcessIntegrationSyncJobsAsync(
+        IApplicationDbContext dbContext,
+        IGovernmentConnectorResolver connectorResolver,
+        DateTime nowUtc,
+        CancellationToken cancellationToken)
+    {
+        var dueJobs = await dbContext.IntegrationSyncJobs
+            .Where(x =>
+                (x.Status == "Queued" || x.Status == "RetryScheduled") &&
+                x.NextAttemptAtUtc <= nowUtc)
+            .OrderBy(x => x.NextAttemptAtUtc)
+            .Take(50)
+            .ToListAsync(cancellationToken);
+        if (dueJobs.Count == 0)
+        {
+            return;
+        }
+
+        var companyByTenantId = await dbContext.CompanyProfiles
+            .ToDictionaryAsync(x => x.TenantId, x => x, cancellationToken);
+
+        foreach (var job in dueJobs)
+        {
+            job.Status = "Processing";
+            job.StartedAtUtc ??= nowUtc;
+            job.LastAttemptAtUtc = nowUtc;
+            job.AttemptCount += 1;
+            await dbContext.SaveChangesAsync(cancellationToken);
+
+            var connector = connectorResolver.Resolve(job.Provider);
+            if (connector is null)
+            {
+                await MarkIntegrationJobFailureAsync(dbContext, job, companyByTenantId, nowUtc, $"No connector registered for provider '{job.Provider}'.", cancellationToken);
+                continue;
+            }
+
+            GovernmentSyncResult result;
+            try
+            {
+                result = await connector.SyncAsync(
+                    new GovernmentSyncRequest(
+                        job.TenantId,
+                        job.Provider,
+                        job.Operation,
+                        job.EntityType,
+                        job.EntityId,
+                        job.RequestPayloadJson,
+                        job.IdempotencyKey),
+                    cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                await MarkIntegrationJobFailureAsync(dbContext, job, companyByTenantId, nowUtc, ex.Message, cancellationToken);
+                continue;
+            }
+
+            if (result.Success)
+            {
+                job.Status = "Succeeded";
+                job.ResponsePayloadJson = string.IsNullOrWhiteSpace(result.ResponseJson) ? "{}" : result.ResponseJson;
+                job.ExternalReference = result.ExternalReference ?? string.Empty;
+                job.LastError = string.Empty;
+                job.CompletedAtUtc = nowUtc;
+                await dbContext.SaveChangesAsync(cancellationToken);
+                continue;
+            }
+
+            await MarkIntegrationJobFailureAsync(
+                dbContext,
+                job,
+                companyByTenantId,
+                nowUtc,
+                string.IsNullOrWhiteSpace(result.ErrorMessage) ? "Integration sync failed." : result.ErrorMessage,
+                cancellationToken);
+        }
+    }
+
+    private async Task MarkIntegrationJobFailureAsync(
+        IApplicationDbContext dbContext,
+        IntegrationSyncJob job,
+        IReadOnlyDictionary<Guid, CompanyProfile> companyByTenantId,
+        DateTime nowUtc,
+        string error,
+        CancellationToken cancellationToken)
+    {
+        job.LastError = error.Length <= 1000 ? error : error[..1000];
+
+        var hasRemainingAttempts = job.AttemptCount < Math.Max(1, job.MaxAttempts);
+        if (hasRemainingAttempts)
+        {
+            var delayMinutes = Math.Min(60, (int)Math.Pow(2, Math.Min(job.AttemptCount, 6)));
+            job.Status = "RetryScheduled";
+            job.NextAttemptAtUtc = nowUtc.AddMinutes(delayMinutes);
+        }
+        else
+        {
+            job.Status = "DeadLetter";
+            job.CompletedAtUtc = nowUtc;
+            await EnqueueIntegrationFailureAlertsAsync(
+                dbContext,
+                job,
+                companyByTenantId,
+                nowUtc,
+                "INTEGRATION_SYNC_FAILED",
+                $"Integration job moved to dead-letter after {job.AttemptCount} attempts.",
+                cancellationToken);
+        }
+
+        if (job.DeadlineAtUtc.HasValue && nowUtc > job.DeadlineAtUtc.Value && job.Status != "Succeeded")
+        {
+            await EnqueueIntegrationFailureAlertsAsync(
+                dbContext,
+                job,
+                companyByTenantId,
+                nowUtc,
+                "INTEGRATION_DEADLINE_MISSED",
+                $"Integration deadline missed at {job.DeadlineAtUtc:O}.",
+                cancellationToken);
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task EnqueueIntegrationFailureAlertsAsync(
+        IApplicationDbContext dbContext,
+        IntegrationSyncJob job,
+        IReadOnlyDictionary<Guid, CompanyProfile> companyByTenantId,
+        DateTime nowUtc,
+        string templateCode,
+        string message,
+        CancellationToken cancellationToken)
+    {
+        var existing = await dbContext.NotificationQueueItems
+            .AnyAsync(x =>
+                x.RelatedEntityType == "IntegrationSyncJob" &&
+                x.RelatedEntityId == job.Id &&
+                x.TemplateCode == templateCode &&
+                (x.Status == "Queued" || x.Status == "Sent"),
+                cancellationToken);
+        if (existing)
+        {
+            return;
+        }
+
+        var payloadJson = JsonSerializer.Serialize(new
+        {
+            provider = job.Provider,
+            operation = job.Operation,
+            entityType = job.EntityType,
+            entityId = job.EntityId,
+            idempotencyKey = job.IdempotencyKey,
+            status = job.Status,
+            attemptCount = job.AttemptCount,
+            maxAttempts = job.MaxAttempts,
+            lastError = job.LastError,
+            deadlineAtUtc = job.DeadlineAtUtc,
+            message
+        });
+
+        dbContext.AddEntity(new NotificationQueueItem
+        {
+            TenantId = job.TenantId,
+            RecipientType = "Role",
+            RecipientValue = "HR",
+            Channel = "InApp",
+            TemplateCode = templateCode,
+            RelatedEntityType = "IntegrationSyncJob",
+            RelatedEntityId = job.Id,
+            PayloadJson = payloadJson,
+            Status = "Queued",
+            ScheduledAtUtc = nowUtc
+        });
+
+        if (companyByTenantId.TryGetValue(job.TenantId, out var company) &&
+            !string.IsNullOrWhiteSpace(company.ComplianceDigestEmail))
+        {
+            dbContext.AddEntity(new NotificationQueueItem
+            {
+                TenantId = job.TenantId,
+                RecipientType = "Email",
+                RecipientValue = company.ComplianceDigestEmail.Trim(),
+                Channel = "Email",
+                TemplateCode = templateCode,
+                RelatedEntityType = "IntegrationSyncJob",
+                RelatedEntityId = job.Id,
+                PayloadJson = payloadJson,
+                Status = "Queued",
+                ScheduledAtUtc = nowUtc
+            });
+        }
+    }
+
+    private async Task ProcessPayrollWorkflowAutomationAsync(
+        IApplicationDbContext dbContext,
+        DateTime nowUtc,
+        CancellationToken cancellationToken)
+    {
+        var stages = await dbContext.PayrollApprovalMatrices
+            .Where(x => x.IsActive && x.PayrollScope == "Default")
+            .OrderBy(x => x.StageOrder)
+            .ToListAsync(cancellationToken);
+        if (stages.Count == 0)
+        {
+            return;
+        }
+
+        var stageByTenant = stages
+            .GroupBy(x => x.TenantId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderBy(x => x.StageOrder).ToList());
+
+        var runs = await dbContext.PayrollRuns
+            .Where(x => x.Status == PayrollRunStatus.Calculated)
+            .OrderBy(x => x.CreatedAtUtc)
+            .ToListAsync(cancellationToken);
+        if (runs.Count == 0)
+        {
+            return;
+        }
+
+        var runIds = runs.Select(x => x.Id).Distinct().ToList();
+        var runActions = await dbContext.PayrollApprovalActions
+            .Where(x => runIds.Contains(x.PayrollRunId))
+            .OrderBy(x => x.ActionAtUtc)
+            .ToListAsync(cancellationToken);
+        var actionsByRunId = runActions
+            .GroupBy(x => x.PayrollRunId)
+            .ToDictionary(x => x.Key, x => x.ToList());
+
+        var periodIds = runs.Select(x => x.PayrollPeriodId).Distinct().ToList();
+        var periods = await dbContext.PayrollPeriods
+            .Where(x => periodIds.Contains(x.Id))
+            .ToListAsync(cancellationToken);
+        var periodById = periods.ToDictionary(x => x.Id, x => x);
+        var companyByTenantId = await dbContext.CompanyProfiles
+            .ToDictionaryAsync(x => x.TenantId, x => x, cancellationToken);
+
+        var changes = 0;
+
+        foreach (var run in runs)
+        {
+            if (!stageByTenant.TryGetValue(run.TenantId, out var tenantStages) || tenantStages.Count == 0)
+            {
+                continue;
+            }
+
+            var actions = actionsByRunId.TryGetValue(run.Id, out var runActionRows)
+                ? runActionRows
+                : new List<PayrollApprovalAction>();
+
+            var approvedStages = actions
+                .Where(x => x.ActionType == "Approve" && x.ActionStatus == "Completed")
+                .Select(x => x.StageCode)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var pendingStage = tenantStages.FirstOrDefault(x => !approvedStages.Contains(x.StageCode));
+            if (pendingStage is null)
+            {
+                continue;
+            }
+
+            var stageAvailableSinceUtc = run.CalculatedAtUtc ?? run.CreatedAtUtc;
+            if (pendingStage.StageOrder > tenantStages.Min(x => x.StageOrder))
+            {
+                var previousStageCodes = tenantStages
+                    .Where(x => x.StageOrder < pendingStage.StageOrder)
+                    .Select(x => x.StageCode)
+                    .ToList();
+
+                var latestPreviousApprovalAtUtc = actions
+                    .Where(x =>
+                        previousStageCodes.Contains(x.StageCode) &&
+                        x.ActionType == "Approve" &&
+                        x.ActionStatus == "Completed")
+                    .Select(x => (DateTime?)x.ActionAtUtc)
+                    .Max();
+
+                if (latestPreviousApprovalAtUtc.HasValue)
+                {
+                    stageAvailableSinceUtc = latestPreviousApprovalAtUtc.Value;
+                }
+            }
+
+            if (pendingStage.AutoApproveEnabled)
+            {
+                dbContext.AddEntity(new PayrollApprovalAction
+                {
+                    TenantId = run.TenantId,
+                    PayrollRunId = run.Id,
+                    StageCode = pendingStage.StageCode,
+                    ActionType = "Approve",
+                    ActionStatus = "Completed",
+                    ActorUserId = null,
+                    ActionAtUtc = nowUtc,
+                    Reason = "Auto-approved by workflow automation.",
+                    ReferenceId = "AUTO-APPROVE",
+                    MetadataJson = "{\"source\":\"worker\",\"mode\":\"auto-approve\"}"
+                });
+                changes++;
+
+                var isLastStage = pendingStage.StageOrder == tenantStages.Max(x => x.StageOrder);
+                if (isLastStage)
+                {
+                    run.Status = PayrollRunStatus.Approved;
+                    run.ApprovedAtUtc = nowUtc;
+                    if (periodById.TryGetValue(run.PayrollPeriodId, out var period))
+                    {
+                        period.Status = PayrollRunStatus.Approved;
+                    }
+                }
+
+                continue;
+            }
+
+            var escalationHours = Math.Max(0, pendingStage.SlaEscalationHours);
+            if (escalationHours <= 0)
+            {
+                continue;
+            }
+
+            var dueAtUtc = stageAvailableSinceUtc.AddHours(escalationHours);
+            if (nowUtc < dueAtUtc)
+            {
+                continue;
+            }
+
+            var alreadyEscalated = actions.Any(x =>
+                x.StageCode == pendingStage.StageCode &&
+                x.ActionType == "Escalate" &&
+                x.ActionStatus == "Completed" &&
+                x.ActionAtUtc >= stageAvailableSinceUtc);
+            if (alreadyEscalated)
+            {
+                continue;
+            }
+
+            var escalatedToRole = string.IsNullOrWhiteSpace(pendingStage.EscalationRole)
+                ? pendingStage.ApproverRole
+                : pendingStage.EscalationRole.Trim();
+            var metadata = JsonSerializer.Serialize(new
+            {
+                source = "worker",
+                mode = "sla-escalation",
+                escalatedToRole = escalatedToRole,
+                stageAvailableSinceUtc = stageAvailableSinceUtc,
+                dueAtUtc = dueAtUtc
+            });
+
+            dbContext.AddEntity(new PayrollApprovalAction
+            {
+                TenantId = run.TenantId,
+                PayrollRunId = run.Id,
+                StageCode = pendingStage.StageCode,
+                ActionType = "Escalate",
+                ActionStatus = "Completed",
+                ActorUserId = null,
+                ActionAtUtc = nowUtc,
+                Reason = $"SLA escalation triggered after {escalationHours} hour(s).",
+                ReferenceId = "AUTO-ESCALATE",
+                MetadataJson = metadata
+            });
+
+            var periodLabel = periodById.TryGetValue(run.PayrollPeriodId, out var payrollPeriod)
+                ? $"{payrollPeriod.Year}-{payrollPeriod.Month:00}"
+                : "Unknown";
+            var companyName = companyByTenantId.TryGetValue(run.TenantId, out var companyProfile) &&
+                              !string.IsNullOrWhiteSpace(companyProfile.LegalName)
+                ? companyProfile.LegalName.Trim()
+                : "Company";
+            var escalationPayload = JsonSerializer.Serialize(new
+            {
+                companyName,
+                period = periodLabel,
+                runId = run.Id,
+                stageCode = pendingStage.StageCode,
+                stageName = pendingStage.StageName,
+                approverRole = pendingStage.ApproverRole,
+                escalatedToRole = escalatedToRole,
+                slaEscalationHours = escalationHours,
+                dueAtUtc = dueAtUtc.ToString("O"),
+                message = $"Payroll run {run.Id} for period {periodLabel} is escalated for stage {pendingStage.StageCode} to role {escalatedToRole}."
+            });
+
+            dbContext.AddEntity(new NotificationQueueItem
+            {
+                TenantId = run.TenantId,
+                RecipientType = "Role",
+                RecipientValue = escalatedToRole,
+                Channel = "InApp",
+                TemplateCode = "PAYROLL_SLA_ESCALATION",
+                RelatedEntityType = "PayrollRun",
+                RelatedEntityId = run.Id,
+                PayloadJson = escalationPayload,
+                Status = "Queued",
+                ScheduledAtUtc = nowUtc
+            });
+
+            if (companyByTenantId.TryGetValue(run.TenantId, out var profile) &&
+                !string.IsNullOrWhiteSpace(profile.ComplianceDigestEmail))
+            {
+                dbContext.AddEntity(new NotificationQueueItem
+                {
+                    TenantId = run.TenantId,
+                    RecipientType = "Email",
+                    RecipientValue = profile.ComplianceDigestEmail.Trim(),
+                    Channel = "Email",
+                    TemplateCode = "PAYROLL_SLA_ESCALATION",
+                    RelatedEntityType = "PayrollRun",
+                    RelatedEntityId = run.Id,
+                    PayloadJson = escalationPayload,
+                    Status = "Queued",
+                    ScheduledAtUtc = nowUtc
+                });
+            }
+            changes++;
+        }
+
+        if (changes > 0)
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+            _logger.LogInformation("Payroll workflow automation applied {Changes} action(s).", changes);
+        }
+    }
 
     private sealed record ComplianceScoreSnapshotData(
         int Score,

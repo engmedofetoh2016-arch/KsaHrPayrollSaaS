@@ -156,13 +156,47 @@
       }
     }
 
+    <h4>{{ i18n.text('Compliance Readiness (WPS/GOSI)', 'Compliance Readiness (WPS/GOSI)') }}</h4>
+    @if (loadingComplianceReadiness()) {
+      <p>{{ i18n.text('Checking compliance readiness...', 'Checking compliance readiness...') }}</p>
+    } @else if (complianceReadiness(); as readiness) {
+      <p>
+        WPS {{ i18n.text('Critical', 'Critical') }}: {{ wpsReadinessCriticalCount() }} |
+        GOSI {{ i18n.text('Critical', 'Critical') }}: {{ gosiReadinessCriticalCount() }}
+      </p>
+      @if (readiness.findings.length === 0) {
+        <p class="ok">{{ i18n.text('No compliance blockers for WPS/GOSI exports.', 'No compliance blockers for WPS/GOSI exports.') }}</p>
+      } @else {
+        <table>
+          <thead>
+            <tr>
+              <th>{{ i18n.text('Scope', 'Scope') }}</th>
+              <th>{{ i18n.text('Severity', 'Severity') }}</th>
+              <th>{{ i18n.text('Employee', 'Employee') }}</th>
+              <th>{{ i18n.text('Issue', 'Issue') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (finding of readiness.findings; track finding.code + '-' + (finding.employeeId ?? '') + '-' + finding.message) {
+              <tr>
+                <td>{{ readinessScope(finding.code) }}</td>
+                <td><span [class]="checkSeverityClass(finding.severity)">{{ finding.severity }}</span></td>
+                <td>{{ finding.employeeName || '-' }}</td>
+                <td>{{ finding.message }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+    }
+
     <button type="button" class="btn btn-secondary" (click)="downloadRegisterCsv()" [disabled]="busy() || exportBusy() || !activeRunId()">
       {{ i18n.text('Export Register CSV', 'تصدير سجل الرواتب CSV') }}
     </button>
-    <button type="button" class="btn btn-secondary" (click)="downloadGosiCsv()" [disabled]="busy() || exportBusy() || !activeRunId()">
+    <button type="button" class="btn btn-secondary" (click)="downloadGosiCsv()" [disabled]="busy() || exportBusy() || !activeRunId() || hasGosiReadinessBlockers()">
       {{ i18n.text('Export GOSI CSV', 'تصدير ملف التأمينات CSV') }}
     </button>
-    <button type="button" class="btn btn-secondary" (click)="downloadWpsCsv()" [disabled]="busy() || exportBusy() || !activeRunId()">
+    <button type="button" class="btn btn-secondary" (click)="downloadWpsCsv()" [disabled]="busy() || exportBusy() || !activeRunId() || hasWpsReadinessBlockers()">
       {{ i18n.text('Export WPS CSV', 'تصدير ملف WPS CSV') }}
     </button>
     <table>

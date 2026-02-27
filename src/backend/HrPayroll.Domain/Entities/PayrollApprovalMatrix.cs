@@ -11,5 +11,8 @@ public class PayrollApprovalMatrix : BaseAuditableEntity, ITenantScoped
     public int StageOrder { get; set; }
     public string ApproverRole { get; set; } = string.Empty;
     public bool AllowRollback { get; set; }
+    public bool AutoApproveEnabled { get; set; }
+    public int SlaEscalationHours { get; set; }
+    public string EscalationRole { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
 }

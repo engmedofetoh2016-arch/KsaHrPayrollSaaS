@@ -1,6 +1,6 @@
 ﻿import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { catchError, forkJoin, of } from 'rxjs';
 import { apiConfig } from '../../core/config/api.config';
@@ -30,6 +30,38 @@ export class OperationsStudioPageComponent implements OnInit {
   readonly forecastScenarios = signal<any[]>([]);
   readonly notificationTemplates = signal<any[]>([]);
   readonly notificationQueue = signal<any[]>([]);
+  readonly integrationJobs = signal<any[]>([]);
+  readonly integrationDashboard = signal<any>({
+    total: 0,
+    queued: 0,
+    processing: 0,
+    retryScheduled: 0,
+    deadLetter: 0,
+    succeeded: 0,
+    deadlinesMissed: 0,
+    recentFailures: []
+  });
+  readonly integrationStatusFilter = signal('All');
+  readonly filteredIntegrationJobs = computed(() => {
+    const items = this.integrationJobs();
+    const filter = this.integrationStatusFilter().trim().toLowerCase();
+    if (!filter || filter === 'all') {
+      return items;
+    }
+
+    return items.filter((x) => String(x?.status ?? '').trim().toLowerCase() === filter);
+  });
+  readonly escalationNotifications = signal<any[]>([]);
+  readonly escalationStatusFilter = signal('All');
+  readonly filteredEscalationNotifications = computed(() => {
+    const filter = this.escalationStatusFilter().trim().toLowerCase();
+    const items = this.escalationNotifications();
+    if (!filter || filter === 'all') {
+      return items;
+    }
+
+    return items.filter((x) => String(x?.status ?? '').trim().toLowerCase() === filter);
+  });
   readonly dataQualityIssues = signal<any[]>([]);
   readonly selfServiceRequests = signal<any[]>([]);
 
@@ -54,6 +86,9 @@ export class OperationsStudioPageComponent implements OnInit {
     stageOrder: 1,
     approverRole: 'Manager',
     allowRollback: true,
+    autoApproveEnabled: false,
+    slaEscalationHours: 24,
+    escalationRole: 'Owner',
     isActive: true
   };
 
@@ -94,6 +129,15 @@ export class OperationsStudioPageComponent implements OnInit {
     payloadJson: '{}'
   };
 
+  readonly integrationForm = {
+    provider: 'Qiwa',
+    operation: 'EmployeeProfileSync',
+    entityType: 'Employee',
+    entityId: '',
+    deadlineAtUtc: '',
+    requestPayloadJson: '{}'
+  };
+
   ngOnInit(): void {
     this.refresh();
   }
@@ -114,7 +158,18 @@ export class OperationsStudioPageComponent implements OnInit {
       forecastScenarios: this.http.get<any>(`${this.base}/analytics/payroll-forecast/scenarios`).pipe(catchError(() => of({ items: [] }))),
       selfServiceRequests: this.http.get<any>(`${this.base}/self-service/requests?status=Submitted&take=100`).pipe(catchError(() => of({ items: [] }))),
       notificationTemplates: this.http.get<any>(`${this.base}/notifications/templates`).pipe(catchError(() => of({ items: [] }))),
-      notificationQueue: this.http.get<any>(`${this.base}/notifications/queue?take=50`).pipe(catchError(() => of({ items: [] }))),
+      notificationQueue: this.http.get<any>(`${this.base}/notifications/queue?take=200`).pipe(catchError(() => of({ items: [] }))),
+      integrationJobs: this.http.get<any>(`${this.base}/integrations/sync-jobs?take=200`).pipe(catchError(() => of({ items: [] }))),
+      integrationDashboard: this.http.get<any>(`${this.base}/integrations/sync-jobs/dashboard`).pipe(catchError(() => of({
+        total: 0,
+        queued: 0,
+        processing: 0,
+        retryScheduled: 0,
+        deadLetter: 0,
+        succeeded: 0,
+        deadlinesMissed: 0,
+        recentFailures: []
+      }))),
       dataQualityIssues: this.http.get<any>(`${this.base}/payroll/data-quality/issues?status=Open&take=100`).pipe(catchError(() => of({ items: [] })))
     }).subscribe({
       next: (response) => {
@@ -124,7 +179,42 @@ export class OperationsStudioPageComponent implements OnInit {
         this.forecastScenarios.set(Array.isArray(response.forecastScenarios?.items) ? response.forecastScenarios.items : []);
         this.selfServiceRequests.set(Array.isArray(response.selfServiceRequests?.items) ? response.selfServiceRequests.items : []);
         this.notificationTemplates.set(Array.isArray(response.notificationTemplates?.items) ? response.notificationTemplates.items : []);
-        this.notificationQueue.set(Array.isArray(response.notificationQueue?.items) ? response.notificationQueue.items : []);
+        const queueItems = Array.isArray(response.notificationQueue?.items) ? response.notificationQueue.items : [];
+        this.notificationQueue.set(queueItems);
+        this.integrationJobs.set(Array.isArray(response.integrationJobs?.items) ? response.integrationJobs.items : []);
+        this.integrationDashboard.set(response.integrationDashboard ?? {
+          total: 0,
+          queued: 0,
+          processing: 0,
+          retryScheduled: 0,
+          deadLetter: 0,
+          succeeded: 0,
+          deadlinesMissed: 0,
+          recentFailures: []
+        });
+        this.escalationNotifications.set(
+          queueItems
+            .filter((x: any) => String(x?.templateCode ?? '').toUpperCase() === 'PAYROLL_SLA_ESCALATION')
+            .map((x: any) => {
+              const payload = this.parseEscalationPayload(x?.payloadJson);
+              return {
+                id: String(x?.id ?? ''),
+                status: String(x?.status ?? ''),
+                channel: String(x?.channel ?? ''),
+                recipientType: String(x?.recipientType ?? ''),
+                recipientValue: String(x?.recipientValue ?? ''),
+                scheduledAtUtc: String(x?.scheduledAtUtc ?? ''),
+                sentAtUtc: x?.sentAtUtc ? String(x.sentAtUtc) : '',
+                errorMessage: String(x?.errorMessage ?? ''),
+                relatedEntityId: x?.relatedEntityId ? String(x.relatedEntityId) : '',
+                runId: payload.runId,
+                stageCode: payload.stageCode,
+                stageName: payload.stageName,
+                escalatedToRole: payload.escalatedToRole,
+                period: payload.period
+              };
+            })
+        );
         this.dataQualityIssues.set(Array.isArray(response.dataQualityIssues?.items) ? response.dataQualityIssues.items : []);
       },
       error: () => this.error.set(this.i18n.text('Failed to load operations studio.', 'تعذر تحميل استوديو العمليات.')),
@@ -167,6 +257,9 @@ export class OperationsStudioPageComponent implements OnInit {
         stageOrder: Number(this.stageForm.stageOrder || 0),
         approverRole: this.stageForm.approverRole,
         allowRollback: !!this.stageForm.allowRollback,
+        autoApproveEnabled: !!this.stageForm.autoApproveEnabled,
+        slaEscalationHours: Number(this.stageForm.slaEscalationHours || 0),
+        escalationRole: this.stageForm.escalationRole || null,
         isActive: !!this.stageForm.isActive
       }),
       this.i18n.text('Approval stage saved.', 'تم حفظ مرحلة الاعتماد.')
@@ -238,6 +331,34 @@ export class OperationsStudioPageComponent implements OnInit {
     );
   }
 
+  queueIntegrationSyncJob() {
+    const entityIdRaw = this.integrationForm.entityId.trim();
+    const deadlineRaw = this.integrationForm.deadlineAtUtc.trim();
+    this.runSave(
+      this.http.post(`${this.base}/integrations/sync-jobs`, {
+        provider: this.integrationForm.provider,
+        operation: this.integrationForm.operation,
+        entityType: this.integrationForm.entityType,
+        entityId: entityIdRaw || null,
+        requestPayloadJson: this.integrationForm.requestPayloadJson || '{}',
+        deadlineAtUtc: deadlineRaw || null,
+        maxAttempts: 3
+      }),
+      this.i18n.text('Integration sync job queued.', 'تمت إضافة مهمة مزامنة التكامل إلى قائمة الانتظار.')
+    );
+  }
+
+  retryIntegrationJob(jobId: string) {
+    if (!jobId) {
+      return;
+    }
+
+    this.runSave(
+      this.http.post(`${this.base}/integrations/sync-jobs/${jobId}/retry`, {}),
+      this.i18n.text('Integration sync job re-queued.', 'تمت إعادة جدولة مهمة التكامل.')
+    );
+  }
+
   reviewSelfServiceRequest(requestId: string, approved: boolean) {
     if (!requestId) {
       return;
@@ -304,6 +425,10 @@ export class OperationsStudioPageComponent implements OnInit {
         return 'طلب قرض';
       case 'CONTRACTRENEWAL':
         return 'تجديد عقد';
+      case 'INTEGRATION_SYNC_FAILED':
+        return 'فشل مزامنة التكامل';
+      case 'INTEGRATION_DEADLINE_MISSED':
+        return 'تجاوز موعد مزامنة التكامل';
       default:
         return code ? 'رمز مخصص' : 'غير محدد';
     }
@@ -333,6 +458,39 @@ export class OperationsStudioPageComponent implements OnInit {
       },
       complete: () => this.saving.set(false)
     });
+  }
+
+  private parseEscalationPayload(raw: unknown): {
+    runId: string;
+    stageCode: string;
+    stageName: string;
+    escalatedToRole: string;
+    period: string;
+  } {
+    const empty = {
+      runId: '',
+      stageCode: '',
+      stageName: '',
+      escalatedToRole: '',
+      period: ''
+    };
+
+    if (typeof raw !== 'string' || !raw.trim()) {
+      return empty;
+    }
+
+    try {
+      const parsed = JSON.parse(raw);
+      return {
+        runId: String(parsed?.runId ?? ''),
+        stageCode: String(parsed?.stageCode ?? ''),
+        stageName: String(parsed?.stageName ?? ''),
+        escalatedToRole: String(parsed?.escalatedToRole ?? ''),
+        period: String(parsed?.period ?? '')
+      };
+    } catch {
+      return empty;
+    }
   }
 }
 
