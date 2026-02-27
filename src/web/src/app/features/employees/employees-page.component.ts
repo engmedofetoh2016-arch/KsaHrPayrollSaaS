@@ -110,8 +110,16 @@ export class EmployeesPageComponent implements OnInit, OnDestroy {
   }
 
   create() {
-    if (this.form.invalid || this.saving()) {
+    if (this.saving()) {
+      return;
+    }
+
+    if (this.form.invalid) {
       this.form.markAllAsTouched();
+      this.error.set(this.i18n.text(
+        this.getFirstEmployeeFormValidationErrorEn(),
+        this.getFirstEmployeeFormValidationErrorAr()
+      ));
       return;
     }
 
@@ -520,6 +528,56 @@ export class EmployeesPageComponent implements OnInit, OnDestroy {
       workPermitExpiryDate: value.workPermitExpiryDate || null,
       contractEndDate: value.contractEndDate || null
     };
+  }
+
+  private getFirstEmployeeFormValidationErrorEn(): string {
+    const controls = this.form.controls;
+    if (controls.email.invalid) {
+      return 'Please enter a valid email address.';
+    }
+
+    if (controls.firstName.invalid || controls.lastName.invalid) {
+      return 'First name and last name are required (minimum 2 characters).';
+    }
+
+    if (controls.jobTitle.invalid) {
+      return 'Job title is required.';
+    }
+
+    if (controls.baseSalary.invalid) {
+      return 'Base salary must be greater than 0.';
+    }
+
+    if (controls.startDate.invalid) {
+      return 'Start date is required.';
+    }
+
+    return 'Please fix the highlighted employee form fields.';
+  }
+
+  private getFirstEmployeeFormValidationErrorAr(): string {
+    const controls = this.form.controls;
+    if (controls.email.invalid) {
+      return 'يرجى إدخال بريد إلكتروني صحيح.';
+    }
+
+    if (controls.firstName.invalid || controls.lastName.invalid) {
+      return 'الاسم الأول واسم العائلة مطلوبان (حد أدنى حرفان).';
+    }
+
+    if (controls.jobTitle.invalid) {
+      return 'المسمى الوظيفي مطلوب.';
+    }
+
+    if (controls.baseSalary.invalid) {
+      return 'يجب أن يكون الراتب الأساسي أكبر من صفر.';
+    }
+
+    if (controls.startDate.invalid) {
+      return 'تاريخ المباشرة مطلوب.';
+    }
+
+    return 'يرجى تصحيح الحقول غير الصحيحة في نموذج الموظف.';
   }
 
   private resetForm() {

@@ -88,6 +88,7 @@ function localizeKnownApiMessage(message: string, isArabic: boolean): string {
 
   const knownMap: Record<string, string> = {
     'An unexpected error occurred.': 'حدث خطأ غير متوقع.',
+    'Database schema is outdated. Apply the latest migrations and retry.': 'مخطط قاعدة البيانات غير محدث. يرجى تطبيق آخر الترحيلات ثم إعادة المحاولة.',
     'Unexpected error': 'حدث خطأ غير متوقع.',
     'Validation failed.': 'فشل التحقق من صحة البيانات.',
     'Validation error.': 'خطأ في التحقق من صحة البيانات.'

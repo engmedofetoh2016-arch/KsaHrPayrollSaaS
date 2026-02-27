@@ -5729,7 +5729,7 @@ api.MapGet("/leave/balances", [Authorize(Roles = RoleNames.Owner + "," + RoleNam
     }
 });
 
-api.MapPost("/leave/balances/upsert", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+api.MapPost("/leave/balances/upsert", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
     UpsertLeaveBalanceRequest request,
     IApplicationDbContext dbContext,
     CancellationToken cancellationToken) =>
