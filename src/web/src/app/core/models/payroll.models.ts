@@ -118,6 +118,33 @@ export interface PayrollApprovalDecision {
   findingsCount?: number;
 }
 
+export interface PayrollApprovalStage {
+  id: string;
+  payrollScope: string;
+  stageCode: string;
+  stageName: string;
+  stageOrder: number;
+  approverRole: string;
+  allowRollback: boolean;
+  autoApproveEnabled: boolean;
+  slaEscalationHours: number;
+  escalationRole: string;
+  isActive: boolean;
+}
+
+export interface PayrollWorkflowAction {
+  id: string;
+  stageCode: string;
+  actionType: string;
+  actionStatus: string;
+  actorUserId?: string;
+  actionAtUtc: string;
+  reason?: string;
+  referenceId?: string;
+  rolledBackActionId?: string;
+  metadataJson?: string;
+}
+
 export interface PayrollApprovalFindingSnapshot {
   code: string;
   severity: 'Critical' | 'Warning' | 'Notice' | string;

@@ -70,6 +70,47 @@
   <h3>{{ i18n.text('Run Details', 'تفاصيل التشغيل') }}</h3>
   @if (run()) {
     <p>Status: {{ run()?.status }} | Total Net: {{ totalNet() | number: '1.2-2' }}</p>
+    <h4>{{ i18n.text('Workflow Stages', 'Workflow Stages') }}</h4>
+    @if (loadingWorkflow()) {
+      <p>{{ i18n.text('Loading workflow stages...','Loading workflow stages...') }}</p>
+    } @else if (approvalStages().length === 0) {
+      <p class="muted">{{ i18n.text('No active workflow stages configured.','No active workflow stages configured.') }}</p>
+    } @else {
+      <table>
+        <thead>
+          <tr>
+            <th>{{ i18n.text('Order', 'Order') }}</th>
+            <th>{{ i18n.text('Stage', 'Stage') }}</th>
+            <th>{{ i18n.text('Approver Role', 'Approver Role') }}</th>
+            <th>{{ i18n.text('Status', 'Status') }}</th>
+            <th>{{ i18n.text('Action', 'Action') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (stage of approvalStages(); track stage.id) {
+            <tr>
+              <td>{{ stage.stageOrder }}</td>
+              <td>{{ stage.stageCode }} - {{ stage.stageName }}</td>
+              <td>{{ stage.approverRole }}</td>
+              <td>
+                <span [class]="workflowStageStatus(stage.stageCode) === 'Approved' ? 'badge completed' : 'badge pending'">
+                  {{ workflowStageStatus(stage.stageCode) }}
+                </span>
+              </td>
+              <td>
+                <button
+                  type="button"
+                  class="btn btn-secondary btn-sm"
+                  (click)="approveWorkflowStage(stage.stageCode)"
+                  [disabled]="!canApproveWorkflowStage(stage)">
+                  {{ i18n.text('Approve Stage', 'Approve Stage') }}
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
     <h4>{{ i18n.text('Executive Summary', 'الملخص التنفيذي') }}</h4>
     @if (loadingExecutiveSummary()) {
       <p>{{ i18n.text('Generating summary...', 'جارٍ إنشاء الملخص...') }}</p>

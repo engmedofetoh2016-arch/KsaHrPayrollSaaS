@@ -7,9 +7,11 @@ import { Employee } from '../../core/models/employee.models';
 import {
   ExportJob,
   PayrollApprovalDecision,
+  PayrollApprovalStage,
   PayrollComplianceReadinessResult,
   PayrollExecutiveSummary,
   PayrollApprovalFindingSnapshot,
+  PayrollWorkflowAction,
   PayrollPeriod,
   PayrollPreApprovalChecksResult,
   PayrollRunDetails
@@ -42,6 +44,8 @@ export class PayrollPageComponent implements OnInit, OnDestroy {
   readonly executiveSummary = signal<PayrollExecutiveSummary | null>(null);
   readonly exports = signal<ExportJob[]>([]);
   readonly approvalDecisions = signal<PayrollApprovalDecision[]>([]);
+  readonly approvalStages = signal<PayrollApprovalStage[]>([]);
+  readonly workflowActions = signal<PayrollWorkflowAction[]>([]);
   readonly activeDecisionSnapshot = signal<{
     decision: PayrollApprovalDecision;
     findings: PayrollApprovalFindingSnapshot[];
@@ -56,6 +60,7 @@ export class PayrollPageComponent implements OnInit, OnDestroy {
   readonly loadingChecks = signal(false);
   readonly loadingComplianceReadiness = signal(false);
   readonly loadingApprovalDecisions = signal(false);
+  readonly loadingWorkflow = signal(false);
   readonly loadingExecutiveSummary = signal(false);
   readonly loadingReferenceId = signal(false);
   readonly exportsLastUpdatedAt = signal<Date | null>(null);
@@ -161,6 +166,7 @@ export class PayrollPageComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.loadBaseData();
+    this.loadWorkflowStages();
     this.generateNextReferenceId();
 
     const linkedRunId = this.route.snapshot.queryParamMap.get('runId');
@@ -301,6 +307,7 @@ export class PayrollPageComponent implements OnInit, OnDestroy {
         this.loadPreApprovalChecks(run.id);
         this.loadComplianceReadiness(run.id);
         this.loadApprovalDecisions(run.id);
+        this.loadWorkflowActions(run.id);
         this.loadExports(true);
         this.busy.set(false);
         this.message.set('Payroll run loaded.');
@@ -335,6 +342,28 @@ export class PayrollPageComponent implements OnInit, OnDestroy {
       error: (err) => {
         this.busy.set(false);
         this.error.set(getApiErrorMessage(err, 'Failed to approve payroll run.'));
+      }
+    });
+  }
+
+  approveWorkflowStage(stageCode: string) {
+    const runId = this.activeRunId();
+    if (!runId || !stageCode || this.busy()) {
+      return;
+    }
+
+    this.busy.set(true);
+    this.error.set('');
+    this.message.set('');
+    this.payrollService.approveWorkflowStage(runId, stageCode).subscribe({
+      next: () => {
+        this.busy.set(false);
+        this.message.set(`Workflow stage ${stageCode} approved.`);
+        this.fetchRun();
+      },
+      error: (err) => {
+        this.busy.set(false);
+        this.error.set(getApiErrorMessage(err, `Failed to approve workflow stage ${stageCode}.`));
       }
     });
   }
@@ -724,6 +753,71 @@ export class PayrollPageComponent implements OnInit, OnDestroy {
       error: (err) => this.error.set(getApiErrorMessage(err, 'Failed to load payroll approval decisions.')),
       complete: () => this.loadingApprovalDecisions.set(false)
     });
+  }
+
+  private loadWorkflowStages() {
+    this.loadingWorkflow.set(true);
+    this.payrollService.getApprovalMatrix('Default').subscribe({
+      next: (rows) =>
+        this.approvalStages.set(
+          (rows ?? []).slice().sort((a, b) => Number(a.stageOrder ?? 0) - Number(b.stageOrder ?? 0))
+        ),
+      error: (err) => this.error.set(getApiErrorMessage(err, 'Failed to load payroll approval matrix.')),
+      complete: () => this.loadingWorkflow.set(false)
+    });
+  }
+
+  private loadWorkflowActions(runId: string) {
+    if (!runId) {
+      this.workflowActions.set([]);
+      return;
+    }
+
+    this.loadingWorkflow.set(true);
+    this.payrollService.getWorkflowActions(runId).subscribe({
+      next: (response) => {
+        const items = Array.isArray(response?.items) ? response.items : [];
+        this.workflowActions.set(items);
+      },
+      error: (err) => {
+        this.workflowActions.set([]);
+        this.error.set(getApiErrorMessage(err, 'Failed to load payroll workflow actions.'));
+      },
+      complete: () => this.loadingWorkflow.set(false)
+    });
+  }
+
+  workflowStageStatus(stageCode: string): 'Approved' | 'Pending' {
+    const normalized = String(stageCode ?? '').trim().toUpperCase();
+    const approved = this.workflowActions().some(
+      (x) =>
+        String(x.stageCode ?? '').trim().toUpperCase() === normalized &&
+        String(x.actionType ?? '').trim().toUpperCase() === 'APPROVE' &&
+        String(x.actionStatus ?? '').trim().toUpperCase() === 'COMPLETED'
+    );
+    return approved ? 'Approved' : 'Pending';
+  }
+
+  canApproveWorkflowStage(stage: PayrollApprovalStage): boolean {
+    const run = this.run();
+    if (!run || this.busy()) {
+      return false;
+    }
+
+    if (Boolean(run.approvedAtUtc) || Boolean(run.lockedAtUtc)) {
+      return false;
+    }
+
+    const stageCode = String(stage.stageCode ?? '').trim().toUpperCase();
+    if (!stageCode || this.workflowStageStatus(stageCode) === 'Approved') {
+      return false;
+    }
+
+    const previousStageCodes = this.approvalStages()
+      .filter((x) => Number(x.stageOrder ?? 0) < Number(stage.stageOrder ?? 0))
+      .map((x) => String(x.stageCode ?? '').trim().toUpperCase());
+
+    return previousStageCodes.every((code) => this.workflowStageStatus(code) === 'Approved');
   }
 
   private loadExecutiveSummary(runId: string) {

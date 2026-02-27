@@ -8,8 +8,10 @@ import {
   ExportJob,
   PayrollAdjustment,
   PayrollApprovalDecision,
+  PayrollApprovalStage,
   PayrollComplianceReadinessResult,
   PayrollExecutiveSummary,
+  PayrollWorkflowAction,
   PayrollPreApprovalChecksResult,
   PayrollPeriod,
   PayrollRunDetails
@@ -67,6 +69,22 @@ export class PayrollService {
 
   getApprovalDecisions(runId: string) {
     return this.http.get<{ items: PayrollApprovalDecision[] }>(`${this.base}/runs/${runId}/approval-decisions`);
+  }
+
+  getApprovalMatrix(payrollScope = 'Default') {
+    const params = new HttpParams().set('payrollScope', payrollScope);
+    return this.http.get<PayrollApprovalStage[]>(`${this.base}/approval-matrix`, { params });
+  }
+
+  getWorkflowActions(runId: string) {
+    return this.http.get<{ runId: string; items: PayrollWorkflowAction[] }>(`${this.base}/runs/${runId}/workflow/actions`);
+  }
+
+  approveWorkflowStage(runId: string, stageCode: string) {
+    return this.http.post(`${this.base}/runs/${runId}/workflow/actions`, {
+      stageCode,
+      actionType: 'Approve'
+    });
   }
 
   getNextOverrideReferenceId() {
