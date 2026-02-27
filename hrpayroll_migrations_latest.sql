@@ -1869,5 +1869,54 @@ BEGIN
     VALUES ('20260227150204_AddEmployeeGradeAndLocationCode', '8.0.12');
     END IF;
 END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260227222000_RepairPayrollSchemaDriftV1') THEN
+    ALTER TABLE "PayrollLineSet" ADD COLUMN IF NOT EXISTS "LoanDeduction" numeric NOT NULL DEFAULT 0.0;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260227222000_RepairPayrollSchemaDriftV1') THEN
+    CREATE TABLE IF NOT EXISTS "AllowancePolicySet" (
+        "Id" uuid NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "PolicyName" text NOT NULL,
+        "JobTitle" text NOT NULL,
+        "MonthlyAmount" numeric NOT NULL,
+        "EffectiveFrom" date NOT NULL,
+        "EffectiveTo" date,
+        "IsTaxable" boolean NOT NULL,
+        "IsActive" boolean NOT NULL,
+        "CreatedAtUtc" timestamp with time zone NOT NULL,
+        "UpdatedAtUtc" timestamp with time zone,
+        CONSTRAINT "PK_AllowancePolicySet" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260227222000_RepairPayrollSchemaDriftV1') THEN
+    CREATE INDEX IF NOT EXISTS "IX_AllowancePolicySet_TenantId_IsActive_JobTitle" ON "AllowancePolicySet" ("TenantId", "IsActive", "JobTitle");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260227222000_RepairPayrollSchemaDriftV1') THEN
+    CREATE UNIQUE INDEX IF NOT EXISTS "IX_AllowancePolicySet_TenantId_PolicyName" ON "AllowancePolicySet" ("TenantId", "PolicyName");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260227222000_RepairPayrollSchemaDriftV1') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20260227222000_RepairPayrollSchemaDriftV1', '8.0.12');
+    END IF;
+END $EF$;
 COMMIT;
 

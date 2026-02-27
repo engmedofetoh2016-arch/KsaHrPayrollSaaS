@@ -7893,7 +7893,7 @@ api.MapGet("/payroll/runs/{runId:guid}/approval-decisions", [Authorize(Roles = R
     var decisions = await dbContext.AuditLogs
         .Where(x =>
             (x.Method == "PAYROLL_APPROVE_STANDARD" || x.Method == "PAYROLL_APPROVE_OVERRIDE") &&
-            x.Path.Contains($"/api/payroll/runs/{runId}/", StringComparison.OrdinalIgnoreCase))
+            x.Path.ToLower().Contains($"/api/payroll/runs/{runId}/".ToLower()))
         .OrderByDescending(x => x.CreatedAtUtc)
         .Select(x => new
         {
