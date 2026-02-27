@@ -5296,57 +5296,57 @@ api.MapGet("/leave/requests", [Authorize(Roles = RoleNames.Owner + "," + RoleNam
     ILogger<Program> logger,
     CancellationToken cancellationToken) =>
 {
-    var canReview = httpContext.User.IsInRole(RoleNames.Owner) ||
-                    httpContext.User.IsInRole(RoleNames.Admin) ||
-                    httpContext.User.IsInRole(RoleNames.Hr) ||
-                    httpContext.User.IsInRole(RoleNames.Manager);
-
-    var query = dbContext.LeaveRequests.AsQueryable();
-
-    if (status.HasValue)
-    {
-        if (status.Value is < 1 or > 3)
-        {
-            return Results.BadRequest(new { error = "Invalid leave request status." });
-        }
-
-        var parsedStatus = (LeaveRequestStatus)status.Value;
-        query = query.Where(x => x.Status == parsedStatus);
-    }
-
-    if (canReview)
-    {
-        if (employeeId.HasValue)
-        {
-            query = query.Where(x => x.EmployeeId == employeeId.Value);
-        }
-    }
-    else
-    {
-        var userEmail = httpContext.User.Claims
-            .Where(x => x.Type is "email" or ClaimTypes.Email)
-            .Select(x => x.Value)
-            .FirstOrDefault();
-
-        if (string.IsNullOrWhiteSpace(userEmail))
-        {
-            return Results.BadRequest(new { error = "Your account email was not found in token." });
-        }
-
-        var ownEmployee = await dbContext.Employees.FirstOrDefaultAsync(
-            x => x.Email.ToLower() == userEmail.ToLower(),
-            cancellationToken);
-
-        if (ownEmployee is null)
-        {
-            return Results.BadRequest(new { error = "No employee profile linked to your account email." });
-        }
-
-        query = query.Where(x => x.EmployeeId == ownEmployee.Id);
-    }
-
     try
     {
+        var canReview = httpContext.User.IsInRole(RoleNames.Owner) ||
+                        httpContext.User.IsInRole(RoleNames.Admin) ||
+                        httpContext.User.IsInRole(RoleNames.Hr) ||
+                        httpContext.User.IsInRole(RoleNames.Manager);
+
+        var query = dbContext.LeaveRequests.AsQueryable();
+
+        if (status.HasValue)
+        {
+            if (status.Value is < 1 or > 3)
+            {
+                return Results.BadRequest(new { error = "Invalid leave request status." });
+            }
+
+            var parsedStatus = (LeaveRequestStatus)status.Value;
+            query = query.Where(x => x.Status == parsedStatus);
+        }
+
+        if (canReview)
+        {
+            if (employeeId.HasValue)
+            {
+                query = query.Where(x => x.EmployeeId == employeeId.Value);
+            }
+        }
+        else
+        {
+            var userEmail = httpContext.User.Claims
+                .Where(x => x.Type is "email" or ClaimTypes.Email)
+                .Select(x => x.Value)
+                .FirstOrDefault();
+
+            if (string.IsNullOrWhiteSpace(userEmail))
+            {
+                return Results.BadRequest(new { error = "Your account email was not found in token." });
+            }
+
+            var ownEmployee = await dbContext.Employees.FirstOrDefaultAsync(
+                x => x.Email.ToLower() == userEmail.ToLower(),
+                cancellationToken);
+
+            if (ownEmployee is null)
+            {
+                return Results.BadRequest(new { error = "No employee profile linked to your account email." });
+            }
+
+            query = query.Where(x => x.EmployeeId == ownEmployee.Id);
+        }
+
         var rows = await (from leaveRequest in query
                           join employee in dbContext.Employees on leaveRequest.EmployeeId equals employee.Id
                           orderby leaveRequest.CreatedAtUtc descending
@@ -5374,6 +5374,11 @@ api.MapGet("/leave/requests", [Authorize(Roles = RoleNames.Owner + "," + RoleNam
         logger.LogWarning(ex, "Leave request query skipped due to schema mismatch.");
         return Results.Ok(Array.Empty<object>());
     }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex, "Leave request query failed. Returning empty list.");
+        return Results.Ok(Array.Empty<object>());
+    }
 });
 
 api.MapGet("/leave/balances", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager + "," + RoleNames.Employee)] async (
@@ -5384,46 +5389,46 @@ api.MapGet("/leave/balances", [Authorize(Roles = RoleNames.Owner + "," + RoleNam
     ILogger<Program> logger,
     CancellationToken cancellationToken) =>
 {
-    var canReview = httpContext.User.IsInRole(RoleNames.Owner) ||
-                    httpContext.User.IsInRole(RoleNames.Admin) ||
-                    httpContext.User.IsInRole(RoleNames.Hr) ||
-                    httpContext.User.IsInRole(RoleNames.Manager);
-
-    var query = dbContext.LeaveBalances.Where(x => x.Year == year);
-
-    if (canReview)
-    {
-        if (employeeId.HasValue)
-        {
-            query = query.Where(x => x.EmployeeId == employeeId.Value);
-        }
-    }
-    else
-    {
-        var userEmail = httpContext.User.Claims
-            .Where(x => x.Type is "email" or ClaimTypes.Email)
-            .Select(x => x.Value)
-            .FirstOrDefault();
-
-        if (string.IsNullOrWhiteSpace(userEmail))
-        {
-            return Results.BadRequest(new { error = "Your account email was not found in token." });
-        }
-
-        var ownEmployee = await dbContext.Employees.FirstOrDefaultAsync(
-            x => x.Email.ToLower() == userEmail.ToLower(),
-            cancellationToken);
-
-        if (ownEmployee is null)
-        {
-            return Results.BadRequest(new { error = "No employee profile linked to your account email." });
-        }
-
-        query = query.Where(x => x.EmployeeId == ownEmployee.Id);
-    }
-
     try
     {
+        var canReview = httpContext.User.IsInRole(RoleNames.Owner) ||
+                        httpContext.User.IsInRole(RoleNames.Admin) ||
+                        httpContext.User.IsInRole(RoleNames.Hr) ||
+                        httpContext.User.IsInRole(RoleNames.Manager);
+
+        var query = dbContext.LeaveBalances.Where(x => x.Year == year);
+
+        if (canReview)
+        {
+            if (employeeId.HasValue)
+            {
+                query = query.Where(x => x.EmployeeId == employeeId.Value);
+            }
+        }
+        else
+        {
+            var userEmail = httpContext.User.Claims
+                .Where(x => x.Type is "email" or ClaimTypes.Email)
+                .Select(x => x.Value)
+                .FirstOrDefault();
+
+            if (string.IsNullOrWhiteSpace(userEmail))
+            {
+                return Results.BadRequest(new { error = "Your account email was not found in token." });
+            }
+
+            var ownEmployee = await dbContext.Employees.FirstOrDefaultAsync(
+                x => x.Email.ToLower() == userEmail.ToLower(),
+                cancellationToken);
+
+            if (ownEmployee is null)
+            {
+                return Results.BadRequest(new { error = "No employee profile linked to your account email." });
+            }
+
+            query = query.Where(x => x.EmployeeId == ownEmployee.Id);
+        }
+
         var rows = await (from balance in query
                           join employee in dbContext.Employees on balance.EmployeeId equals employee.Id
                           orderby employee.FirstName, employee.LastName, balance.LeaveType
@@ -5444,6 +5449,11 @@ api.MapGet("/leave/balances", [Authorize(Roles = RoleNames.Owner + "," + RoleNam
     catch (Exception ex) when (IsDbSchemaMismatch(ex))
     {
         logger.LogWarning(ex, "Leave balance query skipped due to schema mismatch.");
+        return Results.Ok(Array.Empty<object>());
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex, "Leave balance query failed. Returning empty list.");
         return Results.Ok(Array.Empty<object>());
     }
 });
