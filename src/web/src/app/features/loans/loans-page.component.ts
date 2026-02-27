@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Employee } from '../../core/models/employee.models';
 import { EmployeeLoan, EmployeeLoanInstallment } from '../../core/models/loan.models';
@@ -25,10 +25,12 @@ export class LoansPageComponent {
   readonly loans = signal<EmployeeLoan[]>([]);
   readonly installments = signal<EmployeeLoanInstallment[]>([]);
   readonly activeLoanId = signal('');
+  readonly lifecycleCheckMessage = signal('');
   readonly loading = signal(false);
   readonly saving = signal(false);
   readonly error = signal('');
   readonly message = signal('');
+  readonly activeLoan = computed(() => this.loans().find((x) => x.id === this.activeLoanId()) ?? null);
 
   readonly form = this.fb.group({
     employeeId: ['', [Validators.required]],
@@ -39,6 +41,13 @@ export class LoansPageComponent {
     startMonth: [new Date().getMonth() + 1, [Validators.required, Validators.min(1), Validators.max(12)]],
     totalInstallments: [4, [Validators.required, Validators.min(1), Validators.max(120)]],
     notes: ['']
+  });
+
+  readonly lifecycleForm = this.fb.group({
+    startYear: [new Date().getFullYear(), [Validators.required, Validators.min(2000), Validators.max(2100)]],
+    startMonth: [new Date().getMonth() + 1, [Validators.required, Validators.min(1), Validators.max(12)]],
+    settleAmount: [null as number | null, [Validators.min(0.01)]],
+    reason: ['']
   });
 
   constructor() {
@@ -135,10 +144,132 @@ export class LoansPageComponent {
 
   viewInstallments(loanId: string) {
     this.activeLoanId.set(loanId);
+    const loan = this.loans().find((x) => x.id === loanId);
+    if (loan) {
+      this.lifecycleForm.patchValue({
+        startYear: loan.startYear,
+        startMonth: loan.startMonth
+      });
+    }
+    this.lifecycleCheckMessage.set('');
     this.installments.set([]);
     this.loanService.listInstallments(loanId).subscribe({
       next: (rows) => this.installments.set(rows),
       error: (err) => this.error.set(getApiErrorMessage(err, 'Failed to load installments.'))
+    });
+  }
+
+  checkLifecycleLock() {
+    const loanId = this.activeLoanId();
+    if (!loanId || this.saving()) {
+      return;
+    }
+
+    this.saving.set(true);
+    this.error.set('');
+    this.lifecycleCheckMessage.set('');
+    this.loanService.lifecycleCheck(loanId).subscribe({
+      next: (result) => {
+        this.saving.set(false);
+        if (result.blockedPeriods.length === 0) {
+          this.lifecycleCheckMessage.set('No payroll lock blockers for pending installments.');
+          return;
+        }
+
+        this.lifecycleCheckMessage.set(`Locked periods: ${result.blockedPeriods.join(', ')}`);
+      },
+      error: (err) => {
+        this.saving.set(false);
+        this.error.set(getApiErrorMessage(err, 'Failed to check payroll lock status.'));
+      }
+    });
+  }
+
+  rescheduleLoan() {
+    const loanId = this.activeLoanId();
+    if (!loanId || this.lifecycleForm.invalid || this.saving()) {
+      this.lifecycleForm.markAllAsTouched();
+      return;
+    }
+
+    const v = this.lifecycleForm.getRawValue();
+    this.saving.set(true);
+    this.error.set('');
+    this.message.set('');
+    this.loanService.reschedule(loanId, {
+      startYear: Number(v.startYear),
+      startMonth: Number(v.startMonth),
+      reason: String(v.reason ?? '')
+    }).subscribe({
+      next: () => {
+        this.saving.set(false);
+        this.message.set('Loan installments rescheduled.');
+        this.viewInstallments(loanId);
+        this.loadBaseData();
+      },
+      error: (err) => {
+        this.saving.set(false);
+        this.error.set(getApiErrorMessage(err, 'Failed to reschedule installments.'));
+      }
+    });
+  }
+
+  skipNextInstallment() {
+    const loanId = this.activeLoanId();
+    if (!loanId || this.saving()) {
+      return;
+    }
+
+    const v = this.lifecycleForm.getRawValue();
+    this.saving.set(true);
+    this.error.set('');
+    this.message.set('');
+    this.loanService.skipNext(loanId, {
+      reason: String(v.reason ?? '')
+    }).subscribe({
+      next: () => {
+        this.saving.set(false);
+        this.message.set('Next installment skipped and moved to end of schedule.');
+        this.viewInstallments(loanId);
+        this.loadBaseData();
+      },
+      error: (err) => {
+        this.saving.set(false);
+        this.error.set(getApiErrorMessage(err, 'Failed to skip installment.'));
+      }
+    });
+  }
+
+  settleEarlyLoan() {
+    const loanId = this.activeLoanId();
+    if (!loanId || this.saving()) {
+      return;
+    }
+
+    const v = this.lifecycleForm.getRawValue();
+    const amount = v.settleAmount == null ? null : Number(v.settleAmount);
+    if (amount != null && amount <= 0) {
+      this.error.set('Settlement amount must be greater than zero.');
+      return;
+    }
+
+    this.saving.set(true);
+    this.error.set('');
+    this.message.set('');
+    this.loanService.settleEarly(loanId, {
+      amount,
+      reason: String(v.reason ?? '')
+    }).subscribe({
+      next: (result) => {
+        this.saving.set(false);
+        this.message.set(result.remainingBalance <= 0 ? 'Loan settled and closed.' : `Loan settled. Remaining balance: ${result.remainingBalance.toFixed(2)}`);
+        this.viewInstallments(loanId);
+        this.loadBaseData();
+      },
+      error: (err) => {
+        this.saving.set(false);
+        this.error.set(getApiErrorMessage(err, 'Failed to settle loan.'));
+      }
     });
   }
 }

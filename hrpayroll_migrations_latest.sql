@@ -1162,6 +1162,238 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225203000_AddOffboardingWorkflowV2') THEN
+    CREATE TABLE "OffboardingChecklistTemplateSet" (
+        "Id" uuid NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "RoleName" text NOT NULL,
+        "ItemCode" text NOT NULL,
+        "ItemLabel" text NOT NULL,
+        "SortOrder" integer NOT NULL,
+        "IsRequired" boolean NOT NULL,
+        "RequiresApproval" boolean NOT NULL,
+        "RequiresEsign" boolean NOT NULL,
+        "IsActive" boolean NOT NULL,
+        "CreatedAtUtc" timestamp with time zone NOT NULL,
+        "UpdatedAtUtc" timestamp with time zone,
+        CONSTRAINT "PK_OffboardingChecklistTemplateSet" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225203000_AddOffboardingWorkflowV2') THEN
+    CREATE TABLE "OffboardingChecklistApprovalSet" (
+        "Id" uuid NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "ChecklistItemId" uuid NOT NULL,
+        "Status" text NOT NULL,
+        "RequestedByUserId" uuid,
+        "RequestedAtUtc" timestamp with time zone,
+        "ApprovedByUserId" uuid,
+        "ApprovedAtUtc" timestamp with time zone,
+        "Notes" text NOT NULL,
+        "CreatedAtUtc" timestamp with time zone NOT NULL,
+        "UpdatedAtUtc" timestamp with time zone,
+        CONSTRAINT "PK_OffboardingChecklistApprovalSet" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225203000_AddOffboardingWorkflowV2') THEN
+    CREATE TABLE "OffboardingEsignDocumentSet" (
+        "Id" uuid NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "ChecklistItemId" uuid NOT NULL,
+        "DocumentName" text NOT NULL,
+        "DocumentUrl" text NOT NULL,
+        "Status" text NOT NULL,
+        "SignedByUserId" uuid,
+        "SignedAtUtc" timestamp with time zone,
+        "CreatedAtUtc" timestamp with time zone NOT NULL,
+        "UpdatedAtUtc" timestamp with time zone,
+        CONSTRAINT "PK_OffboardingEsignDocumentSet" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225203000_AddOffboardingWorkflowV2') THEN
+    CREATE UNIQUE INDEX "IX_OffboardingChecklistTemplateSet_TenantId_RoleName_ItemCode"
+    ON "OffboardingChecklistTemplateSet" ("TenantId", "RoleName", "ItemCode");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225203000_AddOffboardingWorkflowV2') THEN
+    CREATE INDEX "IX_OffboardingChecklistTemplateSet_TenantId_RoleName_IsActive"
+    ON "OffboardingChecklistTemplateSet" ("TenantId", "RoleName", "IsActive");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225203000_AddOffboardingWorkflowV2') THEN
+    CREATE INDEX "IX_OffboardingChecklistApprovalSet_TenantId_ChecklistItemId_Status"
+    ON "OffboardingChecklistApprovalSet" ("TenantId", "ChecklistItemId", "Status");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225203000_AddOffboardingWorkflowV2') THEN
+    CREATE INDEX "IX_OffboardingEsignDocumentSet_TenantId_ChecklistItemId_Status"
+    ON "OffboardingEsignDocumentSet" ("TenantId", "ChecklistItemId", "Status");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225203000_AddOffboardingWorkflowV2') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20260225203000_AddOffboardingWorkflowV2', '8.0.12');
+    END IF;
+END $EF$;
+
+COMMIT;
+
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225210000_AddOvertimeTimesheetEngine') THEN
+    CREATE TABLE "ShiftRuleSet" (
+        "Id" uuid NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "Name" text NOT NULL,
+        "StandardDailyHours" numeric NOT NULL,
+        "OvertimeMultiplierWeekday" numeric NOT NULL,
+        "OvertimeMultiplierWeekend" numeric NOT NULL,
+        "OvertimeMultiplierHoliday" numeric NOT NULL,
+        "WeekendDaysCsv" text NOT NULL,
+        "IsActive" boolean NOT NULL,
+        "CreatedAtUtc" timestamp with time zone NOT NULL,
+        "UpdatedAtUtc" timestamp with time zone,
+        CONSTRAINT "PK_ShiftRuleSet" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225210000_AddOvertimeTimesheetEngine') THEN
+    CREATE TABLE "TimesheetEntrySet" (
+        "Id" uuid NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "EmployeeId" uuid NOT NULL,
+        "ShiftRuleId" uuid,
+        "WorkDate" date NOT NULL,
+        "HoursWorked" numeric NOT NULL,
+        "ApprovedOvertimeHours" numeric NOT NULL,
+        "IsWeekend" boolean NOT NULL,
+        "IsHoliday" boolean NOT NULL,
+        "Status" text NOT NULL,
+        "ApprovedByUserId" uuid,
+        "ApprovedAtUtc" timestamp with time zone,
+        "Notes" text NOT NULL,
+        "CreatedAtUtc" timestamp with time zone NOT NULL,
+        "UpdatedAtUtc" timestamp with time zone,
+        CONSTRAINT "PK_TimesheetEntrySet" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225210000_AddOvertimeTimesheetEngine') THEN
+    CREATE UNIQUE INDEX "IX_ShiftRuleSet_TenantId_Name"
+    ON "ShiftRuleSet" ("TenantId", "Name");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225210000_AddOvertimeTimesheetEngine') THEN
+    CREATE UNIQUE INDEX "IX_TimesheetEntrySet_TenantId_EmployeeId_WorkDate"
+    ON "TimesheetEntrySet" ("TenantId", "EmployeeId", "WorkDate");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225210000_AddOvertimeTimesheetEngine') THEN
+    CREATE INDEX "IX_TimesheetEntrySet_TenantId_Status_WorkDate"
+    ON "TimesheetEntrySet" ("TenantId", "Status", "WorkDate");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225210000_AddOvertimeTimesheetEngine') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20260225210000_AddOvertimeTimesheetEngine', '8.0.12');
+    END IF;
+END $EF$;
+
+COMMIT;
+
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225213000_AddBenefitsAllowancePolicies') THEN
+    CREATE TABLE "AllowancePolicySet" (
+        "Id" uuid NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "PolicyName" text NOT NULL,
+        "JobTitle" text NOT NULL,
+        "MonthlyAmount" numeric NOT NULL,
+        "EffectiveFrom" date NOT NULL,
+        "EffectiveTo" date,
+        "IsTaxable" boolean NOT NULL,
+        "IsActive" boolean NOT NULL,
+        "CreatedAtUtc" timestamp with time zone NOT NULL,
+        "UpdatedAtUtc" timestamp with time zone,
+        CONSTRAINT "PK_AllowancePolicySet" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225213000_AddBenefitsAllowancePolicies') THEN
+    CREATE UNIQUE INDEX "IX_AllowancePolicySet_TenantId_PolicyName"
+    ON "AllowancePolicySet" ("TenantId", "PolicyName");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225213000_AddBenefitsAllowancePolicies') THEN
+    CREATE INDEX "IX_AllowancePolicySet_TenantId_IsActive_JobTitle"
+    ON "AllowancePolicySet" ("TenantId", "IsActive", "JobTitle");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225213000_AddBenefitsAllowancePolicies') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20260225213000_AddBenefitsAllowancePolicies', '8.0.12');
+    END IF;
+END $EF$;
+
+COMMIT;
+
+START TRANSACTION;
+
+DO $EF$
+BEGIN
     IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260225190000_AddOffboardingChecklist') THEN
     CREATE TABLE "OffboardingChecklistSet" (
         "Id" uuid NOT NULL,

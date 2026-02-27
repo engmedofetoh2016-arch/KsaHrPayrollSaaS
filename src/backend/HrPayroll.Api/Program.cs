@@ -1497,6 +1497,12 @@ api.MapPost("/employees/{employeeId:guid}/final-settlement/estimate", [Authorize
         return Results.NotFound(new { error = "Company profile not found." });
     }
 
+    var finalSettlementBlocker = await OffboardingWorkflowGuards.GetFinalSettlementBlockerAsync(employee.Id, dbContext, cancellationToken);
+    if (!string.IsNullOrWhiteSpace(finalSettlementBlocker))
+    {
+        return Results.BadRequest(new { error = finalSettlementBlocker });
+    }
+
     if (request.TerminationDate < employee.StartDate)
     {
         return Results.BadRequest(new { error = "Termination date cannot be before employee start date." });
@@ -1614,6 +1620,12 @@ api.MapPost("/employees/{employeeId:guid}/final-settlement/export-csv", [Authori
     if (profile is null)
     {
         return Results.NotFound(new { error = "Company profile not found." });
+    }
+
+    var finalSettlementBlocker = await OffboardingWorkflowGuards.GetFinalSettlementBlockerAsync(employee.Id, dbContext, cancellationToken);
+    if (!string.IsNullOrWhiteSpace(finalSettlementBlocker))
+    {
+        return Results.BadRequest(new { error = finalSettlementBlocker });
     }
 
     if (request.TerminationDate < employee.StartDate)
@@ -1735,6 +1747,12 @@ api.MapPost("/employees/{employeeId:guid}/final-settlement/export-pdf", [Authori
     if (profile is null)
     {
         return Results.NotFound(new { error = "Company profile not found." });
+    }
+
+    var finalSettlementBlocker = await OffboardingWorkflowGuards.GetFinalSettlementBlockerAsync(employee.Id, dbContext, cancellationToken);
+    if (!string.IsNullOrWhiteSpace(finalSettlementBlocker))
+    {
+        return Results.BadRequest(new { error = finalSettlementBlocker });
     }
 
     if (request.TerminationDate < employee.StartDate)
@@ -1864,6 +1882,12 @@ api.MapPost("/employees/{employeeId:guid}/final-settlement/exports/pdf", [Author
     if (employee is null)
     {
         return Results.NotFound(new { error = "Employee not found." });
+    }
+
+    var finalSettlementBlocker = await OffboardingWorkflowGuards.GetFinalSettlementBlockerAsync(employee.Id, dbContext, cancellationToken);
+    if (!string.IsNullOrWhiteSpace(finalSettlementBlocker))
+    {
+        return Results.BadRequest(new { error = finalSettlementBlocker });
     }
 
     if (request.TerminationDate < employee.StartDate)
@@ -2250,26 +2274,54 @@ api.MapPost("/offboarding", [Authorize(Roles = RoleNames.Owner + "," + RoleNames
     };
     dbContext.AddEntity(checklist);
 
-    var defaults = new[]
-    {
-        new { Code = "ID_CARD", Label = "Collect company ID card", Sort = 10 },
-        new { Code = "IT_ACCESS", Label = "Revoke system and email access", Sort = 20 },
-        new { Code = "ASSETS", Label = "Return company laptop and assets", Sort = 30 },
-        new { Code = "FINANCE", Label = "Clear outstanding advances/loans", Sort = 40 },
-        new { Code = "FINAL_SETTLEMENT", Label = "Final settlement reviewed and approved", Sort = 50 }
-    };
+    var checklistRoleName = string.IsNullOrWhiteSpace(request.ChecklistRoleName)
+        ? employee.JobTitle.Trim()
+        : request.ChecklistRoleName.Trim();
 
-    foreach (var item in defaults)
+    var templates = await dbContext.OffboardingChecklistTemplates
+        .Where(x => x.IsActive && x.RoleName == checklistRoleName)
+        .OrderBy(x => x.SortOrder)
+        .ThenBy(x => x.ItemCode)
+        .ToListAsync(cancellationToken);
+
+    if (templates.Count > 0)
     {
-        dbContext.AddEntity(new OffboardingChecklistItem
+        foreach (var template in templates)
         {
-            ChecklistId = checklist.Id,
-            ItemCode = item.Code,
-            ItemLabel = item.Label,
-            Status = "Pending",
-            Notes = string.Empty,
-            SortOrder = item.Sort
-        });
+            dbContext.AddEntity(new OffboardingChecklistItem
+            {
+                ChecklistId = checklist.Id,
+                ItemCode = template.ItemCode,
+                ItemLabel = template.ItemLabel,
+                Status = "Pending",
+                Notes = $"TemplateRole:{template.RoleName};Required:{template.IsRequired};Approval:{template.RequiresApproval};Esign:{template.RequiresEsign}",
+                SortOrder = template.SortOrder
+            });
+        }
+    }
+    else
+    {
+        var defaults = new[]
+        {
+            new { Code = "ID_CARD", Label = "Collect company ID card", Sort = 10 },
+            new { Code = "IT_ACCESS", Label = "Revoke system and email access", Sort = 20 },
+            new { Code = "ASSETS", Label = "Return company laptop and assets", Sort = 30 },
+            new { Code = "FINANCE", Label = "Clear outstanding advances/loans", Sort = 40 },
+            new { Code = "FINAL_SETTLEMENT", Label = "Final settlement reviewed and approved", Sort = 50 }
+        };
+
+        foreach (var item in defaults)
+        {
+            dbContext.AddEntity(new OffboardingChecklistItem
+            {
+                ChecklistId = checklist.Id,
+                ItemCode = item.Code,
+                ItemLabel = item.Label,
+                Status = "Pending",
+                Notes = "Required:True",
+                SortOrder = item.Sort
+            });
+        }
     }
 
     await dbContext.SaveChangesAsync(cancellationToken);
@@ -2335,7 +2387,27 @@ api.MapGet("/offboarding/{offboardingId:guid}/checklist", [Authorize(Roles = Rol
         })
         .ToListAsync(cancellationToken);
 
-    var completedCount = items.Count(x => x.Status == "Completed");
+    var itemIds = items.Select(x => x.Id).ToList();
+    var approvals = await dbContext.OffboardingChecklistApprovals
+        .Where(x => itemIds.Contains(x.ChecklistItemId))
+        .GroupBy(x => x.ChecklistItemId)
+        .Select(g => new
+        {
+            ChecklistItemId = g.Key,
+            LastStatus = g.OrderByDescending(x => x.CreatedAtUtc).Select(x => x.Status).FirstOrDefault()
+        })
+        .ToListAsync(cancellationToken);
+
+    var esignCounts = await dbContext.OffboardingEsignDocuments
+        .Where(x => itemIds.Contains(x.ChecklistItemId))
+        .GroupBy(x => x.ChecklistItemId)
+        .Select(g => new { ChecklistItemId = g.Key, Count = g.Count() })
+        .ToListAsync(cancellationToken);
+
+    var approvalByItem = approvals.ToDictionary(x => x.ChecklistItemId, x => x.LastStatus ?? string.Empty);
+    var esignByItem = esignCounts.ToDictionary(x => x.ChecklistItemId, x => x.Count);
+
+    var completedCount = items.Count(x => x.Status == "Completed" || x.Status == "Approved" || x.Status == "Signed");
     return Results.Ok(new
     {
         checklist.Id,
@@ -2347,7 +2419,22 @@ api.MapGet("/offboarding/{offboardingId:guid}/checklist", [Authorize(Roles = Rol
         totalItems = items.Count,
         completedItems = completedCount,
         completionPercent = items.Count == 0 ? 0 : Math.Round(completedCount * 100m / items.Count, 1),
-        items
+        items = items.Select(x => new
+        {
+            x.Id,
+            x.ItemCode,
+            x.ItemLabel,
+            x.Status,
+            x.Notes,
+            x.SortOrder,
+            x.CompletedAtUtc,
+            x.CompletedByUserId,
+            IsRequired = !x.Notes.Contains("Required:False", StringComparison.OrdinalIgnoreCase),
+            RequiresApproval = x.Notes.Contains("Approval:True", StringComparison.OrdinalIgnoreCase),
+            RequiresEsign = x.Notes.Contains("Esign:True", StringComparison.OrdinalIgnoreCase),
+            ApprovalStatus = approvalByItem.TryGetValue(x.Id, out var approvalStatus) ? approvalStatus : null,
+            EsignCount = esignByItem.TryGetValue(x.Id, out var esignCount) ? esignCount : 0
+        })
     });
 });
 
@@ -2420,21 +2507,30 @@ api.MapPost("/offboarding/{offboardingId:guid}/checklist/items/{itemId:guid}/com
         return Results.NotFound(new { error = "Checklist item not found." });
     }
 
-    item.Status = "Completed";
-    item.CompletedAtUtc = dateTimeProvider.UtcNow;
-    item.CompletedByUserId = Guid.TryParse(httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId)
+    var completedByUserId = Guid.TryParse(httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId)
         ? userId
-        : null;
+        : (Guid?)null;
+    var requiresApproval = item.Notes.Contains("Approval:True", StringComparison.OrdinalIgnoreCase);
+    var requiresEsign = item.Notes.Contains("Esign:True", StringComparison.OrdinalIgnoreCase);
+
+    item.Status = requiresApproval
+        ? "PendingApproval"
+        : (requiresEsign ? "PendingEsign" : "Completed");
+    item.CompletedAtUtc = dateTimeProvider.UtcNow;
+    item.CompletedByUserId = completedByUserId;
     item.Notes = string.IsNullOrWhiteSpace(request.Notes) ? item.Notes : request.Notes.Trim();
 
     var totalItems = await dbContext.OffboardingChecklistItems.CountAsync(x => x.ChecklistId == checklist.Id, cancellationToken);
     var completedItems = await dbContext.OffboardingChecklistItems.CountAsync(
-        x => x.ChecklistId == checklist.Id && (x.Id == itemId || x.Status == "Completed"),
+        x => x.ChecklistId == checklist.Id &&
+             (x.Id == itemId
+                ? (item.Status == "Completed" || item.Status == "Approved" || item.Status == "Signed")
+                : (x.Status == "Completed" || x.Status == "Approved" || x.Status == "Signed")),
         cancellationToken);
 
     checklist.Status = completedItems == totalItems ? "Completed" : "InProgress";
     checklist.CompletedAtUtc = completedItems == totalItems ? dateTimeProvider.UtcNow : null;
-    checklist.CompletedByUserId = completedItems == totalItems ? item.CompletedByUserId : null;
+    checklist.CompletedByUserId = completedItems == totalItems ? completedByUserId : null;
 
     await dbContext.SaveChangesAsync(cancellationToken);
     return Results.Ok(new
@@ -2479,6 +2575,557 @@ api.MapPost("/offboarding/{offboardingId:guid}/checklist/items/{itemId:guid}/reo
     await dbContext.SaveChangesAsync(cancellationToken);
     return Results.Ok(new { ItemId = item.Id, ItemStatus = item.Status, ChecklistStatus = checklist.Status });
 });
+
+api.MapGet("/offboarding/checklist-templates", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    string? roleName,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var normalizedRole = string.IsNullOrWhiteSpace(roleName) ? null : roleName.Trim();
+    var query = dbContext.OffboardingChecklistTemplates.Where(x => x.IsActive);
+    if (!string.IsNullOrWhiteSpace(normalizedRole))
+    {
+        query = query.Where(x => x.RoleName == normalizedRole);
+    }
+
+    var rows = await query
+        .OrderBy(x => x.RoleName)
+        .ThenBy(x => x.SortOrder)
+        .Select(x => new
+        {
+            x.Id,
+            x.RoleName,
+            x.ItemCode,
+            x.ItemLabel,
+            x.SortOrder,
+            x.IsRequired,
+            x.RequiresApproval,
+            x.RequiresEsign,
+            x.IsActive
+        })
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(rows);
+});
+
+api.MapPost("/offboarding/checklist-templates", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    CreateOffboardingChecklistTemplateRequest request,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var roleName = request.RoleName.Trim();
+    var itemCode = request.ItemCode.Trim().ToUpperInvariant();
+    var existing = await dbContext.OffboardingChecklistTemplates.FirstOrDefaultAsync(
+        x => x.RoleName == roleName && x.ItemCode == itemCode,
+        cancellationToken);
+
+    if (existing is null)
+    {
+        var template = new OffboardingChecklistTemplate
+        {
+            RoleName = roleName,
+            ItemCode = itemCode,
+            ItemLabel = request.ItemLabel.Trim(),
+            SortOrder = request.SortOrder,
+            IsRequired = request.IsRequired,
+            RequiresApproval = request.RequiresApproval,
+            RequiresEsign = request.RequiresEsign,
+            IsActive = request.IsActive
+        };
+        dbContext.AddEntity(template);
+    }
+    else
+    {
+        existing.ItemLabel = request.ItemLabel.Trim();
+        existing.SortOrder = request.SortOrder;
+        existing.IsRequired = request.IsRequired;
+        existing.RequiresApproval = request.RequiresApproval;
+        existing.RequiresEsign = request.RequiresEsign;
+        existing.IsActive = request.IsActive;
+    }
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { roleName, itemCode });
+})
+    .AddEndpointFilter<ValidationFilter<CreateOffboardingChecklistTemplateRequest>>();
+
+api.MapPost("/offboarding/{offboardingId:guid}/checklist/apply-template", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    Guid offboardingId,
+    ApplyOffboardingChecklistTemplateRequest request,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var checklist = await dbContext.OffboardingChecklists.FirstOrDefaultAsync(x => x.OffboardingId == offboardingId, cancellationToken);
+    if (checklist is null)
+    {
+        return Results.NotFound(new { error = "Checklist not found for offboarding record." });
+    }
+
+    var roleName = request.RoleName.Trim();
+    var templates = await dbContext.OffboardingChecklistTemplates
+        .Where(x => x.IsActive && x.RoleName == roleName)
+        .OrderBy(x => x.SortOrder)
+        .ThenBy(x => x.ItemCode)
+        .ToListAsync(cancellationToken);
+
+    if (templates.Count == 0)
+    {
+        return Results.BadRequest(new { error = "No active checklist templates found for selected role." });
+    }
+
+    if (request.ReplaceExisting)
+    {
+        var existingItems = await dbContext.OffboardingChecklistItems.Where(x => x.ChecklistId == checklist.Id).ToListAsync(cancellationToken);
+        if (existingItems.Count > 0)
+        {
+            dbContext.RemoveEntities(existingItems);
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    var existingCodes = await dbContext.OffboardingChecklistItems
+        .Where(x => x.ChecklistId == checklist.Id)
+        .Select(x => x.ItemCode)
+        .ToListAsync(cancellationToken);
+    var existingSet = existingCodes.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    foreach (var template in templates)
+    {
+        if (existingSet.Contains(template.ItemCode))
+        {
+            continue;
+        }
+
+        dbContext.AddEntity(new OffboardingChecklistItem
+        {
+            ChecklistId = checklist.Id,
+            ItemCode = template.ItemCode,
+            ItemLabel = template.ItemLabel,
+            Status = "Pending",
+            Notes = $"TemplateRole:{template.RoleName};Required:{template.IsRequired};Approval:{template.RequiresApproval};Esign:{template.RequiresEsign}",
+            SortOrder = template.SortOrder
+        });
+    }
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { checklist.Id, roleName, appliedCount = templates.Count });
+})
+    .AddEndpointFilter<ValidationFilter<ApplyOffboardingChecklistTemplateRequest>>();
+
+api.MapPost("/offboarding/{offboardingId:guid}/checklist/items/{itemId:guid}/request-approval", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    Guid offboardingId,
+    Guid itemId,
+    OffboardingChecklistApprovalRequest request,
+    IApplicationDbContext dbContext,
+    HttpContext httpContext,
+    IDateTimeProvider dateTimeProvider,
+    CancellationToken cancellationToken) =>
+{
+    var checklist = await dbContext.OffboardingChecklists.FirstOrDefaultAsync(x => x.OffboardingId == offboardingId, cancellationToken);
+    if (checklist is null)
+    {
+        return Results.NotFound(new { error = "Checklist not found for offboarding record." });
+    }
+
+    var item = await dbContext.OffboardingChecklistItems.FirstOrDefaultAsync(x => x.Id == itemId && x.ChecklistId == checklist.Id, cancellationToken);
+    if (item is null)
+    {
+        return Results.NotFound(new { error = "Checklist item not found." });
+    }
+
+    var requestedBy = Guid.TryParse(httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier), out var parsedUserId)
+        ? parsedUserId
+        : (Guid?)null;
+
+    var approval = new OffboardingChecklistApproval
+    {
+        ChecklistItemId = item.Id,
+        Status = "Pending",
+        RequestedByUserId = requestedBy,
+        RequestedAtUtc = dateTimeProvider.UtcNow,
+        Notes = (request.Notes ?? string.Empty).Trim()
+    };
+    dbContext.AddEntity(approval);
+    item.Status = "PendingApproval";
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new
+    {
+        ItemId = item.Id,
+        ItemStatus = item.Status,
+        ApprovalId = approval.Id,
+        ApprovalStatus = approval.Status
+    });
+})
+    .AddEndpointFilter<ValidationFilter<OffboardingChecklistApprovalRequest>>();
+
+api.MapPost("/offboarding/{offboardingId:guid}/checklist/items/{itemId:guid}/approve", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    Guid offboardingId,
+    Guid itemId,
+    OffboardingChecklistApprovalRequest request,
+    IApplicationDbContext dbContext,
+    HttpContext httpContext,
+    IDateTimeProvider dateTimeProvider,
+    CancellationToken cancellationToken) =>
+{
+    var checklist = await dbContext.OffboardingChecklists.FirstOrDefaultAsync(x => x.OffboardingId == offboardingId, cancellationToken);
+    if (checklist is null)
+    {
+        return Results.NotFound(new { error = "Checklist not found for offboarding record." });
+    }
+
+    var item = await dbContext.OffboardingChecklistItems.FirstOrDefaultAsync(x => x.Id == itemId && x.ChecklistId == checklist.Id, cancellationToken);
+    if (item is null)
+    {
+        return Results.NotFound(new { error = "Checklist item not found." });
+    }
+
+    var approval = await dbContext.OffboardingChecklistApprovals
+        .Where(x => x.ChecklistItemId == item.Id && x.Status == "Pending")
+        .OrderByDescending(x => x.CreatedAtUtc)
+        .FirstOrDefaultAsync(cancellationToken);
+
+    var approvedBy = Guid.TryParse(httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier), out var parsedUserId)
+        ? parsedUserId
+        : (Guid?)null;
+
+    if (approval is not null)
+    {
+        approval.Status = "Approved";
+        approval.ApprovedByUserId = approvedBy;
+        approval.ApprovedAtUtc = dateTimeProvider.UtcNow;
+        approval.Notes = string.IsNullOrWhiteSpace(request.Notes) ? approval.Notes : request.Notes.Trim();
+    }
+
+    item.Status = "Approved";
+    item.CompletedAtUtc = dateTimeProvider.UtcNow;
+    item.CompletedByUserId = approvedBy;
+    if (!string.IsNullOrWhiteSpace(request.Notes))
+    {
+        item.Notes = string.IsNullOrWhiteSpace(item.Notes) ? request.Notes.Trim() : $"{item.Notes}\n{request.Notes.Trim()}";
+    }
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { item.Id, item.Status });
+})
+    .AddEndpointFilter<ValidationFilter<OffboardingChecklistApprovalRequest>>();
+
+api.MapPost("/offboarding/{offboardingId:guid}/checklist/items/{itemId:guid}/esign", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    Guid offboardingId,
+    Guid itemId,
+    OffboardingChecklistEsignRequest request,
+    IApplicationDbContext dbContext,
+    HttpContext httpContext,
+    IDateTimeProvider dateTimeProvider,
+    CancellationToken cancellationToken) =>
+{
+    var checklist = await dbContext.OffboardingChecklists.FirstOrDefaultAsync(x => x.OffboardingId == offboardingId, cancellationToken);
+    if (checklist is null)
+    {
+        return Results.NotFound(new { error = "Checklist not found for offboarding record." });
+    }
+
+    var item = await dbContext.OffboardingChecklistItems.FirstOrDefaultAsync(x => x.Id == itemId && x.ChecklistId == checklist.Id, cancellationToken);
+    if (item is null)
+    {
+        return Results.NotFound(new { error = "Checklist item not found." });
+    }
+
+    var signedBy = Guid.TryParse(httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier), out var parsedUserId)
+        ? parsedUserId
+        : (Guid?)null;
+
+    var esign = new OffboardingEsignDocument
+    {
+        ChecklistItemId = item.Id,
+        DocumentName = request.DocumentName.Trim(),
+        DocumentUrl = request.DocumentUrl.Trim(),
+        Status = "Signed",
+        SignedByUserId = signedBy,
+        SignedAtUtc = dateTimeProvider.UtcNow
+    };
+    dbContext.AddEntity(esign);
+
+    item.Status = "Signed";
+    item.CompletedAtUtc = esign.SignedAtUtc;
+    item.CompletedByUserId = signedBy;
+    item.Notes = string.IsNullOrWhiteSpace(item.Notes) ? $"Esign:{esign.DocumentName}" : $"{item.Notes}\nEsign:{esign.DocumentName}";
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new
+    {
+        ItemId = item.Id,
+        ItemStatus = item.Status,
+        EsignId = esign.Id,
+        esign.DocumentName
+    });
+})
+    .AddEndpointFilter<ValidationFilter<OffboardingChecklistEsignRequest>>();
+
+api.MapGet("/payroll/shift-rules", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var rows = await dbContext.ShiftRules
+        .OrderBy(x => x.Name)
+        .Select(x => new
+        {
+            x.Id,
+            x.Name,
+            x.StandardDailyHours,
+            x.OvertimeMultiplierWeekday,
+            x.OvertimeMultiplierWeekend,
+            x.OvertimeMultiplierHoliday,
+            x.WeekendDaysCsv,
+            x.IsActive
+        })
+        .ToListAsync(cancellationToken);
+    return Results.Ok(rows);
+});
+
+api.MapPost("/payroll/shift-rules", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    CreateShiftRuleRequest request,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var existing = await dbContext.ShiftRules.FirstOrDefaultAsync(x => x.Name == request.Name.Trim(), cancellationToken);
+    if (existing is null)
+    {
+        dbContext.AddEntity(new ShiftRule
+        {
+            Name = request.Name.Trim(),
+            StandardDailyHours = request.StandardDailyHours,
+            OvertimeMultiplierWeekday = request.OvertimeMultiplierWeekday,
+            OvertimeMultiplierWeekend = request.OvertimeMultiplierWeekend,
+            OvertimeMultiplierHoliday = request.OvertimeMultiplierHoliday,
+            WeekendDaysCsv = request.WeekendDaysCsv.Trim(),
+            IsActive = request.IsActive
+        });
+    }
+    else
+    {
+        existing.StandardDailyHours = request.StandardDailyHours;
+        existing.OvertimeMultiplierWeekday = request.OvertimeMultiplierWeekday;
+        existing.OvertimeMultiplierWeekend = request.OvertimeMultiplierWeekend;
+        existing.OvertimeMultiplierHoliday = request.OvertimeMultiplierHoliday;
+        existing.WeekendDaysCsv = request.WeekendDaysCsv.Trim();
+        existing.IsActive = request.IsActive;
+    }
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Ok();
+})
+    .AddEndpointFilter<ValidationFilter<CreateShiftRuleRequest>>();
+
+api.MapGet("/timesheets", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    int year,
+    int month,
+    Guid? employeeId,
+    string? status,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var query = from sheet in dbContext.TimesheetEntries
+                join employee in dbContext.Employees on sheet.EmployeeId equals employee.Id
+                where sheet.WorkDate.Year == year && sheet.WorkDate.Month == month
+                orderby sheet.WorkDate, employee.FirstName, employee.LastName
+                select new
+                {
+                    sheet.Id,
+                    sheet.EmployeeId,
+                    EmployeeName = employee.FirstName + " " + employee.LastName,
+                    sheet.WorkDate,
+                    sheet.HoursWorked,
+                    sheet.ApprovedOvertimeHours,
+                    sheet.IsWeekend,
+                    sheet.IsHoliday,
+                    sheet.Status,
+                    sheet.ShiftRuleId,
+                    sheet.ApprovedAtUtc,
+                    sheet.Notes
+                };
+
+    if (employeeId.HasValue && employeeId.Value != Guid.Empty)
+    {
+        query = query.Where(x => x.EmployeeId == employeeId.Value);
+    }
+
+    if (!string.IsNullOrWhiteSpace(status))
+    {
+        query = query.Where(x => x.Status == status.Trim());
+    }
+
+    var rows = await query.ToListAsync(cancellationToken);
+    return Results.Ok(rows);
+});
+
+api.MapPost("/timesheets", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    UpsertTimesheetEntryRequest request,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var employee = await dbContext.Employees.FirstOrDefaultAsync(x => x.Id == request.EmployeeId, cancellationToken);
+    if (employee is null)
+    {
+        return Results.BadRequest(new { error = "Employee not found in this tenant." });
+    }
+
+    ShiftRule? rule = null;
+    if (request.ShiftRuleId.HasValue && request.ShiftRuleId.Value != Guid.Empty)
+    {
+        rule = await dbContext.ShiftRules.FirstOrDefaultAsync(x => x.Id == request.ShiftRuleId.Value && x.IsActive, cancellationToken);
+        if (rule is null)
+        {
+            return Results.BadRequest(new { error = "Shift rule not found or inactive." });
+        }
+    }
+
+    var existing = await dbContext.TimesheetEntries.FirstOrDefaultAsync(
+        x => x.EmployeeId == request.EmployeeId && x.WorkDate == request.WorkDate,
+        cancellationToken);
+
+    var weekendSet = (rule?.WeekendDaysCsv ?? "5,6")
+        .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+        .Select(x => int.TryParse(x, out var day) ? day : -1)
+        .Where(x => x >= 0 && x <= 6)
+        .ToHashSet();
+    var dayOfWeekNumber = (int)request.WorkDate.DayOfWeek;
+    var isWeekend = weekendSet.Contains(dayOfWeekNumber);
+    var standardDailyHours = rule?.StandardDailyHours ?? 8m;
+    var approvedOvertimeHours = Math.Max(0m, Math.Round(request.HoursWorked - standardDailyHours, 2));
+
+    if (existing is null)
+    {
+        dbContext.AddEntity(new TimesheetEntry
+        {
+            EmployeeId = request.EmployeeId,
+            ShiftRuleId = request.ShiftRuleId,
+            WorkDate = request.WorkDate,
+            HoursWorked = request.HoursWorked,
+            ApprovedOvertimeHours = approvedOvertimeHours,
+            IsWeekend = isWeekend,
+            IsHoliday = request.IsHoliday,
+            Status = "Pending",
+            Notes = (request.Notes ?? string.Empty).Trim()
+        });
+    }
+    else
+    {
+        existing.ShiftRuleId = request.ShiftRuleId;
+        existing.HoursWorked = request.HoursWorked;
+        existing.ApprovedOvertimeHours = approvedOvertimeHours;
+        existing.IsWeekend = isWeekend;
+        existing.IsHoliday = request.IsHoliday;
+        existing.Status = "Pending";
+        existing.ApprovedAtUtc = null;
+        existing.ApprovedByUserId = null;
+        existing.Notes = (request.Notes ?? string.Empty).Trim();
+    }
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Ok();
+})
+    .AddEndpointFilter<ValidationFilter<UpsertTimesheetEntryRequest>>();
+
+api.MapPost("/timesheets/{entryId:guid}/approve", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    Guid entryId,
+    ApproveTimesheetEntryRequest request,
+    IApplicationDbContext dbContext,
+    HttpContext httpContext,
+    IDateTimeProvider dateTimeProvider,
+    CancellationToken cancellationToken) =>
+{
+    var entry = await dbContext.TimesheetEntries.FirstOrDefaultAsync(x => x.Id == entryId, cancellationToken);
+    if (entry is null)
+    {
+        return Results.NotFound(new { error = "Timesheet entry not found." });
+    }
+
+    entry.Status = request.Approved ? "Approved" : "Rejected";
+    entry.ApprovedAtUtc = dateTimeProvider.UtcNow;
+    entry.ApprovedByUserId = Guid.TryParse(httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier), out var parsedUserId)
+        ? parsedUserId
+        : null;
+
+    if (request.ApprovedOvertimeHours.HasValue)
+    {
+        entry.ApprovedOvertimeHours = Math.Max(0m, Math.Round(request.ApprovedOvertimeHours.Value, 2));
+    }
+
+    if (!string.IsNullOrWhiteSpace(request.Notes))
+    {
+        entry.Notes = string.IsNullOrWhiteSpace(entry.Notes) ? request.Notes.Trim() : $"{entry.Notes}\n{request.Notes.Trim()}";
+    }
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { entry.Id, entry.Status, entry.ApprovedOvertimeHours });
+})
+    .AddEndpointFilter<ValidationFilter<ApproveTimesheetEntryRequest>>();
+
+api.MapGet("/payroll/allowance-policies", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    bool? activeOnly,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var query = dbContext.AllowancePolicies.AsQueryable();
+    if (activeOnly.GetValueOrDefault())
+    {
+        query = query.Where(x => x.IsActive);
+    }
+
+    var rows = await query
+        .OrderBy(x => x.PolicyName)
+        .Select(x => new
+        {
+            x.Id,
+            x.PolicyName,
+            x.JobTitle,
+            x.MonthlyAmount,
+            x.EffectiveFrom,
+            x.EffectiveTo,
+            x.IsTaxable,
+            x.IsActive
+        })
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(rows);
+});
+
+api.MapPost("/payroll/allowance-policies", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    UpsertAllowancePolicyRequest request,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var policyName = request.PolicyName.Trim();
+    var existing = await dbContext.AllowancePolicies.FirstOrDefaultAsync(x => x.PolicyName == policyName, cancellationToken);
+
+    if (existing is null)
+    {
+        dbContext.AddEntity(new AllowancePolicy
+        {
+            PolicyName = policyName,
+            JobTitle = request.JobTitle.Trim(),
+            MonthlyAmount = Math.Round(request.MonthlyAmount, 2),
+            EffectiveFrom = request.EffectiveFrom,
+            EffectiveTo = request.EffectiveTo,
+            IsTaxable = request.IsTaxable,
+            IsActive = request.IsActive
+        });
+    }
+    else
+    {
+        existing.JobTitle = request.JobTitle.Trim();
+        existing.MonthlyAmount = Math.Round(request.MonthlyAmount, 2);
+        existing.EffectiveFrom = request.EffectiveFrom;
+        existing.EffectiveTo = request.EffectiveTo;
+        existing.IsTaxable = request.IsTaxable;
+        existing.IsActive = request.IsActive;
+    }
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { policyName });
+})
+    .AddEndpointFilter<ValidationFilter<UpsertAllowancePolicyRequest>>();
 
 api.MapGet("/attendance-inputs", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] (
     int year,
@@ -4190,6 +4837,382 @@ api.MapPost("/payroll/loans/{loanId:guid}/cancel", [Authorize(Roles = RoleNames.
     return Results.Ok(new { loan.Id, loan.Status });
 });
 
+api.MapGet("/payroll/loans/{loanId:guid}/lifecycle-check", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    Guid loanId,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var loan = await dbContext.EmployeeLoans.FirstOrDefaultAsync(x => x.Id == loanId, cancellationToken);
+    if (loan is null)
+    {
+        return Results.NotFound(new { error = "Loan not found." });
+    }
+
+    var pendingInstallments = await dbContext.EmployeeLoanInstallments
+        .Where(x => x.EmployeeLoanId == loan.Id && x.Status == "Pending")
+        .Select(x => new { x.Id, x.Year, x.Month })
+        .ToListAsync(cancellationToken);
+
+    if (pendingInstallments.Count == 0)
+    {
+        return Results.Ok(new
+        {
+            CanReschedule = false,
+            CanSkipNext = false,
+            BlockedPeriods = Array.Empty<string>(),
+            PendingInstallments = 0,
+            NextPendingInstallmentId = (Guid?)null
+        });
+    }
+
+    var years = pendingInstallments.Select(x => x.Year).Distinct().ToList();
+    var months = pendingInstallments.Select(x => x.Month).Distinct().ToList();
+    var pendingPeriodKeys = pendingInstallments
+        .Select(x => $"{x.Year:D4}-{x.Month:D2}")
+        .ToHashSet(StringComparer.Ordinal);
+
+    var lockedPeriods = await (from period in dbContext.PayrollPeriods
+                               join run in dbContext.PayrollRuns on period.Id equals run.PayrollPeriodId
+                               where years.Contains(period.Year) &&
+                                     months.Contains(period.Month) &&
+                                     run.Status == PayrollRunStatus.Locked
+                               select new { period.Year, period.Month })
+        .Distinct()
+        .ToListAsync(cancellationToken);
+
+    var blockedPeriodKeys = lockedPeriods
+        .Select(x => $"{x.Year:D4}-{x.Month:D2}")
+        .Where(pendingPeriodKeys.Contains)
+        .Distinct()
+        .OrderBy(x => x)
+        .ToList();
+
+    var nextPendingInstallmentId = pendingInstallments
+        .OrderBy(x => x.Year)
+        .ThenBy(x => x.Month)
+        .Select(x => x.Id)
+        .FirstOrDefault();
+
+    return Results.Ok(new
+    {
+        CanReschedule = blockedPeriodKeys.Count == 0,
+        CanSkipNext = blockedPeriodKeys.Count == 0,
+        BlockedPeriods = blockedPeriodKeys,
+        PendingInstallments = pendingInstallments.Count,
+        NextPendingInstallmentId = nextPendingInstallmentId
+    });
+});
+
+api.MapPost("/payroll/loans/{loanId:guid}/reschedule", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    Guid loanId,
+    RescheduleEmployeeLoanRequest request,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var loan = await dbContext.EmployeeLoans.FirstOrDefaultAsync(x => x.Id == loanId, cancellationToken);
+    if (loan is null)
+    {
+        return Results.NotFound(new { error = "Loan not found." });
+    }
+
+    if (loan.Status is "Closed" or "Cancelled")
+    {
+        return Results.BadRequest(new { error = $"Loan cannot be rescheduled when status is {loan.Status}." });
+    }
+
+    var pendingInstallments = await dbContext.EmployeeLoanInstallments
+        .Where(x => x.EmployeeLoanId == loan.Id && x.Status == "Pending")
+        .OrderBy(x => x.Year)
+        .ThenBy(x => x.Month)
+        .ToListAsync(cancellationToken);
+
+    if (pendingInstallments.Count == 0)
+    {
+        return Results.BadRequest(new { error = "No pending installments available to reschedule." });
+    }
+
+    var years = pendingInstallments.Select(x => x.Year).Distinct().ToList();
+    var months = pendingInstallments.Select(x => x.Month).Distinct().ToList();
+    var pendingPeriodKeys = pendingInstallments
+        .Select(x => $"{x.Year:D4}-{x.Month:D2}")
+        .ToHashSet(StringComparer.Ordinal);
+
+    var blockedPeriods = await (from period in dbContext.PayrollPeriods
+                                join run in dbContext.PayrollRuns on period.Id equals run.PayrollPeriodId
+                                where years.Contains(period.Year) &&
+                                      months.Contains(period.Month) &&
+                                      run.Status == PayrollRunStatus.Locked
+                                select new { period.Year, period.Month })
+        .Distinct()
+        .ToListAsync(cancellationToken);
+
+    var blockedKeys = blockedPeriods
+        .Select(x => $"{x.Year:D4}-{x.Month:D2}")
+        .Where(pendingPeriodKeys.Contains)
+        .Distinct()
+        .ToList();
+
+    if (blockedKeys.Count > 0)
+    {
+        return Results.BadRequest(new { error = $"Cannot reschedule pending installments in locked payroll periods: {string.Join(", ", blockedKeys)}." });
+    }
+
+    var plannedPeriods = new List<(int Year, int Month)>(pendingInstallments.Count);
+    var scheduleYear = request.StartYear;
+    var scheduleMonth = request.StartMonth;
+    for (var i = 0; i < pendingInstallments.Count; i++)
+    {
+        plannedPeriods.Add((scheduleYear, scheduleMonth));
+        scheduleMonth++;
+        if (scheduleMonth > 12)
+        {
+            scheduleMonth = 1;
+            scheduleYear++;
+        }
+    }
+
+    var nonPendingPeriodKeys = await dbContext.EmployeeLoanInstallments
+        .Where(x => x.EmployeeLoanId == loan.Id && x.Status != "Pending")
+        .Select(x => $"{x.Year:D4}-{x.Month:D2}")
+        .ToListAsync(cancellationToken);
+
+    var nonPendingSet = nonPendingPeriodKeys.ToHashSet(StringComparer.Ordinal);
+    var collidingPlannedKeys = plannedPeriods
+        .Select(x => $"{x.Year:D4}-{x.Month:D2}")
+        .Where(nonPendingSet.Contains)
+        .Distinct()
+        .ToList();
+
+    if (collidingPlannedKeys.Count > 0)
+    {
+        return Results.BadRequest(new { error = $"Rescheduled timeline overlaps existing installments in periods: {string.Join(", ", collidingPlannedKeys)}." });
+    }
+
+    for (var i = 0; i < pendingInstallments.Count; i++)
+    {
+        pendingInstallments[i].Year = plannedPeriods[i].Year;
+        pendingInstallments[i].Month = plannedPeriods[i].Month;
+    }
+
+    if (!string.IsNullOrWhiteSpace(request.Reason))
+    {
+        loan.Notes = string.IsNullOrWhiteSpace(loan.Notes)
+            ? $"Reschedule: {request.Reason.Trim()}"
+            : $"{loan.Notes}\nReschedule: {request.Reason.Trim()}";
+    }
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { loan.Id, loan.Status });
+})
+    .AddEndpointFilter<ValidationFilter<RescheduleEmployeeLoanRequest>>();
+
+api.MapPost("/payroll/loans/{loanId:guid}/skip-next", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    Guid loanId,
+    SkipEmployeeLoanInstallmentRequest request,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var loan = await dbContext.EmployeeLoans.FirstOrDefaultAsync(x => x.Id == loanId, cancellationToken);
+    if (loan is null)
+    {
+        return Results.NotFound(new { error = "Loan not found." });
+    }
+
+    if (loan.Status is "Closed" or "Cancelled")
+    {
+        return Results.BadRequest(new { error = $"Loan cannot be modified when status is {loan.Status}." });
+    }
+
+    var nextPendingInstallment = await dbContext.EmployeeLoanInstallments
+        .Where(x => x.EmployeeLoanId == loan.Id && x.Status == "Pending")
+        .OrderBy(x => x.Year)
+        .ThenBy(x => x.Month)
+        .FirstOrDefaultAsync(cancellationToken);
+
+    if (nextPendingInstallment is null)
+    {
+        return Results.BadRequest(new { error = "No pending installments available to skip." });
+    }
+
+    var lockedPeriod = await (from period in dbContext.PayrollPeriods
+                              join run in dbContext.PayrollRuns on period.Id equals run.PayrollPeriodId
+                              where period.Year == nextPendingInstallment.Year &&
+                                    period.Month == nextPendingInstallment.Month &&
+                                    run.Status == PayrollRunStatus.Locked
+                              select period.Id)
+        .AnyAsync(cancellationToken);
+
+    if (lockedPeriod)
+    {
+        return Results.BadRequest(new { error = $"Cannot skip installment for locked payroll period {nextPendingInstallment.Year:D4}-{nextPendingInstallment.Month:D2}." });
+    }
+
+    nextPendingInstallment.Status = "Skipped";
+
+    var maxPeriod = await dbContext.EmployeeLoanInstallments
+        .Where(x => x.EmployeeLoanId == loan.Id)
+        .OrderByDescending(x => x.Year)
+        .ThenByDescending(x => x.Month)
+        .Select(x => new { x.Year, x.Month })
+        .FirstAsync(cancellationToken);
+
+    var nextYear = maxPeriod.Year;
+    var nextMonth = maxPeriod.Month + 1;
+    if (nextMonth > 12)
+    {
+        nextMonth = 1;
+        nextYear++;
+    }
+
+    dbContext.AddEntity(new EmployeeLoanInstallment
+    {
+        EmployeeLoanId = loan.Id,
+        EmployeeId = loan.EmployeeId,
+        Year = nextYear,
+        Month = nextMonth,
+        Amount = nextPendingInstallment.Amount,
+        Status = "Pending"
+    });
+
+    loan.TotalInstallments += 1;
+    if (!string.IsNullOrWhiteSpace(request.Reason))
+    {
+        loan.Notes = string.IsNullOrWhiteSpace(loan.Notes)
+            ? $"Skip next: {request.Reason.Trim()}"
+            : $"{loan.Notes}\nSkip next: {request.Reason.Trim()}";
+    }
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { loan.Id, loan.Status });
+})
+    .AddEndpointFilter<ValidationFilter<SkipEmployeeLoanInstallmentRequest>>();
+
+api.MapPost("/payroll/loans/{loanId:guid}/settle-early", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
+    Guid loanId,
+    SettleEmployeeLoanRequest request,
+    IApplicationDbContext dbContext,
+    IDateTimeProvider dateTimeProvider,
+    CancellationToken cancellationToken) =>
+{
+    var loan = await dbContext.EmployeeLoans.FirstOrDefaultAsync(x => x.Id == loanId, cancellationToken);
+    if (loan is null)
+    {
+        return Results.NotFound(new { error = "Loan not found." });
+    }
+
+    if (loan.Status is "Closed" or "Cancelled")
+    {
+        return Results.BadRequest(new { error = $"Loan cannot be settled when status is {loan.Status}." });
+    }
+
+    if (loan.RemainingBalance <= 0m)
+    {
+        loan.Status = "Closed";
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return Results.Ok(new { loan.Id, loan.Status, loan.RemainingBalance });
+    }
+
+    var requestedAmount = request.Amount ?? loan.RemainingBalance;
+    var settleAmount = Math.Round(Math.Min(requestedAmount, loan.RemainingBalance), 2);
+    if (settleAmount <= 0m)
+    {
+        return Results.BadRequest(new { error = "Settlement amount must be greater than zero." });
+    }
+
+    var pendingInstallments = await dbContext.EmployeeLoanInstallments
+        .Where(x => x.EmployeeLoanId == loan.Id && x.Status == "Pending")
+        .ToListAsync(cancellationToken);
+
+    if (pendingInstallments.Count > 0)
+    {
+        var years = pendingInstallments.Select(x => x.Year).Distinct().ToList();
+        var months = pendingInstallments.Select(x => x.Month).Distinct().ToList();
+        var pendingPeriodKeys = pendingInstallments
+            .Select(x => $"{x.Year:D4}-{x.Month:D2}")
+            .ToHashSet(StringComparer.Ordinal);
+
+        var blockedPeriods = await (from period in dbContext.PayrollPeriods
+                                    join run in dbContext.PayrollRuns on period.Id equals run.PayrollPeriodId
+                                    where years.Contains(period.Year) &&
+                                          months.Contains(period.Month) &&
+                                          run.Status == PayrollRunStatus.Locked
+                                    select new { period.Year, period.Month })
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var blockedKeys = blockedPeriods
+            .Select(x => $"{x.Year:D4}-{x.Month:D2}")
+            .Where(pendingPeriodKeys.Contains)
+            .Distinct()
+            .ToList();
+
+        if (blockedKeys.Count > 0)
+        {
+            return Results.BadRequest(new { error = $"Cannot settle early while pending installments exist in locked periods: {string.Join(", ", blockedKeys)}." });
+        }
+    }
+
+    var existingPeriodKeys = await dbContext.EmployeeLoanInstallments
+        .Where(x => x.EmployeeLoanId == loan.Id)
+        .Select(x => $"{x.Year:D4}-{x.Month:D2}")
+        .ToListAsync(cancellationToken);
+    var existingPeriodSet = existingPeriodKeys.ToHashSet(StringComparer.Ordinal);
+
+    var now = dateTimeProvider.UtcNow;
+    var settlementYear = now.Year;
+    var settlementMonth = now.Month;
+    while (existingPeriodSet.Contains($"{settlementYear:D4}-{settlementMonth:D2}"))
+    {
+        settlementMonth++;
+        if (settlementMonth > 12)
+        {
+            settlementMonth = 1;
+            settlementYear++;
+        }
+    }
+
+    dbContext.AddEntity(new EmployeeLoanInstallment
+    {
+        EmployeeLoanId = loan.Id,
+        EmployeeId = loan.EmployeeId,
+        Year = settlementYear,
+        Month = settlementMonth,
+        Amount = settleAmount,
+        Status = "SettledEarly",
+        DeductedAtUtc = now
+    });
+
+    loan.RemainingBalance = Math.Max(0m, Math.Round(loan.RemainingBalance - settleAmount, 2));
+    loan.PaidInstallments = await dbContext.EmployeeLoanInstallments
+        .Where(x => x.EmployeeLoanId == loan.Id && (x.Status == "Deducted" || x.Status == "SettledEarly"))
+        .CountAsync(cancellationToken) + 1;
+
+    if (loan.RemainingBalance <= 0m)
+    {
+        foreach (var installment in pendingInstallments)
+        {
+            installment.Status = "Cancelled";
+        }
+
+        loan.Status = "Closed";
+    }
+    else if (loan.Status == "Draft")
+    {
+        loan.Status = "Active";
+    }
+
+    if (!string.IsNullOrWhiteSpace(request.Reason))
+    {
+        loan.Notes = string.IsNullOrWhiteSpace(loan.Notes)
+            ? $"Early settlement: {request.Reason.Trim()}"
+            : $"{loan.Notes}\nEarly settlement: {request.Reason.Trim()}";
+    }
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { loan.Id, loan.Status, loan.RemainingBalance });
+})
+    .AddEndpointFilter<ValidationFilter<SettleEmployeeLoanRequest>>();
+
 api.MapGet("/payroll/loans/{loanId:guid}/installments", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
     Guid loanId,
     IApplicationDbContext dbContext,
@@ -4264,6 +5287,17 @@ api.MapPost("/payroll/runs/calculate", [Authorize(Roles = RoleNames.Owner + "," 
     var employees = await dbContext.Employees.OrderBy(x => x.FirstName).ThenBy(x => x.LastName).ToListAsync(cancellationToken);
     var attendance = await dbContext.AttendanceInputs.Where(x => x.Year == period.Year && x.Month == period.Month).ToListAsync(cancellationToken);
     var adjustments = await dbContext.PayrollAdjustments.Where(x => x.Year == period.Year && x.Month == period.Month).ToListAsync(cancellationToken);
+    var shiftRules = await dbContext.ShiftRules.Where(x => x.IsActive).ToListAsync(cancellationToken);
+    var shiftRuleById = shiftRules.ToDictionary(x => x.Id, x => x);
+    var timesheets = await dbContext.TimesheetEntries
+        .Where(x => x.WorkDate.Year == period.Year && x.WorkDate.Month == period.Month && x.Status == "Approved")
+        .ToListAsync(cancellationToken);
+    var allowancePolicies = await dbContext.AllowancePolicies
+        .Where(x =>
+            x.IsActive &&
+            x.EffectiveFrom <= period.PeriodEndDate &&
+            (x.EffectiveTo == null || x.EffectiveTo >= period.PeriodStartDate))
+        .ToListAsync(cancellationToken);
     var activeLoanIds = await dbContext.EmployeeLoans
         .Where(x => x.Status == "Active")
         .Select(x => x.Id)
@@ -4287,11 +5321,20 @@ api.MapPost("/payroll/runs/calculate", [Authorize(Roles = RoleNames.Owner + "," 
     foreach (var employee in employees)
     {
         var employeeAttendance = attendance.FirstOrDefault(x => x.EmployeeId == employee.Id);
-        var overtimeHours = employeeAttendance?.OvertimeHours ?? 0m;
+        var approvedTimesheets = timesheets.Where(x => x.EmployeeId == employee.Id).ToList();
+        var overtimeHours = approvedTimesheets.Count > 0
+            ? approvedTimesheets.Sum(x => x.ApprovedOvertimeHours)
+            : (employeeAttendance?.OvertimeHours ?? 0m);
+
+        var policyAllowance = allowancePolicies
+            .Where(x =>
+                string.IsNullOrWhiteSpace(x.JobTitle) ||
+                string.Equals(x.JobTitle.Trim(), employee.JobTitle.Trim(), StringComparison.OrdinalIgnoreCase))
+            .Sum(x => x.MonthlyAmount);
 
         var allowance = adjustments
             .Where(x => x.EmployeeId == employee.Id && x.Type == PayrollAdjustmentType.Allowance)
-            .Sum(x => x.Amount);
+            .Sum(x => x.Amount) + policyAllowance;
 
         var manualDeduction = adjustments
             .Where(x => x.EmployeeId == employee.Id && x.Type == PayrollAdjustmentType.Deduction)
@@ -4329,8 +5372,32 @@ api.MapPost("/payroll/runs/calculate", [Authorize(Roles = RoleNames.Owner + "," 
         var gosiEmployerContribution = Math.Round(gosiWageBase * gosiEmployerRate, 2);
         var totalDeductions = Math.Round(manualDeduction + loanDeduction + unpaidLeaveDeduction + gosiEmployeeContribution, 2);
 
-        var overtimeRate = (employee.BaseSalary / 30m / 8m) * 1.5m;
-        var overtimeAmount = Math.Round(overtimeHours * overtimeRate, 2);
+        var overtimeAmount = 0m;
+        if (approvedTimesheets.Count > 0)
+        {
+            var hourlyRate = employee.BaseSalary / 30m / 8m;
+            overtimeAmount = Math.Round(approvedTimesheets.Sum(x =>
+            {
+                ShiftRule? shiftRule = null;
+                if (x.ShiftRuleId.HasValue)
+                {
+                    shiftRuleById.TryGetValue(x.ShiftRuleId.Value, out shiftRule);
+                }
+
+                var multiplier = x.IsHoliday
+                    ? (shiftRule?.OvertimeMultiplierHoliday ?? 2.5m)
+                    : x.IsWeekend
+                        ? (shiftRule?.OvertimeMultiplierWeekend ?? 2m)
+                        : (shiftRule?.OvertimeMultiplierWeekday ?? 1.5m);
+
+                return x.ApprovedOvertimeHours * hourlyRate * multiplier;
+            }), 2);
+        }
+        else
+        {
+            var overtimeRate = (employee.BaseSalary / 30m / 8m) * 1.5m;
+            overtimeAmount = Math.Round(overtimeHours * overtimeRate, 2);
+        }
         var net = Math.Round(employee.BaseSalary + allowance + overtimeAmount - totalDeductions, 2);
 
         dbContext.AddEntity(new PayrollLine
@@ -7158,6 +8225,61 @@ public sealed record CreateLeaveRequestRequest(
     DateOnly EndDate,
     string Reason);
 
+public static class OffboardingWorkflowGuards
+{
+    public static async Task<string?> GetFinalSettlementBlockerAsync(
+        Guid employeeId,
+        IApplicationDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var activeOffboarding = await dbContext.EmployeeOffboardings
+            .Where(x => x.EmployeeId == employeeId && x.Status != "Closed")
+            .OrderByDescending(x => x.CreatedAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (activeOffboarding is null)
+        {
+            return null;
+        }
+
+        if (activeOffboarding.Status != "Approved")
+        {
+            return "Final settlement is blocked until offboarding request is approved.";
+        }
+
+        var checklist = await dbContext.OffboardingChecklists
+            .FirstOrDefaultAsync(x => x.OffboardingId == activeOffboarding.Id, cancellationToken);
+
+        if (checklist is null)
+        {
+            return "Final settlement is blocked because offboarding checklist is missing.";
+        }
+
+        var items = await dbContext.OffboardingChecklistItems
+            .Where(x => x.ChecklistId == checklist.Id)
+            .Select(x => new { x.Status, x.Notes })
+            .ToListAsync(cancellationToken);
+
+        if (items.Count == 0)
+        {
+            return "Final settlement is blocked because no offboarding checklist items are defined.";
+        }
+
+        var requiredItems = items.Where(x => !x.Notes.Contains("Required:False", StringComparison.OrdinalIgnoreCase)).ToList();
+        var incompleteRequiredCount = requiredItems.Count(x =>
+            x.Status != "Completed" &&
+            x.Status != "Approved" &&
+            x.Status != "Signed");
+
+        if (incompleteRequiredCount > 0)
+        {
+            return $"Final settlement is blocked until {incompleteRequiredCount} required offboarding checklist item(s) are completed.";
+        }
+
+        return null;
+    }
+}
+
 public sealed record LeaveBalancePreviewRequest(
     Guid? EmployeeId,
     LeaveType LeaveType,
@@ -7192,10 +8314,56 @@ public sealed record CreateEmployeeLoanRequest(
     int StartMonth,
     int TotalInstallments,
     string? Notes);
+public sealed record RescheduleEmployeeLoanRequest(
+    int StartYear,
+    int StartMonth,
+    string? Reason);
+public sealed record SkipEmployeeLoanInstallmentRequest(string? Reason);
+public sealed record SettleEmployeeLoanRequest(decimal? Amount, string? Reason);
+public sealed record CreateOffboardingChecklistTemplateRequest(
+    string RoleName,
+    string ItemCode,
+    string ItemLabel,
+    int SortOrder,
+    bool IsRequired,
+    bool RequiresApproval,
+    bool RequiresEsign,
+    bool IsActive);
+public sealed record ApplyOffboardingChecklistTemplateRequest(string RoleName, bool ReplaceExisting);
+public sealed record OffboardingChecklistApprovalRequest(string? Notes);
+public sealed record OffboardingChecklistEsignRequest(string DocumentName, string DocumentUrl);
+public sealed record CreateShiftRuleRequest(
+    string Name,
+    decimal StandardDailyHours,
+    decimal OvertimeMultiplierWeekday,
+    decimal OvertimeMultiplierWeekend,
+    decimal OvertimeMultiplierHoliday,
+    string WeekendDaysCsv,
+    bool IsActive);
+public sealed record UpsertTimesheetEntryRequest(
+    Guid EmployeeId,
+    Guid? ShiftRuleId,
+    DateOnly WorkDate,
+    decimal HoursWorked,
+    bool IsHoliday,
+    string? Notes);
+public sealed record ApproveTimesheetEntryRequest(
+    bool Approved,
+    decimal? ApprovedOvertimeHours,
+    string? Notes);
+public sealed record UpsertAllowancePolicyRequest(
+    string PolicyName,
+    string JobTitle,
+    decimal MonthlyAmount,
+    DateOnly EffectiveFrom,
+    DateOnly? EffectiveTo,
+    bool IsTaxable,
+    bool IsActive);
 public sealed record CreateEmployeeOffboardingRequest(
     Guid EmployeeId,
     DateOnly EffectiveDate,
-    string Reason);
+    string Reason,
+    string? ChecklistRoleName);
 public sealed record CreateOffboardingChecklistItemRequest(
     string ItemCode,
     string ItemLabel,

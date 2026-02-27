@@ -9,6 +9,10 @@
   max-width: 520px;
 }
 
+.lifecycle-card {
+  max-width: 760px;
+}
+
 label {
   display: grid;
   gap: 0.35rem;
@@ -26,4 +30,8 @@ label {
 
 .error {
   color: #b42318;
+}
+
+.hint {
+  color: #335b8f;
 }

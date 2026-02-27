@@ -24,6 +24,12 @@ public interface IApplicationDbContext
     IQueryable<EmployeeOffboarding> EmployeeOffboardings { get; }
     IQueryable<OffboardingChecklist> OffboardingChecklists { get; }
     IQueryable<OffboardingChecklistItem> OffboardingChecklistItems { get; }
+    IQueryable<OffboardingChecklistTemplate> OffboardingChecklistTemplates { get; }
+    IQueryable<OffboardingChecklistApproval> OffboardingChecklistApprovals { get; }
+    IQueryable<OffboardingEsignDocument> OffboardingEsignDocuments { get; }
+    IQueryable<ShiftRule> ShiftRules { get; }
+    IQueryable<TimesheetEntry> TimesheetEntries { get; }
+    IQueryable<AllowancePolicy> AllowancePolicies { get; }
 
     void AddEntity<TEntity>(TEntity entity) where TEntity : class;
     void RemoveEntities<TEntity>(IEnumerable<TEntity> entities) where TEntity : class;

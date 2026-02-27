@@ -43,6 +43,12 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
     public DbSet<EmployeeOffboarding> EmployeeOffboardingSet => Set<EmployeeOffboarding>();
     public DbSet<OffboardingChecklist> OffboardingChecklistSet => Set<OffboardingChecklist>();
     public DbSet<OffboardingChecklistItem> OffboardingChecklistItemSet => Set<OffboardingChecklistItem>();
+    public DbSet<OffboardingChecklistTemplate> OffboardingChecklistTemplateSet => Set<OffboardingChecklistTemplate>();
+    public DbSet<OffboardingChecklistApproval> OffboardingChecklistApprovalSet => Set<OffboardingChecklistApproval>();
+    public DbSet<OffboardingEsignDocument> OffboardingEsignDocumentSet => Set<OffboardingEsignDocument>();
+    public DbSet<ShiftRule> ShiftRuleSet => Set<ShiftRule>();
+    public DbSet<TimesheetEntry> TimesheetEntrySet => Set<TimesheetEntry>();
+    public DbSet<AllowancePolicy> AllowancePolicySet => Set<AllowancePolicy>();
 
     public IQueryable<Tenant> Tenants => TenantSet.AsQueryable();
     public IQueryable<CompanyProfile> CompanyProfiles => CompanyProfileSet.AsQueryable();
@@ -64,6 +70,12 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
     public IQueryable<EmployeeOffboarding> EmployeeOffboardings => EmployeeOffboardingSet.AsQueryable();
     public IQueryable<OffboardingChecklist> OffboardingChecklists => OffboardingChecklistSet.AsQueryable();
     public IQueryable<OffboardingChecklistItem> OffboardingChecklistItems => OffboardingChecklistItemSet.AsQueryable();
+    public IQueryable<OffboardingChecklistTemplate> OffboardingChecklistTemplates => OffboardingChecklistTemplateSet.AsQueryable();
+    public IQueryable<OffboardingChecklistApproval> OffboardingChecklistApprovals => OffboardingChecklistApprovalSet.AsQueryable();
+    public IQueryable<OffboardingEsignDocument> OffboardingEsignDocuments => OffboardingEsignDocumentSet.AsQueryable();
+    public IQueryable<ShiftRule> ShiftRules => ShiftRuleSet.AsQueryable();
+    public IQueryable<TimesheetEntry> TimesheetEntries => TimesheetEntrySet.AsQueryable();
+    public IQueryable<AllowancePolicy> AllowancePolicies => AllowancePolicySet.AsQueryable();
 
     public void AddEntity<TEntity>(TEntity entity) where TEntity : class
     {
@@ -104,6 +116,15 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
         modelBuilder.Entity<OffboardingChecklist>().HasIndex(x => new { x.TenantId, x.OffboardingId }).IsUnique();
         modelBuilder.Entity<OffboardingChecklistItem>().HasIndex(x => new { x.TenantId, x.ChecklistId, x.ItemCode }).IsUnique();
         modelBuilder.Entity<OffboardingChecklistItem>().HasIndex(x => new { x.TenantId, x.ChecklistId, x.SortOrder });
+        modelBuilder.Entity<OffboardingChecklistTemplate>().HasIndex(x => new { x.TenantId, x.RoleName, x.ItemCode }).IsUnique();
+        modelBuilder.Entity<OffboardingChecklistTemplate>().HasIndex(x => new { x.TenantId, x.RoleName, x.IsActive });
+        modelBuilder.Entity<OffboardingChecklistApproval>().HasIndex(x => new { x.TenantId, x.ChecklistItemId, x.Status });
+        modelBuilder.Entity<OffboardingEsignDocument>().HasIndex(x => new { x.TenantId, x.ChecklistItemId, x.Status });
+        modelBuilder.Entity<ShiftRule>().HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
+        modelBuilder.Entity<TimesheetEntry>().HasIndex(x => new { x.TenantId, x.EmployeeId, x.WorkDate }).IsUnique();
+        modelBuilder.Entity<TimesheetEntry>().HasIndex(x => new { x.TenantId, x.Status, x.WorkDate });
+        modelBuilder.Entity<AllowancePolicy>().HasIndex(x => new { x.TenantId, x.IsActive, x.JobTitle });
+        modelBuilder.Entity<AllowancePolicy>().HasIndex(x => new { x.TenantId, x.PolicyName }).IsUnique();
 
         modelBuilder.Entity<CompanyProfile>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
         modelBuilder.Entity<Employee>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
@@ -124,6 +145,12 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
         modelBuilder.Entity<EmployeeOffboarding>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
         modelBuilder.Entity<OffboardingChecklist>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
         modelBuilder.Entity<OffboardingChecklistItem>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
+        modelBuilder.Entity<OffboardingChecklistTemplate>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
+        modelBuilder.Entity<OffboardingChecklistApproval>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
+        modelBuilder.Entity<OffboardingEsignDocument>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
+        modelBuilder.Entity<ShiftRule>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
+        modelBuilder.Entity<TimesheetEntry>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
+        modelBuilder.Entity<AllowancePolicy>().HasQueryFilter(x => _tenantContextAccessor.TenantId == Guid.Empty || x.TenantId == _tenantContextAccessor.TenantId);
     }
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

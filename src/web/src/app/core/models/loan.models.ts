@@ -26,6 +26,29 @@ export interface CreateEmployeeLoanRequest {
   notes?: string | null;
 }
 
+export interface RescheduleEmployeeLoanRequest {
+  startYear: number;
+  startMonth: number;
+  reason?: string | null;
+}
+
+export interface SkipEmployeeLoanInstallmentRequest {
+  reason?: string | null;
+}
+
+export interface SettleEmployeeLoanRequest {
+  amount?: number | null;
+  reason?: string | null;
+}
+
+export interface EmployeeLoanLifecycleCheck {
+  canReschedule: boolean;
+  canSkipNext: boolean;
+  blockedPeriods: string[];
+  pendingInstallments: number;
+  nextPendingInstallmentId?: string | null;
+}
+
 export interface EmployeeLoanInstallment {
   id: string;
   year: number;

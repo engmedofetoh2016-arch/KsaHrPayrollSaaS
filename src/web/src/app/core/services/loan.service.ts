@@ -1,7 +1,15 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { apiConfig } from '../config/api.config';
-import { CreateEmployeeLoanRequest, EmployeeLoan, EmployeeLoanInstallment } from '../models/loan.models';
+import {
+  CreateEmployeeLoanRequest,
+  EmployeeLoan,
+  EmployeeLoanInstallment,
+  EmployeeLoanLifecycleCheck,
+  RescheduleEmployeeLoanRequest,
+  SettleEmployeeLoanRequest,
+  SkipEmployeeLoanInstallmentRequest
+} from '../models/loan.models';
 
 @Injectable({ providedIn: 'root' })
 export class LoanService {
@@ -33,5 +41,21 @@ export class LoanService {
 
   listInstallments(loanId: string) {
     return this.http.get<EmployeeLoanInstallment[]>(`${this.base}/${loanId}/installments`);
+  }
+
+  lifecycleCheck(loanId: string) {
+    return this.http.get<EmployeeLoanLifecycleCheck>(`${this.base}/${loanId}/lifecycle-check`);
+  }
+
+  reschedule(loanId: string, request: RescheduleEmployeeLoanRequest) {
+    return this.http.post<{ id: string; status: string }>(`${this.base}/${loanId}/reschedule`, request);
+  }
+
+  skipNext(loanId: string, request: SkipEmployeeLoanInstallmentRequest) {
+    return this.http.post<{ id: string; status: string }>(`${this.base}/${loanId}/skip-next`, request);
+  }
+
+  settleEarly(loanId: string, request: SettleEmployeeLoanRequest) {
+    return this.http.post<{ id: string; status: string; remainingBalance: number }>(`${this.base}/${loanId}/settle-early`, request);
   }
 }

@@ -1,41 +1,41 @@
 <section class="panel">
-  <h2>{{ i18n.text('Loans & Advances', 'السلف والقروض') }}</h2>
+  <h2>{{ i18n.text('Loans & Advances', 'Loans & Advances') }}</h2>
 
   <form class="card" [formGroup]="form" (ngSubmit)="createLoan()">
-    <h3>{{ i18n.text('Create Loan', 'إضافة سلفة/قرض') }}</h3>
+    <h3>{{ i18n.text('Create Loan', 'Create Loan') }}</h3>
     <label>
-      {{ i18n.text('Employee', 'الموظف') }}
+      {{ i18n.text('Employee', 'Employee') }}
       <select formControlName="employeeId">
-        <option value="">{{ i18n.text('Select employee', 'اختر موظفا') }}</option>
+        <option value="">{{ i18n.text('Select employee', 'Select employee') }}</option>
         @for (employee of employees(); track employee.id) {
           <option [value]="employee.id">{{ employee.firstName }} {{ employee.lastName }}</option>
         }
       </select>
     </label>
-    <label>{{ i18n.text('Type', 'النوع') }} <input formControlName="loanType" /></label>
-    <label>{{ i18n.text('Principal', 'المبلغ الأساسي') }} <input type="number" min="1" step="0.01" formControlName="principalAmount" /></label>
-    <label>{{ i18n.text('Installment', 'القسط') }} <input type="number" min="1" step="0.01" formControlName="installmentAmount" /></label>
-    <label>{{ i18n.text('Start Year', 'سنة البدء') }} <input type="number" min="2000" max="2100" formControlName="startYear" /></label>
-    <label>{{ i18n.text('Start Month', 'شهر البدء') }} <input type="number" min="1" max="12" formControlName="startMonth" /></label>
-    <label>{{ i18n.text('Total Installments', 'إجمالي الأقساط') }} <input type="number" min="1" max="120" formControlName="totalInstallments" /></label>
-    <label>{{ i18n.text('Notes', 'ملاحظات') }} <input formControlName="notes" /></label>
-    <button type="submit" [disabled]="saving()">{{ i18n.text('Save', 'حفظ') }}</button>
+    <label>{{ i18n.text('Type', 'Type') }} <input formControlName="loanType" /></label>
+    <label>{{ i18n.text('Principal', 'Principal') }} <input type="number" min="1" step="0.01" formControlName="principalAmount" /></label>
+    <label>{{ i18n.text('Installment', 'Installment') }} <input type="number" min="1" step="0.01" formControlName="installmentAmount" /></label>
+    <label>{{ i18n.text('Start Year', 'Start Year') }} <input type="number" min="2000" max="2100" formControlName="startYear" /></label>
+    <label>{{ i18n.text('Start Month', 'Start Month') }} <input type="number" min="1" max="12" formControlName="startMonth" /></label>
+    <label>{{ i18n.text('Total Installments', 'Total Installments') }} <input type="number" min="1" max="120" formControlName="totalInstallments" /></label>
+    <label>{{ i18n.text('Notes', 'Notes') }} <input formControlName="notes" /></label>
+    <button type="submit" [disabled]="saving()">{{ i18n.text('Save', 'Save') }}</button>
   </form>
 
   @if (message()) { <p class="ok">{{ message() }}</p> }
   @if (error()) { <p class="error">{{ error() }}</p> }
 
-  <h3>{{ i18n.text('Loan Records', 'سجل السلف والقروض') }}</h3>
+  <h3>{{ i18n.text('Loan Records', 'Loan Records') }}</h3>
   <table>
     <thead>
       <tr>
-        <th>{{ i18n.text('Employee', 'الموظف') }}</th>
-        <th>{{ i18n.text('Type', 'النوع') }}</th>
-        <th>{{ i18n.text('Principal', 'الأصل') }}</th>
-        <th>{{ i18n.text('Remaining', 'المتبقي') }}</th>
-        <th>{{ i18n.text('Installment', 'القسط') }}</th>
-        <th>{{ i18n.text('Status', 'الحالة') }}</th>
-        <th>{{ i18n.text('Action', 'إجراء') }}</th>
+        <th>{{ i18n.text('Employee', 'Employee') }}</th>
+        <th>{{ i18n.text('Type', 'Type') }}</th>
+        <th>{{ i18n.text('Principal', 'Principal') }}</th>
+        <th>{{ i18n.text('Remaining', 'Remaining') }}</th>
+        <th>{{ i18n.text('Installment', 'Installment') }}</th>
+        <th>{{ i18n.text('Status', 'Status') }}</th>
+        <th>{{ i18n.text('Action', 'Action') }}</th>
       </tr>
     </thead>
     <tbody>
@@ -48,9 +48,9 @@
           <td>{{ loan.installmentAmount | number: '1.2-2' }}</td>
           <td>{{ loan.status }}</td>
           <td class="actions">
-            <button type="button" (click)="viewInstallments(loan.id)">{{ i18n.text('Installments', 'الأقساط') }}</button>
-            <button type="button" (click)="approveLoan(loan.id)" [disabled]="saving() || loan.status === 'Closed' || loan.status === 'Cancelled'">{{ i18n.text('Approve', 'اعتماد') }}</button>
-            <button type="button" (click)="cancelLoan(loan.id)" [disabled]="saving() || loan.status === 'Closed' || loan.status === 'Cancelled'">{{ i18n.text('Cancel', 'إلغاء') }}</button>
+            <button type="button" (click)="viewInstallments(loan.id)">{{ i18n.text('Installments', 'Installments') }}</button>
+            <button type="button" (click)="approveLoan(loan.id)" [disabled]="saving() || loan.status === 'Closed' || loan.status === 'Cancelled'">{{ i18n.text('Approve', 'Approve') }}</button>
+            <button type="button" (click)="cancelLoan(loan.id)" [disabled]="saving() || loan.status === 'Closed' || loan.status === 'Cancelled'">{{ i18n.text('Cancel', 'Cancel') }}</button>
           </td>
         </tr>
       }
@@ -58,14 +58,14 @@
   </table>
 
   @if (activeLoanId()) {
-    <h3>{{ i18n.text('Installment Schedule', 'جدول الأقساط') }}</h3>
+    <h3>{{ i18n.text('Installment Schedule', 'Installment Schedule') }}</h3>
     <table>
       <thead>
         <tr>
-          <th>{{ i18n.text('Period', 'الفترة') }}</th>
-          <th>{{ i18n.text('Amount', 'المبلغ') }}</th>
-          <th>{{ i18n.text('Status', 'الحالة') }}</th>
-          <th>{{ i18n.text('Payroll Run', 'تشغيل الرواتب') }}</th>
+          <th>{{ i18n.text('Period', 'Period') }}</th>
+          <th>{{ i18n.text('Amount', 'Amount') }}</th>
+          <th>{{ i18n.text('Status', 'Status') }}</th>
+          <th>{{ i18n.text('Payroll Run', 'Payroll Run') }}</th>
         </tr>
       </thead>
       <tbody>
@@ -79,5 +79,22 @@
         }
       </tbody>
     </table>
+
+    <form class="card lifecycle-card" [formGroup]="lifecycleForm" (ngSubmit)="rescheduleLoan()">
+      <h3>{{ i18n.text('Lifecycle Automation', 'Lifecycle Automation') }}</h3>
+      <label>{{ i18n.text('Reschedule Start Year', 'Reschedule Start Year') }} <input type="number" min="2000" max="2100" formControlName="startYear" /></label>
+      <label>{{ i18n.text('Reschedule Start Month', 'Reschedule Start Month') }} <input type="number" min="1" max="12" formControlName="startMonth" /></label>
+      <label>{{ i18n.text('Early Settlement Amount (optional)', 'Early Settlement Amount (optional)') }} <input type="number" min="0.01" step="0.01" formControlName="settleAmount" /></label>
+      <label>{{ i18n.text('Reason (optional)', 'Reason (optional)') }} <input formControlName="reason" /></label>
+      <div class="actions">
+        <button type="button" (click)="checkLifecycleLock()" [disabled]="saving()">{{ i18n.text('Check Payroll Locks', 'Check Payroll Locks') }}</button>
+        <button type="submit" [disabled]="saving()">{{ i18n.text('Reschedule Pending', 'Reschedule Pending') }}</button>
+        <button type="button" (click)="skipNextInstallment()" [disabled]="saving()">{{ i18n.text('Skip Next Installment', 'Skip Next Installment') }}</button>
+        <button type="button" (click)="settleEarlyLoan()" [disabled]="saving()">{{ i18n.text('Settle Early', 'Settle Early') }}</button>
+      </div>
+      @if (lifecycleCheckMessage()) {
+        <p class="hint">{{ lifecycleCheckMessage() }}</p>
+      }
+    </form>
   }
 </section>

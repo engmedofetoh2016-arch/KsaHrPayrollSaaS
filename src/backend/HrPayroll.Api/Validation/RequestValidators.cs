@@ -375,6 +375,35 @@ public class CreateEmployeeLoanRequestValidator : AbstractValidator<CreateEmploy
     }
 }
 
+public class RescheduleEmployeeLoanRequestValidator : AbstractValidator<RescheduleEmployeeLoanRequest>
+{
+    public RescheduleEmployeeLoanRequestValidator()
+    {
+        RuleFor(x => x.StartYear).InclusiveBetween(2000, 2100);
+        RuleFor(x => x.StartMonth).InclusiveBetween(1, 12);
+        RuleFor(x => x.Reason).MaximumLength(300);
+    }
+}
+
+public class SkipEmployeeLoanInstallmentRequestValidator : AbstractValidator<SkipEmployeeLoanInstallmentRequest>
+{
+    public SkipEmployeeLoanInstallmentRequestValidator()
+    {
+        RuleFor(x => x.Reason).MaximumLength(300);
+    }
+}
+
+public class SettleEmployeeLoanRequestValidator : AbstractValidator<SettleEmployeeLoanRequest>
+{
+    public SettleEmployeeLoanRequestValidator()
+    {
+        RuleFor(x => x.Amount)
+            .GreaterThan(0m)
+            .When(x => x.Amount.HasValue);
+        RuleFor(x => x.Reason).MaximumLength(300);
+    }
+}
+
 public class CreateEmployeeOffboardingRequestValidator : AbstractValidator<CreateEmployeeOffboardingRequest>
 {
     public CreateEmployeeOffboardingRequestValidator()
@@ -382,6 +411,26 @@ public class CreateEmployeeOffboardingRequestValidator : AbstractValidator<Creat
         RuleFor(x => x.EmployeeId).NotEmpty();
         RuleFor(x => x.EffectiveDate).GreaterThanOrEqualTo(DateOnly.FromDateTime(new DateTime(2000, 1, 1)));
         RuleFor(x => x.Reason).NotEmpty().MaximumLength(300);
+        RuleFor(x => x.ChecklistRoleName).MaximumLength(80);
+    }
+}
+
+public class CreateOffboardingChecklistTemplateRequestValidator : AbstractValidator<CreateOffboardingChecklistTemplateRequest>
+{
+    public CreateOffboardingChecklistTemplateRequestValidator()
+    {
+        RuleFor(x => x.RoleName).NotEmpty().MaximumLength(80);
+        RuleFor(x => x.ItemCode).NotEmpty().MaximumLength(50).Matches("^[A-Z0-9_\\-a-z]+$");
+        RuleFor(x => x.ItemLabel).NotEmpty().MaximumLength(200);
+        RuleFor(x => x.SortOrder).InclusiveBetween(1, 1000);
+    }
+}
+
+public class ApplyOffboardingChecklistTemplateRequestValidator : AbstractValidator<ApplyOffboardingChecklistTemplateRequest>
+{
+    public ApplyOffboardingChecklistTemplateRequestValidator()
+    {
+        RuleFor(x => x.RoleName).NotEmpty().MaximumLength(80);
     }
 }
 
@@ -396,11 +445,77 @@ public class CreateOffboardingChecklistItemRequestValidator : AbstractValidator<
     }
 }
 
+public class OffboardingChecklistApprovalRequestValidator : AbstractValidator<OffboardingChecklistApprovalRequest>
+{
+    public OffboardingChecklistApprovalRequestValidator()
+    {
+        RuleFor(x => x.Notes).MaximumLength(300);
+    }
+}
+
+public class OffboardingChecklistEsignRequestValidator : AbstractValidator<OffboardingChecklistEsignRequest>
+{
+    public OffboardingChecklistEsignRequestValidator()
+    {
+        RuleFor(x => x.DocumentName).NotEmpty().MaximumLength(200);
+        RuleFor(x => x.DocumentUrl).NotEmpty().MaximumLength(500);
+    }
+}
+
 public class CompleteOffboardingChecklistItemRequestValidator : AbstractValidator<CompleteOffboardingChecklistItemRequest>
 {
     public CompleteOffboardingChecklistItemRequestValidator()
     {
         RuleFor(x => x.Notes).MaximumLength(300);
+    }
+}
+
+public class CreateShiftRuleRequestValidator : AbstractValidator<CreateShiftRuleRequest>
+{
+    public CreateShiftRuleRequestValidator()
+    {
+        RuleFor(x => x.Name).NotEmpty().MaximumLength(120);
+        RuleFor(x => x.StandardDailyHours).InclusiveBetween(1m, 24m);
+        RuleFor(x => x.OvertimeMultiplierWeekday).InclusiveBetween(1m, 5m);
+        RuleFor(x => x.OvertimeMultiplierWeekend).InclusiveBetween(1m, 5m);
+        RuleFor(x => x.OvertimeMultiplierHoliday).InclusiveBetween(1m, 5m);
+        RuleFor(x => x.WeekendDaysCsv).NotEmpty().MaximumLength(40);
+    }
+}
+
+public class UpsertTimesheetEntryRequestValidator : AbstractValidator<UpsertTimesheetEntryRequest>
+{
+    public UpsertTimesheetEntryRequestValidator()
+    {
+        RuleFor(x => x.EmployeeId).NotEmpty();
+        RuleFor(x => x.WorkDate).GreaterThanOrEqualTo(DateOnly.FromDateTime(new DateTime(2000, 1, 1)));
+        RuleFor(x => x.HoursWorked).InclusiveBetween(0m, 24m);
+        RuleFor(x => x.Notes).MaximumLength(300);
+    }
+}
+
+public class ApproveTimesheetEntryRequestValidator : AbstractValidator<ApproveTimesheetEntryRequest>
+{
+    public ApproveTimesheetEntryRequestValidator()
+    {
+        RuleFor(x => x.ApprovedOvertimeHours)
+            .InclusiveBetween(0m, 24m)
+            .When(x => x.ApprovedOvertimeHours.HasValue);
+        RuleFor(x => x.Notes).MaximumLength(300);
+    }
+}
+
+public class UpsertAllowancePolicyRequestValidator : AbstractValidator<UpsertAllowancePolicyRequest>
+{
+    public UpsertAllowancePolicyRequestValidator()
+    {
+        RuleFor(x => x.PolicyName).NotEmpty().MaximumLength(120);
+        RuleFor(x => x.JobTitle).MaximumLength(120);
+        RuleFor(x => x.MonthlyAmount).GreaterThanOrEqualTo(0m);
+        RuleFor(x => x.EffectiveFrom).GreaterThanOrEqualTo(DateOnly.FromDateTime(new DateTime(2000, 1, 1)));
+        RuleFor(x => x.EffectiveTo)
+            .GreaterThanOrEqualTo(x => x.EffectiveFrom)
+            .When(x => x.EffectiveTo.HasValue);
     }
 }
 
