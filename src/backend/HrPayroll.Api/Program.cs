@@ -22,6 +22,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.RateLimiting;
+using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -4255,39 +4256,51 @@ api.MapPost("/payroll/data-quality/scan", [Authorize(Roles = RoleNames.Owner + "
 });
 
 api.MapGet("/payroll/data-quality/issues", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
-    string? status,
-    int? take,
+    HttpRequest request,
     IApplicationDbContext dbContext,
+    ILogger<Program> logger,
     CancellationToken cancellationToken) =>
 {
-    var safeTake = Math.Clamp(take ?? 500, 1, 2000);
-    var query = dbContext.DataQualityIssues.AsQueryable();
-    if (!string.IsNullOrWhiteSpace(status))
+    var status = request.Query.TryGetValue("status", out var statusRaw)
+        ? statusRaw.ToString()
+        : null;
+    var safeTake = Math.Clamp(ReadQueryInt(request.Query, "take", 500), 1, 2000);
+
+    try
     {
-        var normalized = status.Trim();
-        query = query.Where(x => x.IssueStatus == normalized);
-    }
-
-    var items = await query
-        .OrderByDescending(x => x.DetectedAtUtc)
-        .Take(safeTake)
-        .Select(x => new
+        var query = dbContext.DataQualityIssues.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(status))
         {
-            x.Id,
-            x.IssueCode,
-            x.Severity,
-            x.EntityType,
-            x.EntityId,
-            x.IssueStatus,
-            x.IssueMessage,
-            x.FixActionCode,
-            x.FixPayloadJson,
-            x.DetectedAtUtc,
-            x.ResolvedAtUtc
-        })
-        .ToListAsync(cancellationToken);
+            var normalized = status.Trim();
+            query = query.Where(x => x.IssueStatus == normalized);
+        }
 
-    return Results.Ok(new { items });
+        var items = await query
+            .OrderByDescending(x => x.DetectedAtUtc)
+            .Take(safeTake)
+            .Select(x => new
+            {
+                x.Id,
+                x.IssueCode,
+                x.Severity,
+                x.EntityType,
+                x.EntityId,
+                x.IssueStatus,
+                x.IssueMessage,
+                x.FixActionCode,
+                x.FixPayloadJson,
+                x.DetectedAtUtc,
+                x.ResolvedAtUtc
+            })
+            .ToListAsync(cancellationToken);
+
+        return Results.Ok(new { items });
+    }
+    catch (Exception ex) when (IsDbSchemaMismatch(ex))
+    {
+        logger.LogWarning(ex, "Data quality tables are not available yet. Returning empty issue list.");
+        return Results.Ok(new { items = Array.Empty<object>() });
+    }
 });
 
 api.MapPost("/payroll/data-quality/fix-batch", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
@@ -4396,48 +4409,56 @@ api.MapPost("/payroll/data-quality/fix-batch", [Authorize(Roles = RoleNames.Owne
 });
 
 api.MapGet("/attendance-inputs", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] (
-    int? year,
-    int? month,
-    int? page,
-    int? pageSize,
-    string? search,
-    IApplicationDbContext dbContext) =>
+    HttpRequest request,
+    IApplicationDbContext dbContext,
+    ILogger<Program> logger) =>
 {
-    var safeYear = Math.Clamp(year ?? DateTime.UtcNow.Year, 2000, 2100);
-    var safeMonth = Math.Clamp(month ?? DateTime.UtcNow.Month, 1, 12);
-    var safePage = Math.Max(1, page ?? 1);
-    var safePageSize = Math.Clamp(pageSize ?? 20, 1, 200);
-    search = string.IsNullOrWhiteSpace(search) ? null : search.Trim().ToLowerInvariant();
+    var safeYear = Math.Clamp(ReadQueryInt(request.Query, "year", DateTime.UtcNow.Year), 2000, 2100);
+    var safeMonth = Math.Clamp(ReadQueryInt(request.Query, "month", DateTime.UtcNow.Month), 1, 12);
+    var safePage = Math.Max(1, ReadQueryInt(request.Query, "page", 1));
+    var safePageSize = Math.Clamp(ReadQueryInt(request.Query, "pageSize", 20), 1, 200);
+    var searchRaw = request.Query.TryGetValue("search", out var searchQuery)
+        ? searchQuery.ToString()
+        : null;
+    var search = string.IsNullOrWhiteSpace(searchRaw) ? null : searchRaw.Trim().ToLowerInvariant();
 
-    var query = from attendance in dbContext.AttendanceInputs
-                join employee in dbContext.Employees on attendance.EmployeeId equals employee.Id
-                where attendance.Year == safeYear && attendance.Month == safeMonth
-                select new
-                {
-                    attendance.Id,
-                    attendance.EmployeeId,
-                    EmployeeName = employee.FirstName + " " + employee.LastName,
-                    attendance.Year,
-                    attendance.Month,
-                    attendance.DaysPresent,
-                    attendance.DaysAbsent,
-                    attendance.OvertimeHours
-                };
-
-    if (search is not null)
+    try
     {
-        query = query.Where(x => x.EmployeeName.ToLower().Contains(search));
+        var query = from attendance in dbContext.AttendanceInputs
+                    join employee in dbContext.Employees on attendance.EmployeeId equals employee.Id
+                    where attendance.Year == safeYear && attendance.Month == safeMonth
+                    select new
+                    {
+                        attendance.Id,
+                        attendance.EmployeeId,
+                        EmployeeName = employee.FirstName + " " + employee.LastName,
+                        attendance.Year,
+                        attendance.Month,
+                        attendance.DaysPresent,
+                        attendance.DaysAbsent,
+                        attendance.OvertimeHours
+                    };
+
+        if (search is not null)
+        {
+            query = query.Where(x => x.EmployeeName.ToLower().Contains(search));
+        }
+
+        var total = query.Count();
+
+        var rows = query
+            .OrderBy(x => x.EmployeeName)
+            .Skip((safePage - 1) * safePageSize)
+            .Take(safePageSize)
+            .ToList();
+
+        return Results.Ok(new { items = rows, total, page = safePage, pageSize = safePageSize, year = safeYear, month = safeMonth });
     }
-
-    var total = query.Count();
-
-    var rows = query
-        .OrderBy(x => x.EmployeeName)
-        .Skip((safePage - 1) * safePageSize)
-        .Take(safePageSize)
-        .ToList();
-
-    return Results.Ok(new { items = rows, total, page = safePage, pageSize = safePageSize, year = safeYear, month = safeMonth });
+    catch (Exception ex) when (IsDbSchemaMismatch(ex))
+    {
+        logger.LogWarning(ex, "AttendanceInput schema mismatch. Returning empty attendance list.");
+        return Results.Ok(new { items = Array.Empty<object>(), total = 0, page = safePage, pageSize = safePageSize, year = safeYear, month = safeMonth });
+    }
 });
 
 api.MapGet("/compliance/expiries", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] (
@@ -9471,6 +9492,39 @@ static string NormalizeDigits(string? value) =>
     string.IsNullOrWhiteSpace(value)
         ? string.Empty
         : new string(value.Where(char.IsDigit).ToArray());
+
+static int ReadQueryInt(IQueryCollection query, string key, int fallback)
+{
+    if (!query.TryGetValue(key, out var raw))
+    {
+        return fallback;
+    }
+
+    var value = raw.ToString();
+    if (string.IsNullOrWhiteSpace(value))
+    {
+        return fallback;
+    }
+
+    return int.TryParse(value, out var parsed) ? parsed : fallback;
+}
+
+static bool IsDbSchemaMismatch(Exception exception)
+{
+    Exception? current = exception;
+    while (current is not null)
+    {
+        if (current is PostgresException postgresEx &&
+            (postgresEx.SqlState == "42P01" || postgresEx.SqlState == "42703"))
+        {
+            return true;
+        }
+
+        current = current.InnerException;
+    }
+
+    return false;
+}
 
 static async Task<SelfServiceApplyResult> ApplyApprovedSelfServiceRequestAsync(
     EmployeeSelfServiceRequest request,

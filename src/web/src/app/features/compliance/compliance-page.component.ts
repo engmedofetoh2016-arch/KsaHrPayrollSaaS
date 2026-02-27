@@ -637,7 +637,7 @@ export class CompliancePageComponent implements OnInit {
         this.digestHasMore.set(!!digestLogs?.hasMore);
       },
       error: () => {
-        this.error.set(this.i18n.text('Failed to load digest log entries.', 'ØªØ¹Ø°Ø± ØªØ­Ù…ÙŠÙ„ Ø³Ø¬Ù„ Ø¥Ø±Ø³Ø§Ù„ Ø§Ù„Ù…Ù„Ø®Øµ.'));
+        this.error.set(this.i18n.text('Failed to load digest log entries.', 'تعذر تحميل سجل إرسال الملخص.'));
       },
       complete: () => this.loadingDigestLogs.set(false)
     });

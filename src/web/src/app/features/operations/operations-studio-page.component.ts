@@ -34,7 +34,7 @@ export class OperationsStudioPageComponent implements OnInit {
   readonly selfServiceRequests = signal<any[]>([]);
 
   readonly allowanceForm = {
-    policyName: 'Ù‚ÙŠØ§Ø³ÙŠ',
+    policyName: 'قياسي',
     gradeCode: 'G1',
     locationCode: 'RIYADH',
     housingAmount: 1000,
@@ -50,7 +50,7 @@ export class OperationsStudioPageComponent implements OnInit {
   readonly stageForm = {
     payrollScope: 'Default',
     stageCode: 'REVIEWER',
-    stageName: 'Ù…Ø±Ø§Ø¬Ø¹',
+    stageName: 'مراجع',
     stageOrder: 1,
     approverRole: 'Manager',
     allowRollback: true,
@@ -59,7 +59,7 @@ export class OperationsStudioPageComponent implements OnInit {
 
   readonly ruleForm = {
     ruleCode: 'WPS_MISSING',
-    ruleName: 'Ù†Ù‚Øµ Ø¨ÙŠØ§Ù†Ø§Øª Ø­Ù…Ø§ÙŠØ© Ø§Ù„Ø£Ø¬ÙˆØ±',
+    ruleName: 'نقص بيانات حماية الأجور',
     ruleCategory: 'WPS',
     severity: 'Critical',
     ruleConfigJson: '{"daysThreshold":3}',
@@ -67,7 +67,7 @@ export class OperationsStudioPageComponent implements OnInit {
   };
 
   readonly forecastForm = {
-    scenarioName: 'Ø³ÙŠÙ†Ø§Ø±ÙŠÙˆ Ø´Ù‡Ø±ÙŠ',
+    scenarioName: 'سيناريو شهري',
     basePayrollRunId: '',
     plannedSaudiHires: 1,
     plannedNonSaudiHires: 0,
@@ -79,8 +79,8 @@ export class OperationsStudioPageComponent implements OnInit {
   readonly templateForm = {
     templateCode: 'CONTRACT_EXPIRY',
     channel: 'Email',
-    subject: 'Ø§Ù†ØªÙ‡Ø§Ø¡ Ø§Ù„Ø¹Ù‚Ø¯ Ù‚Ø±ÙŠØ¨',
-    body: 'Ø³ÙŠÙ†ØªÙ‡ÙŠ Ø¹Ù‚Ø¯Ùƒ Ù‚Ø±ÙŠØ¨Ù‹Ø§. ÙŠØ±Ø¬Ù‰ Ø§Ù„Ù…Ø±Ø§Ø¬Ø¹Ø©.',
+    subject: 'انتهاء العقد قريب',
+    body: 'سينتهي عقدك قريبًا. يرجى المراجعة.',
     isActive: true
   };
 
@@ -127,7 +127,7 @@ export class OperationsStudioPageComponent implements OnInit {
         this.notificationQueue.set(Array.isArray(response.notificationQueue?.items) ? response.notificationQueue.items : []);
         this.dataQualityIssues.set(Array.isArray(response.dataQualityIssues?.items) ? response.dataQualityIssues.items : []);
       },
-      error: () => this.error.set(this.i18n.text('Failed to load operations studio.', 'ØªØ¹Ø°Ø± ØªØ­Ù…ÙŠÙ„ Ø§Ø³ØªÙˆØ¯ÙŠÙˆ Ø§Ù„Ø¹Ù…Ù„ÙŠØ§Øª.')),
+      error: () => this.error.set(this.i18n.text('Failed to load operations studio.', 'تعذر تحميل استوديو العمليات.')),
       complete: () => this.loading.set(false)
     });
   }
@@ -147,14 +147,14 @@ export class OperationsStudioPageComponent implements OnInit {
         isTaxable: !!this.allowanceForm.isTaxable,
         isActive: !!this.allowanceForm.isActive
       }),
-      this.i18n.text('Allowance matrix saved.', 'ØªÙ… Ø­ÙØ¸ Ù…ØµÙÙˆÙØ© Ø§Ù„Ø¨Ø¯Ù„Ø§Øª.')
+      this.i18n.text('Allowance matrix saved.', 'تم حفظ مصفوفة البدلات.')
     );
   }
 
   seedApprovalMatrix() {
     this.runSave(
       this.http.post(`${this.base}/payroll/approval-matrix/seed-default`, {}),
-      this.i18n.text('Default approval matrix seeded.', 'ØªÙ… Ø¥Ù†Ø´Ø§Ø¡ Ù…ØµÙÙˆÙØ© Ø§Ù„Ø§Ø¹ØªÙ…Ø§Ø¯ Ø§Ù„Ø§ÙØªØ±Ø§Ø¶ÙŠØ©.')
+      this.i18n.text('Default approval matrix seeded.', 'تم إنشاء مصفوفة الاعتماد الافتراضية.')
     );
   }
 
@@ -169,7 +169,7 @@ export class OperationsStudioPageComponent implements OnInit {
         allowRollback: !!this.stageForm.allowRollback,
         isActive: !!this.stageForm.isActive
       }),
-      this.i18n.text('Approval stage saved.', 'ØªÙ… Ø­ÙØ¸ Ù…Ø±Ø­Ù„Ø© Ø§Ù„Ø§Ø¹ØªÙ…Ø§Ø¯.')
+      this.i18n.text('Approval stage saved.', 'تم حفظ مرحلة الاعتماد.')
     );
   }
 
@@ -183,7 +183,7 @@ export class OperationsStudioPageComponent implements OnInit {
         ruleConfigJson: this.ruleForm.ruleConfigJson,
         isEnabled: !!this.ruleForm.isEnabled
       }),
-      this.i18n.text('Compliance rule saved.', 'ØªÙ… Ø­ÙØ¸ Ù‚Ø§Ø¹Ø¯Ø© Ø§Ù„Ø§Ù…ØªØ«Ø§Ù„.')
+      this.i18n.text('Compliance rule saved.', 'تم حفظ قاعدة الامتثال.')
     );
   }
 
@@ -198,14 +198,14 @@ export class OperationsStudioPageComponent implements OnInit {
         plannedSalaryDeltaPercent: Number(this.forecastForm.plannedSalaryDeltaPercent || 0),
         assumptionsJson: this.forecastForm.assumptionsJson || '{}'
       }),
-      this.i18n.text('Forecast scenario created.', 'ØªÙ… Ø¥Ù†Ø´Ø§Ø¡ Ø³ÙŠÙ†Ø§Ø±ÙŠÙˆ Ø§Ù„ØªÙ†Ø¨Ø¤.')
+      this.i18n.text('Forecast scenario created.', 'تم إنشاء سيناريو التنبؤ.')
     );
   }
 
   runForecastScenario(scenarioId: string) {
     this.runSave(
       this.http.post(`${this.base}/analytics/payroll-forecast/scenarios/${scenarioId}/run`, {}),
-      this.i18n.text('Forecast run completed.', 'ØªÙ… ØªÙ†ÙÙŠØ° Ø§Ù„ØªÙ†Ø¨Ø¤.')
+      this.i18n.text('Forecast run completed.', 'تم تنفيذ التنبؤ.')
     );
   }
 
@@ -218,7 +218,7 @@ export class OperationsStudioPageComponent implements OnInit {
         body: this.templateForm.body,
         isActive: !!this.templateForm.isActive
       }),
-      this.i18n.text('Notification template saved.', 'ØªÙ… Ø­ÙØ¸ Ù‚Ø§Ù„Ø¨ Ø§Ù„Ø¥Ø´Ø¹Ø§Ø±.')
+      this.i18n.text('Notification template saved.', 'تم حفظ قالب الإشعار.')
     );
   }
 
@@ -234,7 +234,7 @@ export class OperationsStudioPageComponent implements OnInit {
         payloadJson: this.queueForm.payloadJson || '{}',
         scheduledAtUtc: null
       }),
-      this.i18n.text('Notification queued.', 'ØªÙ…Øª Ø¥Ø¶Ø§ÙØ© Ø§Ù„Ø¥Ø´Ø¹Ø§Ø± Ø¥Ù„Ù‰ Ù‚Ø§Ø¦Ù…Ø© Ø§Ù„Ø§Ù†ØªØ¸Ø§Ø±.')
+      this.i18n.text('Notification queued.', 'تمت إضافة الإشعار إلى قائمة الانتظار.')
     );
   }
 
@@ -257,7 +257,7 @@ export class OperationsStudioPageComponent implements OnInit {
   runDataQualityScan() {
     this.runSave(
       this.http.post(`${this.base}/payroll/data-quality/scan`, {}),
-      this.i18n.text('Data quality scan completed.', 'Ø§ÙƒØªÙ…Ù„ ÙØ­Øµ Ø¬ÙˆØ¯Ø© Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª.')
+      this.i18n.text('Data quality scan completed.', 'اكتمل فحص جودة البيانات.')
     );
   }
 
@@ -266,7 +266,7 @@ export class OperationsStudioPageComponent implements OnInit {
       .filter((x) => x.fixActionCode !== 'ManualUpdateRequired')
       .map((x) => x.id);
     if (issueIds.length === 0) {
-      this.error.set(this.i18n.text('No auto-fixable open issues found.', 'Ù„Ø§ ØªÙˆØ¬Ø¯ Ù…Ø´ÙƒÙ„Ø§Øª Ù…ÙØªÙˆØ­Ø© Ù‚Ø§Ø¨Ù„Ø© Ù„Ù„Ø¥ØµÙ„Ø§Ø­ Ø§Ù„ØªÙ„Ù‚Ø§Ø¦ÙŠ.'));
+      this.error.set(this.i18n.text('No auto-fixable open issues found.', 'لا توجد مشكلات مفتوحة قابلة للإصلاح التلقائي.'));
       return;
     }
 
@@ -275,7 +275,7 @@ export class OperationsStudioPageComponent implements OnInit {
         issueIds,
         batchReference: `UI-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`
       }),
-      this.i18n.text('Fix batch applied.', 'ØªÙ… ØªØ·Ø¨ÙŠÙ‚ Ø¯ÙØ¹Ø© Ø§Ù„Ø¥ØµÙ„Ø§Ø­.')
+      this.i18n.text('Fix batch applied.', 'تم تطبيق دفعة الإصلاح.')
     );
   }
 
@@ -283,19 +283,19 @@ export class OperationsStudioPageComponent implements OnInit {
     const code = String(value ?? '').trim().toUpperCase();
     switch (code) {
       case 'REVIEWER':
-        return 'Ù…Ø±Ø­Ù„Ø© Ø§Ù„Ù…Ø±Ø§Ø¬Ø¹';
+        return 'مرحلة المراجع';
       case 'FINANCE':
-        return 'Ù…Ø±Ø­Ù„Ø© Ø§Ù„Ù…Ø§Ù„ÙŠØ©';
+        return 'مرحلة المالية';
       case 'FINAL':
-        return 'Ø§Ù„Ø§Ø¹ØªÙ…Ø§Ø¯ Ø§Ù„Ù†Ù‡Ø§Ø¦ÙŠ';
+        return 'الاعتماد النهائي';
       case 'WPS_MISSING':
-        return 'Ù†Ù‚Øµ Ø¨ÙŠØ§Ù†Ø§Øª Ø­Ù…Ø§ÙŠØ© Ø§Ù„Ø£Ø¬ÙˆØ±';
+        return 'نقص بيانات حماية الأجور';
       case 'GOSI_MISSING':
-        return 'Ù†Ù‚Øµ Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„ØªØ£Ù…ÙŠÙ†Ø§Øª Ø§Ù„Ø§Ø¬ØªÙ…Ø§Ø¹ÙŠØ©';
+        return 'نقص بيانات التأمينات الاجتماعية';
       case 'SAUDIZATION_GAP':
-        return 'ÙØ¬ÙˆØ© Ù†Ø³Ø¨Ø© Ø§Ù„Ø³Ø¹ÙˆØ¯Ø©';
+        return 'فجوة نسبة السعودة';
       case 'CONTRACT_EXPIRY':
-        return 'ØªÙ†Ø¨ÙŠÙ‡ Ø§Ù†ØªÙ‡Ø§Ø¡ Ø§Ù„Ø¹Ù‚Ø¯';
+        return 'تنبيه انتهاء العقد';
       case 'PROFILEUPDATE':
         return 'تحديث الملف الشخصي';
       case 'LEAVEREQUEST':
@@ -305,7 +305,7 @@ export class OperationsStudioPageComponent implements OnInit {
       case 'CONTRACTRENEWAL':
         return 'تجديد عقد';
       default:
-        return code ? 'Ø±Ù…Ø² Ù…Ø®ØµØµ' : 'ØºÙŠØ± Ù…Ø­Ø¯Ø¯';
+        return code ? 'رمز مخصص' : 'غير محدد';
     }
   }
 
@@ -313,7 +313,7 @@ export class OperationsStudioPageComponent implements OnInit {
     const channel = String(value ?? '').trim().toLowerCase();
     switch (channel) {
       case 'email':
-        return 'Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ø¥Ù„ÙƒØªØ±ÙˆÙ†ÙŠ';
+        return 'البريد الإلكتروني';
       default:
         return value ? 'قناة غير مدعومة' : 'غير محددة';
     }
@@ -329,7 +329,7 @@ export class OperationsStudioPageComponent implements OnInit {
         this.refresh();
       },
       error: () => {
-        this.error.set(this.i18n.text('Request failed.', 'ÙØ´Ù„ Ø§Ù„Ø·Ù„Ø¨.'));
+        this.error.set(this.i18n.text('Request failed.', 'فشل الطلب.'));
       },
       complete: () => this.saving.set(false)
     });
