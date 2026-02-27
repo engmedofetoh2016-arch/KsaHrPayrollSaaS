@@ -8,6 +8,7 @@ using HrPayroll.Domain.Entities;
 using HrPayroll.Domain.Enums;
 using HrPayroll.Infrastructure;
 using HrPayroll.Infrastructure.Auth;
+using HrPayroll.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -88,6 +89,7 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+await ApplyMigrationsOnStartupAsync(app);
 await IdentitySeeder.SeedRolesAsync(app.Services);
 await EnsureIntegrationNotificationTemplatesAsync(app.Services, app.Logger, CancellationToken.None);
 
@@ -10288,6 +10290,39 @@ static string? NormalizeIntegrationProviderName(string? rawProvider)
     }
 
     return null;
+}
+
+static async Task ApplyMigrationsOnStartupAsync(WebApplication app)
+{
+    var configured = app.Configuration["Database:RunMigrationsOnStartup"]
+        ?? app.Configuration["RUN_MIGRATIONS_ON_STARTUP"];
+
+    var shouldRun = configured is null
+        ? app.Environment.IsDevelopment()
+        : bool.TryParse(configured, out var parsed) && parsed;
+
+    if (!shouldRun)
+    {
+        app.Logger.LogInformation("Startup DB migration is disabled.");
+        return;
+    }
+
+    using var scope = app.Services.CreateScope();
+    var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+    var pendingMigrations = (await dbContext.Database.GetPendingMigrationsAsync()).ToArray();
+    if (pendingMigrations.Length == 0)
+    {
+        app.Logger.LogInformation("No pending EF Core migrations.");
+        return;
+    }
+
+    app.Logger.LogInformation("Applying {Count} EF Core migration(s): {Migrations}",
+        pendingMigrations.Length,
+        string.Join(", ", pendingMigrations));
+
+    await dbContext.Database.MigrateAsync();
+    app.Logger.LogInformation("EF Core migrations applied successfully.");
 }
 
 static async Task EnsureIntegrationNotificationTemplatesAsync(
