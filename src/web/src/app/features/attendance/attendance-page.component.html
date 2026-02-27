@@ -10,7 +10,7 @@
   <form class="form-grid" [formGroup]="form" (ngSubmit)="save()">
     <label>
       {{ i18n.text('Employee', 'الموظف') }}
-      <select formControlName="employeeId">
+      <select formControlName="employeeId" [disabled]="isEmployee()">
         <option value="">{{ i18n.text('Select employee', 'اختر موظفاً') }}</option>
         @for (employee of employees(); track employee.id) {
           <option [value]="employee.id">{{ employee.firstName }} {{ employee.lastName }}</option>

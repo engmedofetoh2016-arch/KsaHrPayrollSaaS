@@ -4956,10 +4956,12 @@ api.MapPost("/payroll/data-quality/fix-batch", [Authorize(Roles = RoleNames.Owne
     });
 });
 
-api.MapGet("/attendance-inputs", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] (
+api.MapGet("/attendance-inputs", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager + "," + RoleNames.Employee)] async (
     HttpRequest request,
+    HttpContext httpContext,
     IApplicationDbContext dbContext,
-    ILogger<Program> logger) =>
+    ILogger<Program> logger,
+    CancellationToken cancellationToken) =>
 {
     var safeYear = Math.Clamp(ReadQueryInt(request.Query, "year", DateTime.UtcNow.Year), 2000, 2100);
     var safeMonth = Math.Clamp(ReadQueryInt(request.Query, "month", DateTime.UtcNow.Month), 1, 12);
@@ -4972,6 +4974,36 @@ api.MapGet("/attendance-inputs", [Authorize(Roles = RoleNames.Owner + "," + Role
 
     try
     {
+        var canReview = httpContext.User.IsInRole(RoleNames.Owner) ||
+                        httpContext.User.IsInRole(RoleNames.Admin) ||
+                        httpContext.User.IsInRole(RoleNames.Hr) ||
+                        httpContext.User.IsInRole(RoleNames.Manager);
+
+        Guid? ownEmployeeId = null;
+        if (!canReview)
+        {
+            var userEmail = httpContext.User.Claims
+                .Where(x => x.Type is "email" or ClaimTypes.Email)
+                .Select(x => x.Value)
+                .FirstOrDefault();
+
+            if (string.IsNullOrWhiteSpace(userEmail))
+            {
+                return Results.BadRequest(new { error = "Your account email was not found in token." });
+            }
+
+            var normalizedEmail = userEmail.Trim().ToUpperInvariant();
+            ownEmployeeId = await dbContext.Employees
+                .Where(x => x.Email.ToUpper() == normalizedEmail)
+                .Select(x => (Guid?)x.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (!ownEmployeeId.HasValue)
+            {
+                return Results.BadRequest(new { error = "No employee profile linked to your account email." });
+            }
+        }
+
         var query = from attendance in dbContext.AttendanceInputs
                     join employee in dbContext.Employees on attendance.EmployeeId equals employee.Id
                     where attendance.Year == safeYear && attendance.Month == safeMonth
@@ -4987,18 +5019,23 @@ api.MapGet("/attendance-inputs", [Authorize(Roles = RoleNames.Owner + "," + Role
                         attendance.OvertimeHours
                     };
 
+        if (ownEmployeeId.HasValue)
+        {
+            query = query.Where(x => x.EmployeeId == ownEmployeeId.Value);
+        }
+
         if (search is not null)
         {
             query = query.Where(x => x.EmployeeName.ToLower().Contains(search));
         }
 
-        var total = query.Count();
+        var total = await query.CountAsync(cancellationToken);
 
-        var rows = query
+        var rows = await query
             .OrderBy(x => x.EmployeeName)
             .Skip((safePage - 1) * safePageSize)
             .Take(safePageSize)
-            .ToList();
+            .ToListAsync(cancellationToken);
 
         return Results.Ok(new { items = rows, total, page = safePage, pageSize = safePageSize, year = safeYear, month = safeMonth });
     }
@@ -5716,9 +5753,10 @@ api.MapPost("/compliance/ai-brief", [Authorize(Roles = RoleNames.Owner + "," + R
 })
     .AddEndpointFilter<ValidationFilter<ComplianceAiBriefRequest>>();
 
-api.MapPost("/attendance-inputs", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+api.MapPost("/attendance-inputs", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager + "," + RoleNames.Employee)] async (
     UpsertAttendanceInputRequest request,
     IApplicationDbContext dbContext,
+    HttpContext httpContext,
     CancellationToken cancellationToken) =>
 {
     if (request.Month is < 1 or > 12)
@@ -5734,6 +5772,40 @@ api.MapPost("/attendance-inputs", [Authorize(Roles = RoleNames.Owner + "," + Rol
     if (request.DaysPresent < 0 || request.DaysAbsent < 0 || request.OvertimeHours < 0)
     {
         return Results.BadRequest(new { error = "Attendance values cannot be negative." });
+    }
+
+    var canReview = httpContext.User.IsInRole(RoleNames.Owner) ||
+                    httpContext.User.IsInRole(RoleNames.Admin) ||
+                    httpContext.User.IsInRole(RoleNames.Hr) ||
+                    httpContext.User.IsInRole(RoleNames.Manager);
+
+    if (!canReview)
+    {
+        var userEmail = httpContext.User.Claims
+            .Where(x => x.Type is "email" or ClaimTypes.Email)
+            .Select(x => x.Value)
+            .FirstOrDefault();
+
+        if (string.IsNullOrWhiteSpace(userEmail))
+        {
+            return Results.BadRequest(new { error = "Your account email was not found in token." });
+        }
+
+        var normalizedEmail = userEmail.Trim().ToUpperInvariant();
+        var ownEmployeeId = await dbContext.Employees
+            .Where(x => x.Email.ToUpper() == normalizedEmail)
+            .Select(x => (Guid?)x.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (!ownEmployeeId.HasValue)
+        {
+            return Results.BadRequest(new { error = "No employee profile linked to your account email." });
+        }
+
+        if (request.EmployeeId != ownEmployeeId.Value)
+        {
+            return Results.Forbid();
+        }
     }
 
     var employeeExists = await dbContext.Employees.AnyAsync(x => x.Id == request.EmployeeId, cancellationToken);

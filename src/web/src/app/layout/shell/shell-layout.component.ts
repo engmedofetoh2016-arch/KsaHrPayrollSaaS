@@ -24,7 +24,7 @@ export class ShellLayoutComponent {
   readonly canAccessFinalSettlement = computed(() => this.auth.hasAnyRole(['Owner', 'Admin', 'HR']));
   readonly canAccessLoans = computed(() => this.auth.hasAnyRole(['Owner', 'Admin', 'HR']));
   readonly canAccessOffboarding = computed(() => this.auth.hasAnyRole(['Owner', 'Admin', 'HR', 'Manager']));
-  readonly canAccessAttendance = computed(() => this.auth.hasAnyRole(['Owner', 'Admin', 'HR', 'Manager']));
+  readonly canAccessAttendance = computed(() => this.auth.hasAnyRole(['Owner', 'Admin', 'HR', 'Manager', 'Employee']));
   readonly canAccessPayroll = computed(() => this.auth.hasAnyRole(['Owner', 'Admin', 'HR']));
   readonly canAccessSmartAlerts = computed(() => this.auth.hasAnyRole(['Owner', 'Admin', 'HR', 'Manager']));
   readonly canManageUsers = computed(() => this.auth.hasAnyRole(['Owner', 'Admin']));

@@ -1,11 +1,13 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { AttendanceInputRow } from '../../core/models/attendance.models';
 import { Employee } from '../../core/models/employee.models';
+import { AuthService } from '../../core/services/auth.service';
 import { AttendanceService } from '../../core/services/attendance.service';
 import { EmployeesService } from '../../core/services/employees.service';
 import { I18nService } from '../../core/services/i18n.service';
+import { MeService } from '../../core/services/me.service';
 import { getApiErrorMessage } from '../../core/utils/api-error.util';
 
 @Component({
@@ -17,9 +19,12 @@ import { getApiErrorMessage } from '../../core/utils/api-error.util';
 })
 export class AttendancePageComponent implements OnInit {
   private readonly fb = inject(FormBuilder);
+  private readonly auth = inject(AuthService);
+  private readonly meService = inject(MeService);
   private readonly attendanceService = inject(AttendanceService);
   private readonly employeesService = inject(EmployeesService);
   readonly i18n = inject(I18nService);
+  readonly isEmployee = computed(() => this.auth.hasAnyRole(['Employee']));
 
   readonly rows = signal<AttendanceInputRow[]>([]);
   readonly employees = signal<Employee[]>([]);
@@ -46,6 +51,49 @@ export class AttendancePageComponent implements OnInit {
   }
 
   loadEmployees() {
+    if (this.isEmployee()) {
+      this.meService.getProfile().subscribe({
+        next: (profile) => {
+          const employee = profile.employee;
+          if (!employee) {
+            this.error.set(getApiErrorMessage(null, 'No employee profile linked to this account.'));
+            this.employees.set([]);
+            this.form.patchValue({ employeeId: '' });
+            return;
+          }
+
+          const selfEmployee: Employee = {
+            id: employee.id,
+            startDate: employee.startDate,
+            firstName: employee.firstName,
+            lastName: employee.lastName,
+            email: employee.email,
+            jobTitle: employee.jobTitle,
+            baseSalary: employee.baseSalary,
+            employeeNumber: employee.employeeNumber,
+            bankName: employee.bankName,
+            bankIban: employee.bankIban,
+            iqamaNumber: employee.iqamaNumber,
+            iqamaExpiryDate: employee.iqamaExpiryDate ?? null,
+            workPermitExpiryDate: employee.workPermitExpiryDate ?? null,
+            contractEndDate: employee.contractEndDate ?? null,
+            tenantId: profile.user.tenantId,
+            gradeCode: undefined,
+            locationCode: undefined,
+            isSaudiNational: false,
+            isGosiEligible: false,
+            gosiBasicWage: 0,
+            gosiHousingAllowance: 0
+          };
+
+          this.employees.set([selfEmployee]);
+          this.form.patchValue({ employeeId: employee.id });
+        },
+        error: (err) => this.error.set(getApiErrorMessage(err, 'Failed to load employee profile for attendance input.'))
+      });
+      return;
+    }
+
     this.employeesService.list().subscribe({
       next: (employees) => {
         this.employees.set(employees);

@@ -62,7 +62,7 @@ export const routes: Routes = [
         canActivate: [roleGuard],
         data: { roles: ['Owner', 'Admin', 'HR', 'Manager'] }
       },
-      { path: 'attendance', component: AttendancePageComponent, canActivate: [roleGuard], data: { roles: ['Owner', 'Admin', 'HR', 'Manager'] } },
+      { path: 'attendance', component: AttendancePageComponent, canActivate: [roleGuard], data: { roles: ['Owner', 'Admin', 'HR', 'Manager', 'Employee'] } },
       { path: 'payroll', component: PayrollPageComponent, canActivate: [roleGuard], data: { roles: ['Owner', 'Admin', 'HR'] } },
       { path: 'operations-studio', component: OperationsStudioPageComponent, canActivate: [roleGuard], data: { roles: ['Owner', 'Admin', 'HR', 'Manager'] } },
       { path: 'smart-alerts', component: SmartAlertsPageComponent, canActivate: [roleGuard], data: { roles: ['Owner', 'Admin', 'HR', 'Manager'] } },
