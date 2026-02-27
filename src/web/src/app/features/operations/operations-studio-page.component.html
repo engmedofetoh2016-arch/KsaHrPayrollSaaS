@@ -1,10 +1,10 @@
-<section class="ops-page">
+﻿<section class="ops-page">
   <header>
-    <h1>{{ i18n.text('Operations Studio', 'استوديو العمليات') }}</h1>
-    <p>{{ i18n.text('Configure payroll workflows, compliance rules, forecasting, notifications, and data quality.', 'تهيئة سير عمل الرواتب وقواعد الامتثال والتنبؤات والإشعارات وجودة البيانات.') }}</p>
-    <button type="button" (click)="refresh()" [disabled]="loading() || saving()">{{ i18n.text('Refresh', 'تحديث') }}</button>
+    <h1>{{ i18n.text('Operations Studio', 'Ø§Ø³ØªÙˆØ¯ÙŠÙˆ Ø§Ù„Ø¹Ù…Ù„ÙŠØ§Øª') }}</h1>
+    <p>{{ i18n.text('Configure payroll workflows, compliance rules, forecasting, notifications, and data quality.', 'ØªÙ‡ÙŠØ¦Ø© Ø³ÙŠØ± Ø¹Ù…Ù„ Ø§Ù„Ø±ÙˆØ§ØªØ¨ ÙˆÙ‚ÙˆØ§Ø¹Ø¯ Ø§Ù„Ø§Ù…ØªØ«Ø§Ù„ ÙˆØ§Ù„ØªÙ†Ø¨Ø¤Ø§Øª ÙˆØ§Ù„Ø¥Ø´Ø¹Ø§Ø±Ø§Øª ÙˆØ¬ÙˆØ¯Ø© Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª.') }}</p>
+    <button type="button" (click)="refresh()" [disabled]="loading() || saving()">{{ i18n.text('Refresh', 'ØªØ­Ø¯ÙŠØ«') }}</button>
     <button type="button" class="toggle-codes" (click)="toggleTechnicalCodes()">
-      {{ showTechnicalCodes() ? i18n.text('Hide Technical Codes', 'إخفاء الأكواد التقنية') : i18n.text('Show Technical Codes', 'إظهار الأكواد التقنية') }}
+      {{ showTechnicalCodes() ? i18n.text('Hide Technical Codes', 'Ø¥Ø®ÙØ§Ø¡ Ø§Ù„Ø£ÙƒÙˆØ§Ø¯ Ø§Ù„ØªÙ‚Ù†ÙŠØ©') : i18n.text('Show Technical Codes', 'Ø¥Ø¸Ù‡Ø§Ø± Ø§Ù„Ø£ÙƒÙˆØ§Ø¯ Ø§Ù„ØªÙ‚Ù†ÙŠØ©') }}
     </button>
   </header>
 
@@ -17,37 +17,37 @@
 
   <div class="grid">
     <article>
-      <h2>{{ i18n.text('Allowance Matrix', 'مصفوفة البدلات') }}</h2>
+      <h2>{{ i18n.text('Allowance Matrix', 'Ù…ØµÙÙˆÙØ© Ø§Ù„Ø¨Ø¯Ù„Ø§Øª') }}</h2>
       <div class="form">
-        <input [(ngModel)]="allowanceForm.policyName" [placeholder]="i18n.text('Policy Name', 'اسم السياسة')" />
-        <input [(ngModel)]="allowanceForm.gradeCode" [placeholder]="i18n.text('Grade', 'الدرجة')" />
-        <input [(ngModel)]="allowanceForm.locationCode" [placeholder]="i18n.text('Location', 'الموقع')" />
-        <input [(ngModel)]="allowanceForm.housingAmount" type="number" [placeholder]="i18n.text('Housing', 'السكن')" />
-        <input [(ngModel)]="allowanceForm.transportAmount" type="number" [placeholder]="i18n.text('Transport', 'النقل')" />
-        <input [(ngModel)]="allowanceForm.mealAmount" type="number" [placeholder]="i18n.text('Meal', 'الوجبات')" />
+        <input [(ngModel)]="allowanceForm.policyName" [placeholder]="i18n.text('Policy Name', 'Ø§Ø³Ù… Ø§Ù„Ø³ÙŠØ§Ø³Ø©')" />
+        <input [(ngModel)]="allowanceForm.gradeCode" [placeholder]="i18n.text('Grade', 'Ø§Ù„Ø¯Ø±Ø¬Ø©')" />
+        <input [(ngModel)]="allowanceForm.locationCode" [placeholder]="i18n.text('Location', 'Ø§Ù„Ù…ÙˆÙ‚Ø¹')" />
+        <input [(ngModel)]="allowanceForm.housingAmount" type="number" [placeholder]="i18n.text('Housing', 'Ø§Ù„Ø³ÙƒÙ†')" />
+        <input [(ngModel)]="allowanceForm.transportAmount" type="number" [placeholder]="i18n.text('Transport', 'Ø§Ù„Ù†Ù‚Ù„')" />
+        <input [(ngModel)]="allowanceForm.mealAmount" type="number" [placeholder]="i18n.text('Meal', 'Ø§Ù„ÙˆØ¬Ø¨Ø§Øª')" />
         <input [(ngModel)]="allowanceForm.effectiveFrom" type="date" />
-        <button type="button" (click)="saveAllowanceMatrix()" [disabled]="saving()">{{ i18n.text('Save Matrix Row', 'حفظ سطر المصفوفة') }}</button>
+        <button type="button" (click)="saveAllowanceMatrix()" [disabled]="saving()">{{ i18n.text('Save Matrix Row', 'Ø­ÙØ¸ Ø³Ø·Ø± Ø§Ù„Ù…ØµÙÙˆÙØ©') }}</button>
       </div>
-      <small>{{ allowanceMatrix().length }} {{ i18n.text('rows', 'سجل') }}</small>
+      <small>{{ allowanceMatrix().length }} {{ i18n.text('rows', 'Ø³Ø¬Ù„') }}</small>
     </article>
 
     <article>
-      <h2>{{ i18n.text('Payroll Approval Matrix', 'مصفوفة اعتماد الرواتب') }}</h2>
+      <h2>{{ i18n.text('Payroll Approval Matrix', 'Ù…ØµÙÙˆÙØ© Ø§Ø¹ØªÙ…Ø§Ø¯ Ø§Ù„Ø±ÙˆØ§ØªØ¨') }}</h2>
       <div class="form">
-        <button type="button" (click)="seedApprovalMatrix()" [disabled]="saving()">{{ i18n.text('Seed Default Flow', 'تهيئة المسار الافتراضي') }}</button>
-        <input [(ngModel)]="stageForm.stageCode" [placeholder]="i18n.text('Stage Code', 'رمز المرحلة')" />
+        <button type="button" (click)="seedApprovalMatrix()" [disabled]="saving()">{{ i18n.text('Seed Default Flow', 'ØªÙ‡ÙŠØ¦Ø© Ø§Ù„Ù…Ø³Ø§Ø± Ø§Ù„Ø§ÙØªØ±Ø§Ø¶ÙŠ') }}</button>
+        <input [(ngModel)]="stageForm.stageCode" [placeholder]="i18n.text('Stage Code', 'Ø±Ù…Ø² Ø§Ù„Ù…Ø±Ø­Ù„Ø©')" />
         <small class="code-hint">
           {{ codeLabel(stageForm.stageCode) }}
           @if (showTechnicalCodes()) {
             <span class="code-tech">{{ stageForm.stageCode }}</span>
           }
         </small>
-        <input [(ngModel)]="stageForm.stageName" [placeholder]="i18n.text('Stage Name', 'اسم المرحلة')" />
-        <input [(ngModel)]="stageForm.stageOrder" type="number" [placeholder]="i18n.text('Order', 'الترتيب')" />
-        <input [(ngModel)]="stageForm.approverRole" [placeholder]="i18n.text('Approver Role', 'دور المعتمد')" />
-        <button type="button" (click)="saveApprovalStage()" [disabled]="saving()">{{ i18n.text('Save Stage', 'حفظ المرحلة') }}</button>
+        <input [(ngModel)]="stageForm.stageName" [placeholder]="i18n.text('Stage Name', 'Ø§Ø³Ù… Ø§Ù„Ù…Ø±Ø­Ù„Ø©')" />
+        <input [(ngModel)]="stageForm.stageOrder" type="number" [placeholder]="i18n.text('Order', 'Ø§Ù„ØªØ±ØªÙŠØ¨')" />
+        <input [(ngModel)]="stageForm.approverRole" [placeholder]="i18n.text('Approver Role', 'Ø¯ÙˆØ± Ø§Ù„Ù…Ø¹ØªÙ…Ø¯')" />
+        <button type="button" (click)="saveApprovalStage()" [disabled]="saving()">{{ i18n.text('Save Stage', 'Ø­ÙØ¸ Ø§Ù„Ù…Ø±Ø­Ù„Ø©') }}</button>
       </div>
-      <small>{{ approvalMatrix().length }} {{ i18n.text('active stages', 'مرحلة نشطة') }}</small>
+      <small>{{ approvalMatrix().length }} {{ i18n.text('active stages', 'Ù…Ø±Ø­Ù„Ø© Ù†Ø´Ø·Ø©') }}</small>
       <ul>
         @for (item of approvalMatrix(); track item.id) {
           <li>
@@ -61,22 +61,22 @@
     </article>
 
     <article>
-      <h2>{{ i18n.text('Compliance Rules Studio', 'استوديو قواعد الامتثال') }}</h2>
+      <h2>{{ i18n.text('Compliance Rules Studio', 'Ø§Ø³ØªÙˆØ¯ÙŠÙˆ Ù‚ÙˆØ§Ø¹Ø¯ Ø§Ù„Ø§Ù…ØªØ«Ø§Ù„') }}</h2>
       <div class="form">
-        <input [(ngModel)]="ruleForm.ruleCode" [placeholder]="i18n.text('Rule Code', 'رمز القاعدة')" />
+        <input [(ngModel)]="ruleForm.ruleCode" [placeholder]="i18n.text('Rule Code', 'Ø±Ù…Ø² Ø§Ù„Ù‚Ø§Ø¹Ø¯Ø©')" />
         <small class="code-hint">
           {{ codeLabel(ruleForm.ruleCode) }}
           @if (showTechnicalCodes()) {
             <span class="code-tech">{{ ruleForm.ruleCode }}</span>
           }
         </small>
-        <input [(ngModel)]="ruleForm.ruleName" [placeholder]="i18n.text('Rule Name', 'اسم القاعدة')" />
-        <input [(ngModel)]="ruleForm.ruleCategory" [placeholder]="i18n.text('Category', 'الفئة')" />
-        <input [(ngModel)]="ruleForm.severity" [placeholder]="i18n.text('Severity', 'الأولوية')" />
-        <textarea [(ngModel)]="ruleForm.ruleConfigJson" rows="3" [placeholder]="i18n.text('Rule Config JSON', 'إعداد القاعدة (JSON)')"></textarea>
-        <button type="button" (click)="saveComplianceRule()" [disabled]="saving()">{{ i18n.text('Save Rule', 'حفظ القاعدة') }}</button>
+        <input [(ngModel)]="ruleForm.ruleName" [placeholder]="i18n.text('Rule Name', 'Ø§Ø³Ù… Ø§Ù„Ù‚Ø§Ø¹Ø¯Ø©')" />
+        <input [(ngModel)]="ruleForm.ruleCategory" [placeholder]="i18n.text('Category', 'Ø§Ù„ÙØ¦Ø©')" />
+        <input [(ngModel)]="ruleForm.severity" [placeholder]="i18n.text('Severity', 'Ø§Ù„Ø£ÙˆÙ„ÙˆÙŠØ©')" />
+        <textarea [(ngModel)]="ruleForm.ruleConfigJson" rows="3" [placeholder]="i18n.text('Rule Config JSON', 'Ø¥Ø¹Ø¯Ø§Ø¯ Ø§Ù„Ù‚Ø§Ø¹Ø¯Ø© (JSON)')"></textarea>
+        <button type="button" (click)="saveComplianceRule()" [disabled]="saving()">{{ i18n.text('Save Rule', 'Ø­ÙØ¸ Ø§Ù„Ù‚Ø§Ø¹Ø¯Ø©') }}</button>
       </div>
-      <small>{{ complianceRules().length }} {{ i18n.text('enabled rules', 'قاعدة مفعلة') }}</small>
+      <small>{{ complianceRules().length }} {{ i18n.text('enabled rules', 'Ù‚Ø§Ø¹Ø¯Ø© Ù…ÙØ¹Ù„Ø©') }}</small>
       <ul>
         @for (item of complianceRules(); track item.id) {
           <li>
@@ -90,53 +90,60 @@
     </article>
 
     <article>
-      <h2>{{ i18n.text('Analytics & Forecasting', 'التحليلات والتنبؤ') }}</h2>
+      <h2>{{ i18n.text('Analytics & Forecasting', 'Ø§Ù„ØªØ­Ù„ÙŠÙ„Ø§Øª ÙˆØ§Ù„ØªÙ†Ø¨Ø¤') }}</h2>
       <div class="form">
-        <input [(ngModel)]="forecastForm.scenarioName" [placeholder]="i18n.text('Scenario Name', 'اسم السيناريو')" />
-        <input [(ngModel)]="forecastForm.plannedSaudiHires" type="number" [placeholder]="i18n.text('Saudi Hires', 'توظيف سعوديين')" />
-        <input [(ngModel)]="forecastForm.plannedNonSaudiHires" type="number" [placeholder]="i18n.text('Non-Saudi Hires', 'توظيف غير سعوديين')" />
-        <input [(ngModel)]="forecastForm.plannedAttrition" type="number" [placeholder]="i18n.text('Attrition', 'الاستقالات/المغادرات')" />
-        <input [(ngModel)]="forecastForm.plannedSalaryDeltaPercent" type="number" [placeholder]="i18n.text('Salary Delta %', 'نسبة تغير الرواتب %')" />
-        <button type="button" (click)="createForecastScenario()" [disabled]="saving()">{{ i18n.text('Create Scenario', 'إنشاء سيناريو') }}</button>
+        <input [(ngModel)]="forecastForm.scenarioName" [placeholder]="i18n.text('Scenario Name', 'Ø§Ø³Ù… Ø§Ù„Ø³ÙŠÙ†Ø§Ø±ÙŠÙˆ')" />
+        <input [(ngModel)]="forecastForm.plannedSaudiHires" type="number" [placeholder]="i18n.text('Saudi Hires', 'ØªÙˆØ¸ÙŠÙ Ø³Ø¹ÙˆØ¯ÙŠÙŠÙ†')" />
+        <input [(ngModel)]="forecastForm.plannedNonSaudiHires" type="number" [placeholder]="i18n.text('Non-Saudi Hires', 'ØªÙˆØ¸ÙŠÙ ØºÙŠØ± Ø³Ø¹ÙˆØ¯ÙŠÙŠÙ†')" />
+        <input [(ngModel)]="forecastForm.plannedAttrition" type="number" [placeholder]="i18n.text('Attrition', 'Ø§Ù„Ø§Ø³ØªÙ‚Ø§Ù„Ø§Øª/Ø§Ù„Ù…ØºØ§Ø¯Ø±Ø§Øª')" />
+        <input [(ngModel)]="forecastForm.plannedSalaryDeltaPercent" type="number" [placeholder]="i18n.text('Salary Delta %', 'Ù†Ø³Ø¨Ø© ØªØºÙŠØ± Ø§Ù„Ø±ÙˆØ§ØªØ¨ %')" />
+        <button type="button" (click)="createForecastScenario()" [disabled]="saving()">{{ i18n.text('Create Scenario', 'Ø¥Ù†Ø´Ø§Ø¡ Ø³ÙŠÙ†Ø§Ø±ÙŠÙˆ') }}</button>
       </div>
       <ul>
         @for (item of forecastScenarios(); track item.id) {
           <li>
             {{ item.scenarioName }}
-            <button type="button" (click)="runForecastScenario(item.id)" [disabled]="saving()">{{ i18n.text('Run', 'تشغيل') }}</button>
+            <button type="button" (click)="runForecastScenario(item.id)" [disabled]="saving()">{{ i18n.text('Run', 'ØªØ´ØºÙŠÙ„') }}</button>
+          </li>
+        }
+      </ul>
+    </article>
+    <article>
+      <h2>{{ i18n.text('ESS Requests Review', 'مراجعة طلبات الخدمة الذاتية') }}</h2>
+      <small>{{ selfServiceRequests().length }} {{ i18n.text('submitted requests', 'طلبات مرسلة') }}</small>
+      <ul>
+        @for (item of selfServiceRequests(); track item.id) {
+          <li>
+            <span>{{ item.employeeName || '-' }} - {{ codeLabel(item.requestType) }} ({{ item.status }})</span>
+            <button type="button" (click)="reviewSelfServiceRequest(item.id, true)" [disabled]="saving()">{{ i18n.text('Approve', 'اعتماد') }}</button>
+            <button type="button" (click)="reviewSelfServiceRequest(item.id, false)" [disabled]="saving()">{{ i18n.text('Reject', 'رفض') }}</button>
           </li>
         }
       </ul>
     </article>
 
     <article>
-      <h2>{{ i18n.text('Notification Center', 'مركز الإشعارات') }}</h2>
+      <h2>{{ i18n.text('Notification Center', 'Ù…Ø±ÙƒØ² Ø§Ù„Ø¥Ø´Ø¹Ø§Ø±Ø§Øª') }}</h2>
       <div class="form">
-        <input [(ngModel)]="templateForm.templateCode" [placeholder]="i18n.text('Template Code', 'رمز القالب')" />
+        <input [(ngModel)]="templateForm.templateCode" [placeholder]="i18n.text('Template Code', 'Ø±Ù…Ø² Ø§Ù„Ù‚Ø§Ù„Ø¨')" />
         <small class="code-hint">
           {{ codeLabel(templateForm.templateCode) }}
           @if (showTechnicalCodes()) {
             <span class="code-tech">{{ templateForm.templateCode }}</span>
           }
         </small>
-        <input [(ngModel)]="templateForm.channel" [placeholder]="i18n.text('Channel', 'القناة')" />
-        <small class="code-hint">
-          {{ channelLabel(templateForm.channel) }}
-          @if (showTechnicalCodes()) {
-            <span class="code-tech">{{ templateForm.channel }}</span>
-          }
-        </small>
-        <input [(ngModel)]="templateForm.subject" [placeholder]="i18n.text('Subject', 'العنوان')" />
-        <textarea [(ngModel)]="templateForm.body" rows="2" [placeholder]="i18n.text('Body', 'النص')"></textarea>
-        <button type="button" (click)="saveNotificationTemplate()" [disabled]="saving()">{{ i18n.text('Save Template', 'حفظ القالب') }}</button>
+        <input [value]="i18n.text('Email only', 'Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ø¥Ù„ÙƒØªØ±ÙˆÙ†ÙŠ ÙÙ‚Ø·')" readonly />
+        <input [(ngModel)]="templateForm.subject" [placeholder]="i18n.text('Subject', 'Ø§Ù„Ø¹Ù†ÙˆØ§Ù†')" />
+        <textarea [(ngModel)]="templateForm.body" rows="2" [placeholder]="i18n.text('Body', 'Ø§Ù„Ù†Øµ')"></textarea>
+        <button type="button" (click)="saveNotificationTemplate()" [disabled]="saving()">{{ i18n.text('Save Template', 'Ø­ÙØ¸ Ø§Ù„Ù‚Ø§Ù„Ø¨') }}</button>
       </div>
       <div class="form">
-        <input [(ngModel)]="queueForm.recipientValue" [placeholder]="i18n.text('Recipient', 'المستلم')" />
-        <input [(ngModel)]="queueForm.channel" [placeholder]="i18n.text('Channel', 'القناة')" />
-        <input [(ngModel)]="queueForm.templateCode" [placeholder]="i18n.text('Template Code', 'رمز القالب')" />
-        <button type="button" (click)="enqueueNotification()" [disabled]="saving()">{{ i18n.text('Queue Notification', 'جدولة الإشعار') }}</button>
+        <input [(ngModel)]="queueForm.recipientValue" [placeholder]="i18n.text('Recipient', 'Ø§Ù„Ù…Ø³ØªÙ„Ù…')" />
+        <input [value]="i18n.text('Email only', 'Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ø¥Ù„ÙƒØªØ±ÙˆÙ†ÙŠ ÙÙ‚Ø·')" readonly />
+        <input [(ngModel)]="queueForm.templateCode" [placeholder]="i18n.text('Template Code', 'Ø±Ù…Ø² Ø§Ù„Ù‚Ø§Ù„Ø¨')" />
+        <button type="button" (click)="enqueueNotification()" [disabled]="saving()">{{ i18n.text('Queue Notification', 'Ø¬Ø¯ÙˆÙ„Ø© Ø§Ù„Ø¥Ø´Ø¹Ø§Ø±') }}</button>
       </div>
-      <small>{{ notificationTemplates().length }} {{ i18n.text('templates', 'قالب') }}, {{ notificationQueue().length }} {{ i18n.text('queue records', 'سجل انتظار') }}</small>
+      <small>{{ notificationTemplates().length }} {{ i18n.text('templates', 'Ù‚Ø§Ù„Ø¨') }}, {{ notificationQueue().length }} {{ i18n.text('queue records', 'Ø³Ø¬Ù„ Ø§Ù†ØªØ¸Ø§Ø±') }}</small>
       <ul>
         @for (item of notificationTemplates(); track item.id) {
           <li>
@@ -150,12 +157,13 @@
     </article>
 
     <article>
-      <h2>{{ i18n.text('Data Quality & Reconciliation', 'جودة البيانات والمطابقة') }}</h2>
+      <h2>{{ i18n.text('Data Quality & Reconciliation', 'Ø¬ÙˆØ¯Ø© Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª ÙˆØ§Ù„Ù…Ø·Ø§Ø¨Ù‚Ø©') }}</h2>
       <div class="form">
-        <button type="button" (click)="runDataQualityScan()" [disabled]="saving()">{{ i18n.text('Run Scan', 'تشغيل الفحص') }}</button>
-        <button type="button" (click)="fixOpenIssues()" [disabled]="saving()">{{ i18n.text('Apply Auto Fixes', 'تطبيق الإصلاحات التلقائية') }}</button>
+        <button type="button" (click)="runDataQualityScan()" [disabled]="saving()">{{ i18n.text('Run Scan', 'ØªØ´ØºÙŠÙ„ Ø§Ù„ÙØ­Øµ') }}</button>
+        <button type="button" (click)="fixOpenIssues()" [disabled]="saving()">{{ i18n.text('Apply Auto Fixes', 'ØªØ·Ø¨ÙŠÙ‚ Ø§Ù„Ø¥ØµÙ„Ø§Ø­Ø§Øª Ø§Ù„ØªÙ„Ù‚Ø§Ø¦ÙŠØ©') }}</button>
       </div>
-      <small>{{ dataQualityIssues().length }} {{ i18n.text('open issues', 'مشكلة مفتوحة') }}</small>
+      <small>{{ dataQualityIssues().length }} {{ i18n.text('open issues', 'Ù…Ø´ÙƒÙ„Ø© Ù…ÙØªÙˆØ­Ø©') }}</small>
     </article>
   </div>
 </section>
+

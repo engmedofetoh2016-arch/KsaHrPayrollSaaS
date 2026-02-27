@@ -47,7 +47,15 @@ export class AttendancePageComponent implements OnInit {
 
   loadEmployees() {
     this.employeesService.list().subscribe({
-      next: (employees) => this.employees.set(employees),
+      next: (employees) => {
+        this.employees.set(employees);
+
+        const currentEmployeeId = String(this.form.getRawValue().employeeId ?? '').trim();
+        const exists = employees.some((x) => x.id === currentEmployeeId);
+        if (!exists) {
+          this.form.patchValue({ employeeId: employees[0]?.id ?? '' });
+        }
+      },
       error: (err) => this.error.set(getApiErrorMessage(err, 'Failed to load employees for attendance input.'))
     });
   }
@@ -73,6 +81,11 @@ export class AttendancePageComponent implements OnInit {
   }
 
   save() {
+    if (this.employees().length === 0) {
+      this.error.set(this.i18n.text('No employees available. Add employees first.', 'لا يوجد موظفون متاحون. أضف موظفين أولًا.'));
+      return;
+    }
+
     if (this.form.invalid || this.filterForm.invalid || this.saving()) {
       this.form.markAllAsTouched();
       this.filterForm.markAllAsTouched();

@@ -814,20 +814,9 @@ public class Worker : BackgroundService
                         item.ErrorMessage = string.Empty;
                         break;
 
-                    case "SMS":
-                    case "WHATSAPP":
-                    case "INAPP":
-                    case "IN-APP":
-                        // External providers are not wired yet, so this acts as an operationally successful simulated dispatch.
-                        item.Status = "Sent";
-                        item.ProviderMessageId = $"SIM-{channel}-{nowUtc:yyyyMMddHHmmss}";
-                        item.SentAtUtc = nowUtc;
-                        item.ErrorMessage = string.Empty;
-                        break;
-
                     default:
                         item.Status = "Failed";
-                        item.ErrorMessage = $"Unsupported notification channel '{item.Channel}'.";
+                        item.ErrorMessage = $"Channel '{item.Channel}' is not supported. Only Email is enabled.";
                         item.SentAtUtc = nowUtc;
                         break;
                 }

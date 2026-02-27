@@ -12,6 +12,7 @@ import { EmployeesPageComponent } from './features/employees/employees-page.comp
 import { MyPayslipsPageComponent } from './features/employee/my-payslips-page.component';
 import { MyProfilePageComponent } from './features/employee/my-profile-page.component';
 import { MySelfServicePageComponent } from './features/employee/my-self-service-page.component';
+import { EssReviewHistoryPageComponent } from './features/employee/ess-review-history-page.component';
 import { MySalaryCertificatePageComponent } from './features/employee/my-salary-certificate-page.component';
 import { MyEosEstimatePageComponent } from './features/employee/my-eos-estimate-page.component';
 import { FinalSettlementPageComponent } from './features/final-settlement/final-settlement-page.component';
@@ -51,6 +52,7 @@ export const routes: Routes = [
       { path: 'leave/my', component: MyLeavePageComponent },
       { path: 'employee/profile', component: MyProfilePageComponent, canActivate: [roleGuard], data: { roles: ['Employee'] } },
       { path: 'employee/self-service', component: MySelfServicePageComponent, canActivate: [roleGuard], data: { roles: ['Employee'] } },
+      { path: 'employee/self-service/review-history', component: EssReviewHistoryPageComponent, canActivate: [roleGuard], data: { roles: ['Owner', 'Admin', 'HR', 'Manager'] } },
       { path: 'employee/payslips', component: MyPayslipsPageComponent, canActivate: [roleGuard], data: { roles: ['Employee'] } },
       { path: 'employee/salary-certificate', component: MySalaryCertificatePageComponent, canActivate: [roleGuard], data: { roles: ['Employee'] } },
       { path: 'employee/eos-estimate', component: MyEosEstimatePageComponent, canActivate: [roleGuard], data: { roles: ['Employee'] } },

@@ -1,0 +1,97 @@
+<section class="ess-review-page">
+  <header>
+    <h2>{{ i18n.text('ESS Review History', 'سجل مراجعة طلبات الخدمة الذاتية') }}</h2>
+    <p>{{ i18n.text('Track submitted, approved, and rejected employee self-service requests.', 'متابعة طلبات الخدمة الذاتية المرسلة والمعتمدة والمرفوضة.') }}</p>
+  </header>
+
+  @if (error()) {
+    <p class="error">{{ error() }}</p>
+  }
+  @if (message()) {
+    <p class="message">{{ message() }}</p>
+  }
+
+  <div class="card filters">
+    <label>
+      {{ i18n.text('Status', 'الحالة') }}
+      <select [(ngModel)]="statusFilter">
+        <option value="All">{{ i18n.text('All', 'الكل') }}</option>
+        <option value="Submitted">{{ i18n.text('Submitted', 'مرسل') }}</option>
+        <option value="Approved">{{ i18n.text('Approved', 'معتمد') }}</option>
+        <option value="Rejected">{{ i18n.text('Rejected', 'مرفوض') }}</option>
+      </select>
+    </label>
+    <label>
+      {{ i18n.text('Type', 'النوع') }}
+      <select [(ngModel)]="typeFilter">
+        <option value="All">{{ i18n.text('All', 'الكل') }}</option>
+        <option value="ProfileUpdate">{{ i18n.text('Profile Update', 'تحديث الملف') }}</option>
+        <option value="LeaveRequest">{{ i18n.text('Leave Request', 'طلب إجازة') }}</option>
+        <option value="LoanRequest">{{ i18n.text('Loan Request', 'طلب قرض') }}</option>
+        <option value="ContractRenewal">{{ i18n.text('Contract Renewal', 'تجديد عقد') }}</option>
+      </select>
+    </label>
+    <label>
+      {{ i18n.text('Rows', 'عدد السجلات') }}
+      <input type="number" min="10" max="1000" [(ngModel)]="take" />
+    </label>
+    <button type="button" (click)="load()" [disabled]="loading() || saving()">{{ i18n.text('Apply Filters', 'تطبيق الفلاتر') }}</button>
+  </div>
+
+  <div class="content-grid">
+    <div class="card">
+      <h3>{{ i18n.text('Requests', 'الطلبات') }}</h3>
+      @if (loading()) {
+        <p>{{ i18n.text('Loading...', 'جاري التحميل...') }}</p>
+      } @else if (items().length === 0) {
+        <p>{{ i18n.text('No records found.', 'لا توجد سجلات.') }}</p>
+      } @else {
+        <table>
+          <thead>
+            <tr>
+              <th>{{ i18n.text('Employee', 'الموظف') }}</th>
+              <th>{{ i18n.text('Type', 'النوع') }}</th>
+              <th>{{ i18n.text('Status', 'الحالة') }}</th>
+              <th>{{ i18n.text('Created', 'الإنشاء') }}</th>
+              <th>{{ i18n.text('Action', 'إجراء') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (item of items(); track item.id) {
+              <tr [class.selected]="selected()?.id === item.id">
+                <td>{{ item.employeeName }}</td>
+                <td>{{ requestTypeLabel(item.requestType) }}</td>
+                <td>{{ statusLabel(item.status) }}</td>
+                <td>{{ item.createdAtUtc }}</td>
+                <td><button type="button" class="link-btn" (click)="selectItem(item)">{{ i18n.text('Preview', 'معاينة') }}</button></td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+    </div>
+
+    <div class="card">
+      <h3>{{ i18n.text('Payload Preview', 'معاينة البيانات') }}</h3>
+      @if (selected(); as item) {
+        <p><strong>{{ i18n.text('Employee', 'الموظف') }}:</strong> {{ item.employeeName }} ({{ item.email || '-' }})</p>
+        <p><strong>{{ i18n.text('Type', 'النوع') }}:</strong> {{ requestTypeLabel(item.requestType) }}</p>
+        <p><strong>{{ i18n.text('Status', 'الحالة') }}:</strong> {{ statusLabel(item.status) }}</p>
+        <p><strong>{{ i18n.text('Reviewed At', 'تاريخ المراجعة') }}:</strong> {{ item.reviewedAtUtc || '-' }}</p>
+        <label>
+          {{ i18n.text('Review Notes', 'ملاحظات المراجعة') }}
+          <textarea rows="3" [ngModel]="reviewNotes()" (ngModelChange)="reviewNotes.set($event)"></textarea>
+        </label>
+        @if (item.status === 'Submitted') {
+          <div class="actions">
+            <button type="button" (click)="reviewSelected(true)" [disabled]="saving()">{{ i18n.text('Approve', 'اعتماد') }}</button>
+            <button type="button" class="danger" (click)="reviewSelected(false)" [disabled]="saving()">{{ i18n.text('Reject', 'رفض') }}</button>
+          </div>
+        }
+        <pre>{{ payloadPreview() }}</pre>
+      } @else {
+        <p>{{ i18n.text('Select a request to preview payload.', 'اختر طلبًا لمعاينة البيانات.') }}</p>
+      }
+    </div>
+  </div>
+</section>

@@ -1,4 +1,4 @@
-import { CommonModule } from '@angular/common';
+﻿import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -31,9 +31,10 @@ export class OperationsStudioPageComponent implements OnInit {
   readonly notificationTemplates = signal<any[]>([]);
   readonly notificationQueue = signal<any[]>([]);
   readonly dataQualityIssues = signal<any[]>([]);
+  readonly selfServiceRequests = signal<any[]>([]);
 
   readonly allowanceForm = {
-    policyName: 'قياسي',
+    policyName: 'Ù‚ÙŠØ§Ø³ÙŠ',
     gradeCode: 'G1',
     locationCode: 'RIYADH',
     housingAmount: 1000,
@@ -49,7 +50,7 @@ export class OperationsStudioPageComponent implements OnInit {
   readonly stageForm = {
     payrollScope: 'Default',
     stageCode: 'REVIEWER',
-    stageName: 'مراجع',
+    stageName: 'Ù…Ø±Ø§Ø¬Ø¹',
     stageOrder: 1,
     approverRole: 'Manager',
     allowRollback: true,
@@ -58,7 +59,7 @@ export class OperationsStudioPageComponent implements OnInit {
 
   readonly ruleForm = {
     ruleCode: 'WPS_MISSING',
-    ruleName: 'نقص بيانات حماية الأجور',
+    ruleName: 'Ù†Ù‚Øµ Ø¨ÙŠØ§Ù†Ø§Øª Ø­Ù…Ø§ÙŠØ© Ø§Ù„Ø£Ø¬ÙˆØ±',
     ruleCategory: 'WPS',
     severity: 'Critical',
     ruleConfigJson: '{"daysThreshold":3}',
@@ -66,7 +67,7 @@ export class OperationsStudioPageComponent implements OnInit {
   };
 
   readonly forecastForm = {
-    scenarioName: 'سيناريو شهري',
+    scenarioName: 'Ø³ÙŠÙ†Ø§Ø±ÙŠÙˆ Ø´Ù‡Ø±ÙŠ',
     basePayrollRunId: '',
     plannedSaudiHires: 1,
     plannedNonSaudiHires: 0,
@@ -78,8 +79,8 @@ export class OperationsStudioPageComponent implements OnInit {
   readonly templateForm = {
     templateCode: 'CONTRACT_EXPIRY',
     channel: 'Email',
-    subject: 'انتهاء العقد قريب',
-    body: 'سينتهي عقدك قريبًا. يرجى المراجعة.',
+    subject: 'Ø§Ù†ØªÙ‡Ø§Ø¡ Ø§Ù„Ø¹Ù‚Ø¯ Ù‚Ø±ÙŠØ¨',
+    body: 'Ø³ÙŠÙ†ØªÙ‡ÙŠ Ø¹Ù‚Ø¯Ùƒ Ù‚Ø±ÙŠØ¨Ù‹Ø§. ÙŠØ±Ø¬Ù‰ Ø§Ù„Ù…Ø±Ø§Ø¬Ø¹Ø©.',
     isActive: true
   };
 
@@ -111,6 +112,7 @@ export class OperationsStudioPageComponent implements OnInit {
       approvalMatrix: this.http.get<any>(`${this.base}/payroll/approval-matrix?payrollScope=Default`).pipe(catchError(() => of([]))),
       complianceRules: this.http.get<any>(`${this.base}/compliance/rules?enabledOnly=true`).pipe(catchError(() => of({ items: [] }))),
       forecastScenarios: this.http.get<any>(`${this.base}/analytics/payroll-forecast/scenarios`).pipe(catchError(() => of({ items: [] }))),
+      selfServiceRequests: this.http.get<any>(`${this.base}/self-service/requests?status=Submitted&take=100`).pipe(catchError(() => of({ items: [] }))),
       notificationTemplates: this.http.get<any>(`${this.base}/notifications/templates`).pipe(catchError(() => of({ items: [] }))),
       notificationQueue: this.http.get<any>(`${this.base}/notifications/queue?take=50`).pipe(catchError(() => of({ items: [] }))),
       dataQualityIssues: this.http.get<any>(`${this.base}/payroll/data-quality/issues?status=Open&take=100`).pipe(catchError(() => of({ items: [] })))
@@ -120,11 +122,12 @@ export class OperationsStudioPageComponent implements OnInit {
         this.approvalMatrix.set(Array.isArray(response.approvalMatrix) ? response.approvalMatrix : []);
         this.complianceRules.set(Array.isArray(response.complianceRules?.items) ? response.complianceRules.items : []);
         this.forecastScenarios.set(Array.isArray(response.forecastScenarios?.items) ? response.forecastScenarios.items : []);
+        this.selfServiceRequests.set(Array.isArray(response.selfServiceRequests?.items) ? response.selfServiceRequests.items : []);
         this.notificationTemplates.set(Array.isArray(response.notificationTemplates?.items) ? response.notificationTemplates.items : []);
         this.notificationQueue.set(Array.isArray(response.notificationQueue?.items) ? response.notificationQueue.items : []);
         this.dataQualityIssues.set(Array.isArray(response.dataQualityIssues?.items) ? response.dataQualityIssues.items : []);
       },
-      error: () => this.error.set(this.i18n.text('Failed to load operations studio.', 'تعذر تحميل استوديو العمليات.')),
+      error: () => this.error.set(this.i18n.text('Failed to load operations studio.', 'ØªØ¹Ø°Ø± ØªØ­Ù…ÙŠÙ„ Ø§Ø³ØªÙˆØ¯ÙŠÙˆ Ø§Ù„Ø¹Ù…Ù„ÙŠØ§Øª.')),
       complete: () => this.loading.set(false)
     });
   }
@@ -144,14 +147,14 @@ export class OperationsStudioPageComponent implements OnInit {
         isTaxable: !!this.allowanceForm.isTaxable,
         isActive: !!this.allowanceForm.isActive
       }),
-      this.i18n.text('Allowance matrix saved.', 'تم حفظ مصفوفة البدلات.')
+      this.i18n.text('Allowance matrix saved.', 'ØªÙ… Ø­ÙØ¸ Ù…ØµÙÙˆÙØ© Ø§Ù„Ø¨Ø¯Ù„Ø§Øª.')
     );
   }
 
   seedApprovalMatrix() {
     this.runSave(
       this.http.post(`${this.base}/payroll/approval-matrix/seed-default`, {}),
-      this.i18n.text('Default approval matrix seeded.', 'تم إنشاء مصفوفة الاعتماد الافتراضية.')
+      this.i18n.text('Default approval matrix seeded.', 'ØªÙ… Ø¥Ù†Ø´Ø§Ø¡ Ù…ØµÙÙˆÙØ© Ø§Ù„Ø§Ø¹ØªÙ…Ø§Ø¯ Ø§Ù„Ø§ÙØªØ±Ø§Ø¶ÙŠØ©.')
     );
   }
 
@@ -166,7 +169,7 @@ export class OperationsStudioPageComponent implements OnInit {
         allowRollback: !!this.stageForm.allowRollback,
         isActive: !!this.stageForm.isActive
       }),
-      this.i18n.text('Approval stage saved.', 'تم حفظ مرحلة الاعتماد.')
+      this.i18n.text('Approval stage saved.', 'ØªÙ… Ø­ÙØ¸ Ù…Ø±Ø­Ù„Ø© Ø§Ù„Ø§Ø¹ØªÙ…Ø§Ø¯.')
     );
   }
 
@@ -180,7 +183,7 @@ export class OperationsStudioPageComponent implements OnInit {
         ruleConfigJson: this.ruleForm.ruleConfigJson,
         isEnabled: !!this.ruleForm.isEnabled
       }),
-      this.i18n.text('Compliance rule saved.', 'تم حفظ قاعدة الامتثال.')
+      this.i18n.text('Compliance rule saved.', 'ØªÙ… Ø­ÙØ¸ Ù‚Ø§Ø¹Ø¯Ø© Ø§Ù„Ø§Ù…ØªØ«Ø§Ù„.')
     );
   }
 
@@ -195,14 +198,14 @@ export class OperationsStudioPageComponent implements OnInit {
         plannedSalaryDeltaPercent: Number(this.forecastForm.plannedSalaryDeltaPercent || 0),
         assumptionsJson: this.forecastForm.assumptionsJson || '{}'
       }),
-      this.i18n.text('Forecast scenario created.', 'تم إنشاء سيناريو التنبؤ.')
+      this.i18n.text('Forecast scenario created.', 'ØªÙ… Ø¥Ù†Ø´Ø§Ø¡ Ø³ÙŠÙ†Ø§Ø±ÙŠÙˆ Ø§Ù„ØªÙ†Ø¨Ø¤.')
     );
   }
 
   runForecastScenario(scenarioId: string) {
     this.runSave(
       this.http.post(`${this.base}/analytics/payroll-forecast/scenarios/${scenarioId}/run`, {}),
-      this.i18n.text('Forecast run completed.', 'تم تنفيذ التنبؤ.')
+      this.i18n.text('Forecast run completed.', 'ØªÙ… ØªÙ†ÙÙŠØ° Ø§Ù„ØªÙ†Ø¨Ø¤.')
     );
   }
 
@@ -210,12 +213,12 @@ export class OperationsStudioPageComponent implements OnInit {
     this.runSave(
       this.http.post(`${this.base}/notifications/templates`, {
         templateCode: this.templateForm.templateCode,
-        channel: this.templateForm.channel,
+        channel: 'Email',
         subject: this.templateForm.subject,
         body: this.templateForm.body,
         isActive: !!this.templateForm.isActive
       }),
-      this.i18n.text('Notification template saved.', 'تم حفظ قالب الإشعار.')
+      this.i18n.text('Notification template saved.', 'ØªÙ… Ø­ÙØ¸ Ù‚Ø§Ù„Ø¨ Ø§Ù„Ø¥Ø´Ø¹Ø§Ø±.')
     );
   }
 
@@ -224,21 +227,37 @@ export class OperationsStudioPageComponent implements OnInit {
       this.http.post(`${this.base}/notifications/queue`, {
         recipientType: this.queueForm.recipientType,
         recipientValue: this.queueForm.recipientValue,
-        channel: this.queueForm.channel,
+        channel: 'Email',
         templateCode: this.queueForm.templateCode,
         relatedEntityType: this.queueForm.relatedEntityType,
         relatedEntityId: this.queueForm.relatedEntityId || null,
         payloadJson: this.queueForm.payloadJson || '{}',
         scheduledAtUtc: null
       }),
-      this.i18n.text('Notification queued.', 'تمت إضافة الإشعار إلى قائمة الانتظار.')
+      this.i18n.text('Notification queued.', 'ØªÙ…Øª Ø¥Ø¶Ø§ÙØ© Ø§Ù„Ø¥Ø´Ø¹Ø§Ø± Ø¥Ù„Ù‰ Ù‚Ø§Ø¦Ù…Ø© Ø§Ù„Ø§Ù†ØªØ¸Ø§Ø±.')
+    );
+  }
+
+  reviewSelfServiceRequest(requestId: string, approved: boolean) {
+    if (!requestId) {
+      return;
+    }
+
+    this.runSave(
+      this.http.post(`${this.base}/self-service/requests/${requestId}/review`, {
+        approved,
+        resolutionNotes: approved ? 'Approved from Operations Studio.' : 'Rejected from Operations Studio.'
+      }),
+      approved
+        ? this.i18n.text('Request approved and applied.', 'تمت الموافقة على الطلب وتطبيقه.')
+        : this.i18n.text('Request rejected.', 'تم رفض الطلب.')
     );
   }
 
   runDataQualityScan() {
     this.runSave(
       this.http.post(`${this.base}/payroll/data-quality/scan`, {}),
-      this.i18n.text('Data quality scan completed.', 'اكتمل فحص جودة البيانات.')
+      this.i18n.text('Data quality scan completed.', 'Ø§ÙƒØªÙ…Ù„ ÙØ­Øµ Ø¬ÙˆØ¯Ø© Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª.')
     );
   }
 
@@ -247,7 +266,7 @@ export class OperationsStudioPageComponent implements OnInit {
       .filter((x) => x.fixActionCode !== 'ManualUpdateRequired')
       .map((x) => x.id);
     if (issueIds.length === 0) {
-      this.error.set(this.i18n.text('No auto-fixable open issues found.', 'لا توجد مشكلات مفتوحة قابلة للإصلاح التلقائي.'));
+      this.error.set(this.i18n.text('No auto-fixable open issues found.', 'Ù„Ø§ ØªÙˆØ¬Ø¯ Ù…Ø´ÙƒÙ„Ø§Øª Ù…ÙØªÙˆØ­Ø© Ù‚Ø§Ø¨Ù„Ø© Ù„Ù„Ø¥ØµÙ„Ø§Ø­ Ø§Ù„ØªÙ„Ù‚Ø§Ø¦ÙŠ.'));
       return;
     }
 
@@ -256,7 +275,7 @@ export class OperationsStudioPageComponent implements OnInit {
         issueIds,
         batchReference: `UI-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`
       }),
-      this.i18n.text('Fix batch applied.', 'تم تطبيق دفعة الإصلاح.')
+      this.i18n.text('Fix batch applied.', 'ØªÙ… ØªØ·Ø¨ÙŠÙ‚ Ø¯ÙØ¹Ø© Ø§Ù„Ø¥ØµÙ„Ø§Ø­.')
     );
   }
 
@@ -264,21 +283,29 @@ export class OperationsStudioPageComponent implements OnInit {
     const code = String(value ?? '').trim().toUpperCase();
     switch (code) {
       case 'REVIEWER':
-        return 'مرحلة المراجع';
+        return 'Ù…Ø±Ø­Ù„Ø© Ø§Ù„Ù…Ø±Ø§Ø¬Ø¹';
       case 'FINANCE':
-        return 'مرحلة المالية';
+        return 'Ù…Ø±Ø­Ù„Ø© Ø§Ù„Ù…Ø§Ù„ÙŠØ©';
       case 'FINAL':
-        return 'الاعتماد النهائي';
+        return 'Ø§Ù„Ø§Ø¹ØªÙ…Ø§Ø¯ Ø§Ù„Ù†Ù‡Ø§Ø¦ÙŠ';
       case 'WPS_MISSING':
-        return 'نقص بيانات حماية الأجور';
+        return 'Ù†Ù‚Øµ Ø¨ÙŠØ§Ù†Ø§Øª Ø­Ù…Ø§ÙŠØ© Ø§Ù„Ø£Ø¬ÙˆØ±';
       case 'GOSI_MISSING':
-        return 'نقص بيانات التأمينات الاجتماعية';
+        return 'Ù†Ù‚Øµ Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„ØªØ£Ù…ÙŠÙ†Ø§Øª Ø§Ù„Ø§Ø¬ØªÙ…Ø§Ø¹ÙŠØ©';
       case 'SAUDIZATION_GAP':
-        return 'فجوة نسبة السعودة';
+        return 'ÙØ¬ÙˆØ© Ù†Ø³Ø¨Ø© Ø§Ù„Ø³Ø¹ÙˆØ¯Ø©';
       case 'CONTRACT_EXPIRY':
-        return 'تنبيه انتهاء العقد';
+        return 'ØªÙ†Ø¨ÙŠÙ‡ Ø§Ù†ØªÙ‡Ø§Ø¡ Ø§Ù„Ø¹Ù‚Ø¯';
+      case 'PROFILEUPDATE':
+        return 'تحديث الملف الشخصي';
+      case 'LEAVEREQUEST':
+        return 'طلب إجازة';
+      case 'LOANREQUEST':
+        return 'طلب قرض';
+      case 'CONTRACTRENEWAL':
+        return 'تجديد عقد';
       default:
-        return code ? 'رمز مخصص' : 'غير محدد';
+        return code ? 'Ø±Ù…Ø² Ù…Ø®ØµØµ' : 'ØºÙŠØ± Ù…Ø­Ø¯Ø¯';
     }
   }
 
@@ -286,16 +313,9 @@ export class OperationsStudioPageComponent implements OnInit {
     const channel = String(value ?? '').trim().toLowerCase();
     switch (channel) {
       case 'email':
-        return 'البريد الإلكتروني';
-      case 'sms':
-        return 'رسائل نصية';
-      case 'whatsapp':
-        return 'واتساب';
-      case 'inapp':
-      case 'in-app':
-        return 'داخل النظام';
+        return 'Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ø¥Ù„ÙƒØªØ±ÙˆÙ†ÙŠ';
       default:
-        return value ? 'قناة مخصصة' : 'غير محددة';
+        return value ? 'قناة غير مدعومة' : 'غير محددة';
     }
   }
 
@@ -309,9 +329,10 @@ export class OperationsStudioPageComponent implements OnInit {
         this.refresh();
       },
       error: () => {
-        this.error.set(this.i18n.text('Request failed.', 'فشل الطلب.'));
+        this.error.set(this.i18n.text('Request failed.', 'ÙØ´Ù„ Ø§Ù„Ø·Ù„Ø¨.'));
       },
       complete: () => this.saving.set(false)
     });
   }
 }
+

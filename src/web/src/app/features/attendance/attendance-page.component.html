@@ -22,7 +22,7 @@
     <label>{{ i18n.text('Days Absent', 'أيام الغياب') }} <input type="number" formControlName="daysAbsent" min="0" /></label>
     <label>{{ i18n.text('Overtime Hours', 'ساعات إضافية') }} <input type="number" step="0.25" formControlName="overtimeHours" min="0" /></label>
     <div class="actions">
-      <button type="submit" [disabled]="saving()">
+      <button type="submit" [disabled]="saving() || employees().length === 0">
         {{ saving() ? i18n.text('Saving...', 'جاري الحفظ...') : i18n.text('Save Attendance', 'حفظ الحضور') }}
       </button>
     </div>

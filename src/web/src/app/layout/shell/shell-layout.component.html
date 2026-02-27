@@ -35,6 +35,9 @@
       @if (canApproveLeave()) {
         <a routerLink="/leave/approvals" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Leave Approvals', 'موافقات الإجازات') }}</a>
       }
+      @if (canAccessEssReview()) {
+        <a routerLink="/employee/self-service/review-history" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('ESS Review History', 'سجل مراجعة الخدمة الذاتية') }}</a>
+      }
       @if (canAccessAttendance()) {
         <a routerLink="/attendance" routerLinkActive="active" (click)="closeMobileNav()">{{ i18n.text('Attendance', 'الحضور') }}</a>
       }

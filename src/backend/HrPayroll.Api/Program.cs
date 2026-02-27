@@ -3595,6 +3595,49 @@ api.MapPost("/me/self-service/requests", [Authorize(Roles = RoleNames.Employee)]
     return Results.Created($"/api/me/self-service/requests/{item.Id}", new { item.Id, item.Status });
 });
 
+api.MapGet("/self-service/requests", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
+    string? status,
+    string? requestType,
+    int? take,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    var safeTake = Math.Clamp(take ?? 200, 1, 1000);
+    var normalizedStatus = string.IsNullOrWhiteSpace(status) ? null : status.Trim();
+    var normalizedType = string.IsNullOrWhiteSpace(requestType) ? null : requestType.Trim();
+
+    var query = from req in dbContext.EmployeeSelfServiceRequests
+                join employee in dbContext.Employees on req.EmployeeId equals employee.Id
+                orderby req.CreatedAtUtc descending
+                select new
+                {
+                    req.Id,
+                    req.EmployeeId,
+                    EmployeeName = employee.FirstName + " " + employee.LastName,
+                    employee.Email,
+                    req.RequestType,
+                    req.Status,
+                    req.PayloadJson,
+                    req.ReviewerUserId,
+                    req.ReviewedAtUtc,
+                    req.ResolutionNotes,
+                    req.CreatedAtUtc
+                };
+
+    if (!string.IsNullOrWhiteSpace(normalizedStatus))
+    {
+        query = query.Where(x => x.Status == normalizedStatus);
+    }
+
+    if (!string.IsNullOrWhiteSpace(normalizedType))
+    {
+        query = query.Where(x => x.RequestType == normalizedType);
+    }
+
+    var items = await query.Take(safeTake).ToListAsync(cancellationToken);
+    return Results.Ok(new { items });
+});
+
 api.MapPost("/self-service/requests/{requestId:guid}/review", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
     Guid requestId,
     ReviewEmployeeSelfServiceRequest request,
@@ -3609,6 +3652,25 @@ api.MapPost("/self-service/requests/{requestId:guid}/review", [Authorize(Roles =
         return Results.NotFound(new { error = "Self-service request not found." });
     }
 
+    if (!string.Equals(item.Status, "Submitted", StringComparison.OrdinalIgnoreCase))
+    {
+        return Results.BadRequest(new { error = $"Request cannot be reviewed when status is {item.Status}." });
+    }
+
+    Guid? appliedEntityId = null;
+    var appliedEntityType = string.Empty;
+    if (request.Approved)
+    {
+        var applyResult = await ApplyApprovedSelfServiceRequestAsync(item, dbContext, cancellationToken);
+        if (!applyResult.Success)
+        {
+            return Results.BadRequest(new { error = applyResult.Error ?? "Failed to apply approved self-service request." });
+        }
+
+        appliedEntityType = applyResult.AppliedEntityType ?? string.Empty;
+        appliedEntityId = applyResult.AppliedEntityId;
+    }
+
     item.Status = request.Approved ? "Approved" : "Rejected";
     item.ReviewedAtUtc = dateTimeProvider.UtcNow;
     item.ReviewerUserId = Guid.TryParse(httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier), out var parsedUserId)
@@ -3617,7 +3679,14 @@ api.MapPost("/self-service/requests/{requestId:guid}/review", [Authorize(Roles =
     item.ResolutionNotes = request.ResolutionNotes?.Trim() ?? string.Empty;
 
     await dbContext.SaveChangesAsync(cancellationToken);
-    return Results.Ok(new { item.Id, item.Status, item.ReviewedAtUtc });
+    return Results.Ok(new
+    {
+        item.Id,
+        item.Status,
+        item.ReviewedAtUtc,
+        appliedEntityType,
+        appliedEntityId
+    });
 });
 
 api.MapGet("/compliance/rules", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
@@ -3956,6 +4025,12 @@ api.MapPost("/notifications/templates", [Authorize(Roles = RoleNames.Owner + ","
 {
     var templateCode = request.TemplateCode.Trim().ToUpperInvariant();
     var channel = request.Channel.Trim();
+    if (!string.Equals(channel, "Email", StringComparison.OrdinalIgnoreCase))
+    {
+        return Results.BadRequest(new { error = "Only Email channel is supported." });
+    }
+
+    channel = "Email";
     var existing = await dbContext.NotificationTemplates
         .FirstOrDefaultAsync(x => x.TemplateCode == templateCode && x.Channel == channel, cancellationToken);
 
@@ -4024,11 +4099,17 @@ api.MapPost("/notifications/queue", [Authorize(Roles = RoleNames.Owner + "," + R
     IApplicationDbContext dbContext,
     CancellationToken cancellationToken) =>
 {
+    var channel = request.Channel.Trim();
+    if (!string.Equals(channel, "Email", StringComparison.OrdinalIgnoreCase))
+    {
+        return Results.BadRequest(new { error = "Only Email channel is supported." });
+    }
+
     var item = new NotificationQueueItem
     {
         RecipientType = request.RecipientType.Trim(),
         RecipientValue = request.RecipientValue.Trim(),
-        Channel = request.Channel.Trim(),
+        Channel = "Email",
         TemplateCode = request.TemplateCode.Trim().ToUpperInvariant(),
         RelatedEntityType = request.RelatedEntityType.Trim(),
         RelatedEntityId = request.RelatedEntityId,
@@ -4315,20 +4396,22 @@ api.MapPost("/payroll/data-quality/fix-batch", [Authorize(Roles = RoleNames.Owne
 });
 
 api.MapGet("/attendance-inputs", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] (
-    int year,
-    int month,
+    int? year,
+    int? month,
     int? page,
     int? pageSize,
     string? search,
     IApplicationDbContext dbContext) =>
 {
+    var safeYear = Math.Clamp(year ?? DateTime.UtcNow.Year, 2000, 2100);
+    var safeMonth = Math.Clamp(month ?? DateTime.UtcNow.Month, 1, 12);
     var safePage = Math.Max(1, page ?? 1);
     var safePageSize = Math.Clamp(pageSize ?? 20, 1, 200);
     search = string.IsNullOrWhiteSpace(search) ? null : search.Trim().ToLowerInvariant();
 
     var query = from attendance in dbContext.AttendanceInputs
                 join employee in dbContext.Employees on attendance.EmployeeId equals employee.Id
-                where attendance.Year == year && attendance.Month == month
+                where attendance.Year == safeYear && attendance.Month == safeMonth
                 select new
                 {
                     attendance.Id,
@@ -4354,7 +4437,7 @@ api.MapGet("/attendance-inputs", [Authorize(Roles = RoleNames.Owner + "," + Role
         .Take(safePageSize)
         .ToList();
 
-    return Results.Ok(new { items = rows, total, page = safePage, pageSize = safePageSize });
+    return Results.Ok(new { items = rows, total, page = safePage, pageSize = safePageSize, year = safeYear, month = safeMonth });
 });
 
 api.MapGet("/compliance/expiries", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] (
@@ -9389,6 +9472,324 @@ static string NormalizeDigits(string? value) =>
         ? string.Empty
         : new string(value.Where(char.IsDigit).ToArray());
 
+static async Task<SelfServiceApplyResult> ApplyApprovedSelfServiceRequestAsync(
+    EmployeeSelfServiceRequest request,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken)
+{
+    if (!TryParseJsonObject(request.PayloadJson, out var payload))
+    {
+        return new SelfServiceApplyResult(false, "PayloadJson must be a valid JSON object.");
+    }
+
+    var type = request.RequestType.Trim().ToUpperInvariant();
+    var employee = await dbContext.Employees.FirstOrDefaultAsync(x => x.Id == request.EmployeeId, cancellationToken);
+    if (employee is null)
+    {
+        return new SelfServiceApplyResult(false, "Employee profile not found.");
+    }
+
+    if (type == "PROFILEUPDATE")
+    {
+        if (TryGetString(payload, "firstName", out var firstName))
+        {
+            employee.FirstName = firstName;
+        }
+
+        if (TryGetString(payload, "lastName", out var lastName))
+        {
+            employee.LastName = lastName;
+        }
+
+        if (TryGetString(payload, "email", out var email))
+        {
+            employee.Email = email;
+        }
+
+        if (TryGetString(payload, "jobTitle", out var jobTitle))
+        {
+            employee.JobTitle = jobTitle;
+        }
+
+        if (TryGetString(payload, "gradeCode", out var gradeCode))
+        {
+            employee.GradeCode = gradeCode.ToUpperInvariant();
+        }
+
+        if (TryGetString(payload, "locationCode", out var locationCode))
+        {
+            employee.LocationCode = locationCode.ToUpperInvariant();
+        }
+
+        if (TryGetString(payload, "bankName", out var bankName))
+        {
+            employee.BankName = bankName;
+        }
+
+        if (TryGetString(payload, "bankIban", out var bankIban))
+        {
+            employee.BankIban = NormalizeIban(bankIban);
+        }
+
+        if (TryGetString(payload, "iqamaNumber", out var iqamaNumber))
+        {
+            employee.IqamaNumber = iqamaNumber;
+        }
+
+        if (TryGetDateOnly(payload, "iqamaExpiryDate", out var iqamaExpiryDate))
+        {
+            employee.IqamaExpiryDate = iqamaExpiryDate;
+        }
+
+        if (TryGetDateOnly(payload, "workPermitExpiryDate", out var workPermitExpiryDate))
+        {
+            employee.WorkPermitExpiryDate = workPermitExpiryDate;
+        }
+
+        if (TryGetDateOnly(payload, "contractEndDate", out var contractEndDate))
+        {
+            employee.ContractEndDate = contractEndDate;
+        }
+
+        return new SelfServiceApplyResult(true, null, "Employee", employee.Id);
+    }
+
+    if (type == "CONTRACTRENEWAL")
+    {
+        if (!TryGetDateOnly(payload, "newContractEndDate", out var newContractEndDate) &&
+            !TryGetDateOnly(payload, "contractEndDate", out newContractEndDate))
+        {
+            return new SelfServiceApplyResult(false, "ContractRenewal payload requires newContractEndDate.");
+        }
+
+        employee.ContractEndDate = newContractEndDate;
+        return new SelfServiceApplyResult(true, null, "Employee", employee.Id);
+    }
+
+    if (type == "LOANREQUEST")
+    {
+        if (!TryGetDecimal(payload, "principalAmount", out var principalAmount) || principalAmount <= 0m)
+        {
+            return new SelfServiceApplyResult(false, "LoanRequest payload requires principalAmount > 0.");
+        }
+
+        if (!TryGetDecimal(payload, "installmentAmount", out var installmentAmount) || installmentAmount <= 0m)
+        {
+            return new SelfServiceApplyResult(false, "LoanRequest payload requires installmentAmount > 0.");
+        }
+
+        if (!TryGetInt(payload, "totalInstallments", out var totalInstallments) || totalInstallments <= 0)
+        {
+            return new SelfServiceApplyResult(false, "LoanRequest payload requires totalInstallments > 0.");
+        }
+
+        var now = DateTime.UtcNow;
+        var startYear = TryGetInt(payload, "startYear", out var parsedStartYear) ? parsedStartYear : now.Year;
+        var startMonth = TryGetInt(payload, "startMonth", out var parsedStartMonth) ? parsedStartMonth : now.Month;
+        if (startMonth is < 1 or > 12)
+        {
+            return new SelfServiceApplyResult(false, "LoanRequest startMonth must be between 1 and 12.");
+        }
+
+        var loanType = TryGetString(payload, "loanType", out var parsedLoanType) ? parsedLoanType : "Advance";
+        var notes = TryGetString(payload, "notes", out var parsedNotes) ? parsedNotes : string.Empty;
+
+        var loan = new EmployeeLoan
+        {
+            EmployeeId = employee.Id,
+            LoanType = loanType,
+            PrincipalAmount = Math.Round(principalAmount, 2),
+            RemainingBalance = Math.Round(principalAmount, 2),
+            InstallmentAmount = Math.Round(installmentAmount, 2),
+            StartYear = startYear,
+            StartMonth = startMonth,
+            TotalInstallments = totalInstallments,
+            PaidInstallments = 0,
+            Status = "Active",
+            Notes = notes
+        };
+
+        dbContext.AddEntity(loan);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        var scheduleYear = startYear;
+        var scheduleMonth = startMonth;
+        var remaining = loan.PrincipalAmount;
+        for (var i = 0; i < totalInstallments; i++)
+        {
+            var amount = i == totalInstallments - 1
+                ? Math.Round(remaining, 2)
+                : Math.Round(Math.Min(loan.InstallmentAmount, remaining), 2);
+
+            remaining = Math.Max(0m, Math.Round(remaining - amount, 2));
+
+            dbContext.AddEntity(new EmployeeLoanInstallment
+            {
+                EmployeeLoanId = loan.Id,
+                EmployeeId = employee.Id,
+                Year = scheduleYear,
+                Month = scheduleMonth,
+                Amount = amount,
+                Status = "Pending"
+            });
+
+            scheduleMonth++;
+            if (scheduleMonth > 12)
+            {
+                scheduleMonth = 1;
+                scheduleYear++;
+            }
+        }
+
+        return new SelfServiceApplyResult(true, null, "EmployeeLoan", loan.Id);
+    }
+
+    if (type == "LEAVEREQUEST")
+    {
+        if (!TryGetDateOnly(payload, "startDate", out var startDate) ||
+            !TryGetDateOnly(payload, "endDate", out var endDate))
+        {
+            return new SelfServiceApplyResult(false, "LeaveRequest payload requires startDate and endDate.");
+        }
+
+        if (endDate < startDate)
+        {
+            return new SelfServiceApplyResult(false, "LeaveRequest endDate cannot be before startDate.");
+        }
+
+        var leaveTypeRaw = TryGetString(payload, "leaveType", out var parsedLeaveType) ? parsedLeaveType : "Annual";
+        if (!Enum.TryParse<LeaveType>(leaveTypeRaw, true, out var leaveType))
+        {
+            leaveType = LeaveType.Annual;
+        }
+
+        var totalDays = endDate.DayNumber - startDate.DayNumber + 1;
+        var reason = TryGetString(payload, "reason", out var parsedReason) ? parsedReason : "Submitted from ESS workflow.";
+
+        var leaveRequest = new LeaveRequest
+        {
+            EmployeeId = employee.Id,
+            LeaveType = leaveType,
+            StartDate = startDate,
+            EndDate = endDate,
+            TotalDays = totalDays,
+            Reason = reason,
+            Status = LeaveRequestStatus.Pending
+        };
+
+        dbContext.AddEntity(leaveRequest);
+        return new SelfServiceApplyResult(true, null, "LeaveRequest", leaveRequest.Id);
+    }
+
+    return new SelfServiceApplyResult(false, $"Unsupported self-service request type '{request.RequestType}'.");
+}
+
+static bool TryParseJsonObject(string json, out Dictionary<string, JsonElement> payload)
+{
+    payload = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
+    try
+    {
+        var data = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(string.IsNullOrWhiteSpace(json) ? "{}" : json);
+        if (data is null)
+        {
+            return false;
+        }
+
+        payload = new Dictionary<string, JsonElement>(data, StringComparer.OrdinalIgnoreCase);
+        return true;
+    }
+    catch
+    {
+        return false;
+    }
+}
+
+static bool TryGetString(IReadOnlyDictionary<string, JsonElement> payload, string key, out string value)
+{
+    value = string.Empty;
+    if (!payload.TryGetValue(key, out var raw))
+    {
+        return false;
+    }
+
+    if (raw.ValueKind != JsonValueKind.String)
+    {
+        return false;
+    }
+
+    var parsed = raw.GetString();
+    if (string.IsNullOrWhiteSpace(parsed))
+    {
+        return false;
+    }
+
+    value = parsed.Trim();
+    return true;
+}
+
+static bool TryGetDecimal(IReadOnlyDictionary<string, JsonElement> payload, string key, out decimal value)
+{
+    value = 0m;
+    if (!payload.TryGetValue(key, out var raw))
+    {
+        return false;
+    }
+
+    if (raw.ValueKind == JsonValueKind.Number && raw.TryGetDecimal(out var numberValue))
+    {
+        value = numberValue;
+        return true;
+    }
+
+    if (raw.ValueKind == JsonValueKind.String && decimal.TryParse(raw.GetString(), out var stringValue))
+    {
+        value = stringValue;
+        return true;
+    }
+
+    return false;
+}
+
+static bool TryGetInt(IReadOnlyDictionary<string, JsonElement> payload, string key, out int value)
+{
+    value = 0;
+    if (!payload.TryGetValue(key, out var raw))
+    {
+        return false;
+    }
+
+    if (raw.ValueKind == JsonValueKind.Number && raw.TryGetInt32(out var numberValue))
+    {
+        value = numberValue;
+        return true;
+    }
+
+    if (raw.ValueKind == JsonValueKind.String && int.TryParse(raw.GetString(), out var stringValue))
+    {
+        value = stringValue;
+        return true;
+    }
+
+    return false;
+}
+
+static bool TryGetDateOnly(IReadOnlyDictionary<string, JsonElement> payload, string key, out DateOnly value)
+{
+    value = default;
+    if (!payload.TryGetValue(key, out var raw))
+    {
+        return false;
+    }
+
+    if (raw.ValueKind != JsonValueKind.String)
+    {
+        return false;
+    }
+
+    var text = raw.GetString();
+    return !string.IsNullOrWhiteSpace(text) && DateOnly.TryParse(text, out value);
+}
+
 app.Run();
 
 public sealed record CreateTenantRequest(
@@ -9508,6 +9909,7 @@ public sealed record ComplianceDigestAlertItemResponse(
     string Severity,
     DateOnly ExpiryDate);
 public sealed record EmailSendResult(bool Sent, bool Simulated, string? ErrorMessage = null);
+public sealed record SelfServiceApplyResult(bool Success, string? Error = null, string? AppliedEntityType = null, Guid? AppliedEntityId = null);
 public sealed record ComplianceScoreResponse(
     int Score,
     string Grade,

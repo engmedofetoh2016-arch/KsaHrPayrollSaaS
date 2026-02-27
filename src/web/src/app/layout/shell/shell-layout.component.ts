@@ -30,6 +30,7 @@ export class ShellLayoutComponent {
   readonly canManageUsers = computed(() => this.auth.hasAnyRole(['Owner', 'Admin']));
   readonly canApproveLeave = computed(() => this.auth.hasAnyRole(['Owner', 'Admin', 'HR', 'Manager']));
   readonly canAccessGovernanceRegistry = computed(() => this.auth.hasAnyRole(['Owner', 'Admin', 'HR', 'Manager']));
+  readonly canAccessEssReview = computed(() => this.auth.hasAnyRole(['Owner', 'Admin', 'HR', 'Manager']));
   isMobileNavOpen = false;
 
   logout() {

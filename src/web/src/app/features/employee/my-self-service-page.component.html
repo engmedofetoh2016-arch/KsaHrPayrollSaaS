@@ -1,4 +1,4 @@
-<section class="self-service-page">
+﻿<section class="self-service-page">
   <header>
     <h2>{{ i18n.text('My Self-Service Requests', 'طلباتي للخدمة الذاتية') }}</h2>
     <p>{{ i18n.text('Submit leave, profile, loan, and contract-related requests.', 'قدّم طلبات الإجازة وتحديث الملف والقروض والعقود.') }}</p>
@@ -22,10 +22,60 @@
         <option value="ContractRenewal">{{ i18n.text('Contract Renewal', 'تجديد عقد') }}</option>
       </select>
     </label>
-    <label>
-      {{ i18n.text('Details (JSON)', 'التفاصيل (JSON)') }}
-      <textarea rows="6" [(ngModel)]="payloadJson"></textarea>
-    </label>
+
+    @if (requestType === 'ProfileUpdate') {
+      <div class="grid-two">
+        <label>{{ i18n.text('First Name', 'الاسم الأول') }} <input [(ngModel)]="profileForm.firstName" /></label>
+        <label>{{ i18n.text('Last Name', 'اسم العائلة') }} <input [(ngModel)]="profileForm.lastName" /></label>
+        <label>{{ i18n.text('Email', 'البريد الإلكتروني') }} <input [(ngModel)]="profileForm.email" /></label>
+        <label>{{ i18n.text('Job Title', 'المسمى الوظيفي') }} <input [(ngModel)]="profileForm.jobTitle" /></label>
+        <label>{{ i18n.text('Grade', 'الدرجة') }} <input [(ngModel)]="profileForm.gradeCode" /></label>
+        <label>{{ i18n.text('Location', 'الموقع') }} <input [(ngModel)]="profileForm.locationCode" /></label>
+        <label>{{ i18n.text('Bank Name', 'اسم البنك') }} <input [(ngModel)]="profileForm.bankName" /></label>
+        <label>{{ i18n.text('IBAN', 'رقم الآيبان') }} <input [(ngModel)]="profileForm.bankIban" /></label>
+        <label>{{ i18n.text('Iqama Number', 'رقم الإقامة') }} <input [(ngModel)]="profileForm.iqamaNumber" /></label>
+        <label>{{ i18n.text('Iqama Expiry', 'انتهاء الإقامة') }} <input type="date" [(ngModel)]="profileForm.iqamaExpiryDate" /></label>
+        <label>{{ i18n.text('Work Permit Expiry', 'انتهاء رخصة العمل') }} <input type="date" [(ngModel)]="profileForm.workPermitExpiryDate" /></label>
+        <label>{{ i18n.text('Contract End Date', 'تاريخ نهاية العقد') }} <input type="date" [(ngModel)]="profileForm.contractEndDate" /></label>
+      </div>
+    }
+
+    @if (requestType === 'LeaveRequest') {
+      <div class="grid-two">
+        <label>
+          {{ i18n.text('Leave Type', 'نوع الإجازة') }}
+          <select [(ngModel)]="leaveForm.leaveType">
+            <option value="Annual">{{ i18n.text('Annual', 'سنوية') }}</option>
+            <option value="Sick">{{ i18n.text('Sick', 'مرضية') }}</option>
+            <option value="Unpaid">{{ i18n.text('Unpaid', 'بدون راتب') }}</option>
+            <option value="Emergency">{{ i18n.text('Emergency', 'طارئة') }}</option>
+          </select>
+        </label>
+        <label>{{ i18n.text('Start Date', 'تاريخ البداية') }} <input type="date" [(ngModel)]="leaveForm.startDate" /></label>
+        <label>{{ i18n.text('End Date', 'تاريخ النهاية') }} <input type="date" [(ngModel)]="leaveForm.endDate" /></label>
+        <label class="full">{{ i18n.text('Reason', 'السبب') }} <textarea rows="3" [(ngModel)]="leaveForm.reason"></textarea></label>
+      </div>
+    }
+
+    @if (requestType === 'LoanRequest') {
+      <div class="grid-two">
+        <label>{{ i18n.text('Loan Type', 'نوع القرض') }} <input [(ngModel)]="loanForm.loanType" /></label>
+        <label>{{ i18n.text('Principal Amount', 'المبلغ الأساسي') }} <input type="number" min="0.01" step="0.01" [(ngModel)]="loanForm.principalAmount" /></label>
+        <label>{{ i18n.text('Installment Amount', 'مبلغ القسط') }} <input type="number" min="0.01" step="0.01" [(ngModel)]="loanForm.installmentAmount" /></label>
+        <label>{{ i18n.text('Total Installments', 'عدد الأقساط') }} <input type="number" min="1" [(ngModel)]="loanForm.totalInstallments" /></label>
+        <label>{{ i18n.text('Start Year', 'سنة البداية') }} <input type="number" min="2000" max="2100" [(ngModel)]="loanForm.startYear" /></label>
+        <label>{{ i18n.text('Start Month', 'شهر البداية') }} <input type="number" min="1" max="12" [(ngModel)]="loanForm.startMonth" /></label>
+        <label class="full">{{ i18n.text('Notes', 'ملاحظات') }} <textarea rows="3" [(ngModel)]="loanForm.notes"></textarea></label>
+      </div>
+    }
+
+    @if (requestType === 'ContractRenewal') {
+      <div class="grid-two">
+        <label>{{ i18n.text('New Contract End Date', 'تاريخ نهاية العقد الجديد') }} <input type="date" [(ngModel)]="contractRenewalForm.newContractEndDate" /></label>
+        <label class="full">{{ i18n.text('Notes', 'ملاحظات') }} <textarea rows="3" [(ngModel)]="contractRenewalForm.notes"></textarea></label>
+      </div>
+    }
+
     <button type="button" (click)="submit()" [disabled]="saving()">{{ i18n.text('Submit', 'إرسال') }}</button>
   </div>
 
@@ -51,8 +101,8 @@
         <tbody>
           @for (item of items(); track item.id) {
             <tr>
-              <td>{{ item.requestType }}</td>
-              <td>{{ item.status }}</td>
+              <td>{{ requestTypeLabel(item.requestType) }}</td>
+              <td>{{ statusLabel(item.status) }}</td>
               <td>{{ item.createdAtUtc }}</td>
               <td>{{ item.resolutionNotes || '-' }}</td>
             </tr>
