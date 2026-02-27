@@ -221,6 +221,7 @@ public class Worker : BackgroundService
             {
                 page.Margin(30);
                 page.Size(PageSizes.A4);
+                page.DefaultTextStyle(x => x.FontFamily("Noto Naskh Arabic", "Noto Sans Arabic", "Tahoma", "Arial", "Segoe UI"));
                 var currency = string.IsNullOrWhiteSpace(company?.CurrencyCode) ? "SAR" : company!.CurrencyCode;
 
                 page.Content().Column(col =>
@@ -251,7 +252,6 @@ public class Worker : BackgroundService
             });
         }).GeneratePdf();
     }
-
     private static async Task<byte[]> GenerateGosiCsvAsync(
         IApplicationDbContext dbContext,
         Guid runId,
@@ -459,6 +459,7 @@ public class Worker : BackgroundService
             {
                 page.Margin(28);
                 page.Size(PageSizes.A4);
+                page.DefaultTextStyle(x => x.FontFamily("Noto Naskh Arabic", "Noto Sans Arabic", "Tahoma", "Arial", "Segoe UI"));
                 page.Content().Column(col =>
                 {
                     col.Spacing(6);
@@ -493,7 +494,6 @@ public class Worker : BackgroundService
             });
         }).GeneratePdf();
     }
-
     private async Task SyncComplianceAlertsAsync(
         IApplicationDbContext dbContext,
         DateTime nowUtc,
@@ -1875,4 +1875,3 @@ public class Worker : BackgroundService
         decimal AdditionalManualDeduction,
         string? Notes);
 }
-
