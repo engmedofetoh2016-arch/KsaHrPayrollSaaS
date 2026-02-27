@@ -394,6 +394,7 @@ api.MapGet("/me/profile", [Authorize] async (
     HttpContext httpContext,
     UserManager<ApplicationUser> userManager,
     IApplicationDbContext dbContext,
+    ILogger<Program> logger,
     CancellationToken cancellationToken) =>
 {
     if (tenantContext.TenantId == Guid.Empty)
@@ -407,50 +408,105 @@ api.MapGet("/me/profile", [Authorize] async (
         return Results.Unauthorized();
     }
 
-    var user = await userManager.Users
-        .Where(x => x.Id == userId && x.TenantId == tenantContext.TenantId)
-        .Select(x => new
-        {
-            x.Id,
-            x.TenantId,
-            x.FirstName,
-            x.LastName,
-            x.Email
-        })
-        .FirstOrDefaultAsync(cancellationToken);
-
-    if (user is null)
+    object userPayload;
+    string normalizedEmail;
+    try
     {
-        return Results.Unauthorized();
+        var user = await userManager.Users
+            .Where(x => x.Id == userId && x.TenantId == tenantContext.TenantId)
+            .Select(x => new
+            {
+                x.Id,
+                x.TenantId,
+                x.FirstName,
+                x.LastName,
+                x.Email
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (user is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        userPayload = user;
+        normalizedEmail = (user.Email ?? string.Empty).Trim().ToUpperInvariant();
+    }
+    catch (Exception ex) when (IsDbSchemaMismatch(ex))
+    {
+        logger.LogWarning(ex, "User profile schema mismatch. Returning reduced user payload from token claims.");
+        var emailFromClaims = httpContext.User.Claims
+            .Where(x => x.Type is "email" or ClaimTypes.Email)
+            .Select(x => x.Value)
+            .FirstOrDefault() ?? string.Empty;
+
+        userPayload = new
+        {
+            Id = userId,
+            TenantId = tenantContext.TenantId,
+            FirstName = string.Empty,
+            LastName = string.Empty,
+            Email = emailFromClaims
+        };
+        normalizedEmail = emailFromClaims.Trim().ToUpperInvariant();
     }
 
-    var normalizedEmail = (user.Email ?? string.Empty).Trim().ToUpperInvariant();
-    var employee = await dbContext.Employees
-        .Where(x => x.Email.ToUpper() == normalizedEmail)
-        .Select(x => new
-        {
-            x.Id,
-            x.StartDate,
-            x.FirstName,
-            x.LastName,
-            x.Email,
-            x.JobTitle,
-            x.GradeCode,
-            x.LocationCode,
-            x.BaseSalary,
-            x.EmployeeNumber,
-            x.BankName,
-            x.BankIban,
-            x.IqamaNumber,
-            x.IqamaExpiryDate,
-            x.WorkPermitExpiryDate,
-            x.ContractEndDate
-        })
-        .FirstOrDefaultAsync(cancellationToken);
+    object? employee;
+    try
+    {
+        employee = string.IsNullOrWhiteSpace(normalizedEmail)
+            ? null
+            : await dbContext.Employees
+                .Where(x => x.Email.ToUpper() == normalizedEmail)
+                .Select(x => new
+                {
+                    x.Id,
+                    x.StartDate,
+                    x.FirstName,
+                    x.LastName,
+                    x.Email,
+                    x.JobTitle,
+                    x.GradeCode,
+                    x.LocationCode,
+                    x.BaseSalary,
+                    x.EmployeeNumber,
+                    x.BankName,
+                    x.BankIban,
+                    x.IqamaNumber,
+                    x.IqamaExpiryDate,
+                    x.WorkPermitExpiryDate,
+                    x.ContractEndDate
+                })
+                .FirstOrDefaultAsync(cancellationToken);
+    }
+    catch (Exception ex) when (IsDbSchemaMismatch(ex))
+    {
+        logger.LogWarning(ex, "Employee profile schema mismatch. Returning reduced profile payload.");
+        employee = string.IsNullOrWhiteSpace(normalizedEmail)
+            ? null
+            : await dbContext.Employees
+                .Where(x => x.Email.ToUpper() == normalizedEmail)
+                .Select(x => new
+                {
+                    x.Id,
+                    x.StartDate,
+                    x.FirstName,
+                    x.LastName,
+                    x.Email,
+                    x.JobTitle,
+                    x.BaseSalary
+                })
+                .FirstOrDefaultAsync(cancellationToken);
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex, "Failed to read employee profile for /me/profile. Returning user payload only.");
+        employee = null;
+    }
 
     return Results.Ok(new
     {
-        user,
+        user = userPayload,
         employee
     });
 });
@@ -4149,110 +4205,119 @@ api.MapPost("/notifications/queue/{queueId:guid}/mark-sent", [Authorize(Roles = 
 api.MapPost("/payroll/data-quality/scan", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
     IDateTimeProvider dateTimeProvider,
     IApplicationDbContext dbContext,
+    ILogger<Program> logger,
     CancellationToken cancellationToken) =>
 {
-    var nowUtc = dateTimeProvider.UtcNow;
-    var employees = await dbContext.Employees.ToListAsync(cancellationToken);
-    var existingOpen = await dbContext.DataQualityIssues
-        .Where(x => x.IssueStatus == "Open")
-        .ToListAsync(cancellationToken);
-    var existingLookup = existingOpen.ToDictionary(x => $"{x.IssueCode}:{x.EntityId}", StringComparer.OrdinalIgnoreCase);
-
-    var detected = 0;
-    foreach (var employee in employees)
+    try
     {
-        var rawIban = employee.BankIban?.Trim() ?? string.Empty;
-        var normalizedIban = NormalizeIban(rawIban);
-        if (string.IsNullOrWhiteSpace(rawIban))
-        {
-            var key = $"MissingIban:{employee.Id}";
-            if (!existingLookup.ContainsKey(key))
-            {
-                detected++;
-                dbContext.AddEntity(new DataQualityIssue
-                {
-                    IssueCode = "MissingIban",
-                    Severity = "Critical",
-                    EntityType = "Employee",
-                    EntityId = employee.Id,
-                    IssueStatus = "Open",
-                    IssueMessage = "Employee IBAN is missing.",
-                    FixActionCode = "ManualUpdateRequired",
-                    FixPayloadJson = "{}",
-                    DetectedAtUtc = nowUtc
-                });
-            }
-        }
-        else if (!Regex.IsMatch(normalizedIban, "^[A-Z]{2}[0-9A-Z]{13,32}$"))
-        {
-            var key = $"InvalidIbanFormat:{employee.Id}";
-            if (!existingLookup.ContainsKey(key))
-            {
-                detected++;
-                dbContext.AddEntity(new DataQualityIssue
-                {
-                    IssueCode = "InvalidIbanFormat",
-                    Severity = "Warning",
-                    EntityType = "Employee",
-                    EntityId = employee.Id,
-                    IssueStatus = "Open",
-                    IssueMessage = "Employee IBAN format is invalid.",
-                    FixActionCode = "NormalizeIban",
-                    FixPayloadJson = JsonSerializer.Serialize(new { normalizedIban }),
-                    DetectedAtUtc = nowUtc
-                });
-            }
-        }
+        var nowUtc = dateTimeProvider.UtcNow;
+        var employees = await dbContext.Employees.ToListAsync(cancellationToken);
+        var existingOpen = await dbContext.DataQualityIssues
+            .Where(x => x.IssueStatus == "Open")
+            .ToListAsync(cancellationToken);
+        var existingLookup = existingOpen.ToDictionary(x => $"{x.IssueCode}:{x.EntityId}", StringComparer.OrdinalIgnoreCase);
 
-        if (!employee.IsSaudiNational)
+        var detected = 0;
+        foreach (var employee in employees)
         {
-            var iqamaDigits = NormalizeDigits(employee.IqamaNumber ?? string.Empty);
-            if (!string.IsNullOrWhiteSpace(employee.IqamaNumber) && iqamaDigits.Length != 10)
+            var rawIban = employee.BankIban?.Trim() ?? string.Empty;
+            var normalizedIban = NormalizeIban(rawIban);
+            if (string.IsNullOrWhiteSpace(rawIban))
             {
-                var key = $"InvalidIqamaFormat:{employee.Id}";
+                var key = $"MissingIban:{employee.Id}";
                 if (!existingLookup.ContainsKey(key))
                 {
                     detected++;
                     dbContext.AddEntity(new DataQualityIssue
                     {
-                        IssueCode = "InvalidIqamaFormat",
-                        Severity = "Warning",
+                        IssueCode = "MissingIban",
+                        Severity = "Critical",
                         EntityType = "Employee",
                         EntityId = employee.Id,
                         IssueStatus = "Open",
-                        IssueMessage = "Iqama number must be 10 digits.",
-                        FixActionCode = "NormalizeIqama",
-                        FixPayloadJson = JsonSerializer.Serialize(new { normalizedIqama = iqamaDigits }),
+                        IssueMessage = "Employee IBAN is missing.",
+                        FixActionCode = "ManualUpdateRequired",
+                        FixPayloadJson = "{}",
                         DetectedAtUtc = nowUtc
                     });
                 }
             }
-
-            if (!employee.ContractEndDate.HasValue)
+            else if (!Regex.IsMatch(normalizedIban, "^[A-Z]{2}[0-9A-Z]{13,32}$"))
             {
-                var key = $"MissingContractEndDateNonSaudi:{employee.Id}";
+                var key = $"InvalidIbanFormat:{employee.Id}";
                 if (!existingLookup.ContainsKey(key))
                 {
                     detected++;
                     dbContext.AddEntity(new DataQualityIssue
                     {
-                        IssueCode = "MissingContractEndDateNonSaudi",
+                        IssueCode = "InvalidIbanFormat",
                         Severity = "Warning",
                         EntityType = "Employee",
                         EntityId = employee.Id,
                         IssueStatus = "Open",
-                        IssueMessage = "Contract end date is missing for non-Saudi employee.",
-                        FixActionCode = "SetContractEndDefault",
-                        FixPayloadJson = JsonSerializer.Serialize(new { suggestedContractEndDate = DateOnly.FromDateTime(nowUtc.Date).AddYears(1) }),
+                        IssueMessage = "Employee IBAN format is invalid.",
+                        FixActionCode = "NormalizeIban",
+                        FixPayloadJson = JsonSerializer.Serialize(new { normalizedIban }),
                         DetectedAtUtc = nowUtc
                     });
                 }
             }
+
+            if (!employee.IsSaudiNational)
+            {
+                var iqamaDigits = NormalizeDigits(employee.IqamaNumber ?? string.Empty);
+                if (!string.IsNullOrWhiteSpace(employee.IqamaNumber) && iqamaDigits.Length != 10)
+                {
+                    var key = $"InvalidIqamaFormat:{employee.Id}";
+                    if (!existingLookup.ContainsKey(key))
+                    {
+                        detected++;
+                        dbContext.AddEntity(new DataQualityIssue
+                        {
+                            IssueCode = "InvalidIqamaFormat",
+                            Severity = "Warning",
+                            EntityType = "Employee",
+                            EntityId = employee.Id,
+                            IssueStatus = "Open",
+                            IssueMessage = "Iqama number must be 10 digits.",
+                            FixActionCode = "NormalizeIqama",
+                            FixPayloadJson = JsonSerializer.Serialize(new { normalizedIqama = iqamaDigits }),
+                            DetectedAtUtc = nowUtc
+                        });
+                    }
+                }
+
+                if (!employee.ContractEndDate.HasValue)
+                {
+                    var key = $"MissingContractEndDateNonSaudi:{employee.Id}";
+                    if (!existingLookup.ContainsKey(key))
+                    {
+                        detected++;
+                        dbContext.AddEntity(new DataQualityIssue
+                        {
+                            IssueCode = "MissingContractEndDateNonSaudi",
+                            Severity = "Warning",
+                            EntityType = "Employee",
+                            EntityId = employee.Id,
+                            IssueStatus = "Open",
+                            IssueMessage = "Contract end date is missing for non-Saudi employee.",
+                            FixActionCode = "SetContractEndDefault",
+                            FixPayloadJson = JsonSerializer.Serialize(new { suggestedContractEndDate = DateOnly.FromDateTime(nowUtc.Date).AddYears(1) }),
+                            DetectedAtUtc = nowUtc
+                        });
+                    }
+                }
+            }
         }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return Results.Ok(new { detected });
     }
-
-    await dbContext.SaveChangesAsync(cancellationToken);
-    return Results.Ok(new { detected });
+    catch (Exception ex) when (IsDbSchemaMismatch(ex))
+    {
+        logger.LogWarning(ex, "Data quality scan skipped due to schema mismatch.");
+        return Results.Ok(new { detected = 0, skipped = true, reason = "SchemaMismatch" });
+    }
 });
 
 api.MapGet("/payroll/data-quality/issues", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
@@ -5228,6 +5293,7 @@ api.MapGet("/leave/requests", [Authorize(Roles = RoleNames.Owner + "," + RoleNam
     Guid? employeeId,
     IApplicationDbContext dbContext,
     HttpContext httpContext,
+    ILogger<Program> logger,
     CancellationToken cancellationToken) =>
 {
     var canReview = httpContext.User.IsInRole(RoleNames.Owner) ||
@@ -5279,27 +5345,35 @@ api.MapGet("/leave/requests", [Authorize(Roles = RoleNames.Owner + "," + RoleNam
         query = query.Where(x => x.EmployeeId == ownEmployee.Id);
     }
 
-    var rows = await (from leaveRequest in query
-                      join employee in dbContext.Employees on leaveRequest.EmployeeId equals employee.Id
-                      orderby leaveRequest.CreatedAtUtc descending
-                      select new
-                      {
-                          leaveRequest.Id,
-                          leaveRequest.EmployeeId,
-                          EmployeeName = employee.FirstName + " " + employee.LastName,
-                          leaveRequest.LeaveType,
-                          leaveRequest.StartDate,
-                          leaveRequest.EndDate,
-                          leaveRequest.TotalDays,
-                          leaveRequest.Reason,
-                          leaveRequest.Status,
-                          leaveRequest.RejectionReason,
-                          leaveRequest.ReviewedByUserId,
-                          leaveRequest.ReviewedAtUtc,
-                          leaveRequest.CreatedAtUtc
-                      }).ToListAsync(cancellationToken);
+    try
+    {
+        var rows = await (from leaveRequest in query
+                          join employee in dbContext.Employees on leaveRequest.EmployeeId equals employee.Id
+                          orderby leaveRequest.CreatedAtUtc descending
+                          select new
+                          {
+                              leaveRequest.Id,
+                              leaveRequest.EmployeeId,
+                              EmployeeName = employee.FirstName + " " + employee.LastName,
+                              leaveRequest.LeaveType,
+                              leaveRequest.StartDate,
+                              leaveRequest.EndDate,
+                              leaveRequest.TotalDays,
+                              leaveRequest.Reason,
+                              leaveRequest.Status,
+                              leaveRequest.RejectionReason,
+                              leaveRequest.ReviewedByUserId,
+                              leaveRequest.ReviewedAtUtc,
+                              leaveRequest.CreatedAtUtc
+                          }).ToListAsync(cancellationToken);
 
-    return Results.Ok(rows);
+        return Results.Ok(rows);
+    }
+    catch (Exception ex) when (IsDbSchemaMismatch(ex))
+    {
+        logger.LogWarning(ex, "Leave request query skipped due to schema mismatch.");
+        return Results.Ok(Array.Empty<object>());
+    }
 });
 
 api.MapGet("/leave/balances", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager + "," + RoleNames.Employee)] async (
@@ -5307,6 +5381,7 @@ api.MapGet("/leave/balances", [Authorize(Roles = RoleNames.Owner + "," + RoleNam
     Guid? employeeId,
     IApplicationDbContext dbContext,
     HttpContext httpContext,
+    ILogger<Program> logger,
     CancellationToken cancellationToken) =>
 {
     var canReview = httpContext.User.IsInRole(RoleNames.Owner) ||
@@ -5347,22 +5422,30 @@ api.MapGet("/leave/balances", [Authorize(Roles = RoleNames.Owner + "," + RoleNam
         query = query.Where(x => x.EmployeeId == ownEmployee.Id);
     }
 
-    var rows = await (from balance in query
-                      join employee in dbContext.Employees on balance.EmployeeId equals employee.Id
-                      orderby employee.FirstName, employee.LastName, balance.LeaveType
-                      select new
-                      {
-                          balance.Id,
-                          balance.EmployeeId,
-                          EmployeeName = employee.FirstName + " " + employee.LastName,
-                          balance.Year,
-                          balance.LeaveType,
-                          balance.AllocatedDays,
-                          balance.UsedDays,
-                          RemainingDays = balance.AllocatedDays - balance.UsedDays
-                      }).ToListAsync(cancellationToken);
+    try
+    {
+        var rows = await (from balance in query
+                          join employee in dbContext.Employees on balance.EmployeeId equals employee.Id
+                          orderby employee.FirstName, employee.LastName, balance.LeaveType
+                          select new
+                          {
+                              balance.Id,
+                              balance.EmployeeId,
+                              EmployeeName = employee.FirstName + " " + employee.LastName,
+                              balance.Year,
+                              balance.LeaveType,
+                              balance.AllocatedDays,
+                              balance.UsedDays,
+                              RemainingDays = balance.AllocatedDays - balance.UsedDays
+                          }).ToListAsync(cancellationToken);
 
-    return Results.Ok(rows);
+        return Results.Ok(rows);
+    }
+    catch (Exception ex) when (IsDbSchemaMismatch(ex))
+    {
+        logger.LogWarning(ex, "Leave balance query skipped due to schema mismatch.");
+        return Results.Ok(Array.Empty<object>());
+    }
 });
 
 api.MapPost("/leave/requests", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager + "," + RoleNames.Employee)] async (
