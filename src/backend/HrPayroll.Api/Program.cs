@@ -846,6 +846,197 @@ api.MapGet("/me/payslips/{exportId:guid}/download", [Authorize(Roles = RoleNames
     return Results.File(export.FileData, export.ContentType, export.FileName);
 });
 
+api.MapGet("/me/bookings", [Authorize(Roles = RoleNames.Employee)] async (
+    DateOnly? from,
+    DateOnly? to,
+    ITenantContext tenantContext,
+    HttpContext httpContext,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    if (tenantContext.TenantId == Guid.Empty)
+    {
+        return Results.BadRequest(new { error = "Tenant was not resolved." });
+    }
+
+    var ownEmployeeId = await ResolveCurrentEmployeeIdAsync(httpContext, dbContext, cancellationToken);
+    if (!ownEmployeeId.HasValue)
+    {
+        return Results.BadRequest(new { error = "No employee profile linked to your account email." });
+    }
+
+    var today = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+    var rangeFrom = from ?? new DateOnly(today.Year, today.Month, 1);
+    var rangeTo = to ?? rangeFrom.AddMonths(1).AddDays(-1);
+    if (rangeTo < rangeFrom)
+    {
+        return Results.BadRequest(new { error = "to date cannot be before from date." });
+    }
+
+    var rows = await dbContext.TimesheetEntries
+        .Where(x => x.EmployeeId == ownEmployeeId.Value && x.WorkDate >= rangeFrom && x.WorkDate <= rangeTo)
+        .OrderByDescending(x => x.WorkDate)
+        .Select(x => new
+        {
+            x.Id,
+            x.WorkDate,
+            x.HoursWorked,
+            x.Status,
+            x.IsWeekend,
+            x.IsHoliday,
+            x.Notes
+        })
+        .ToListAsync(cancellationToken);
+
+    var items = rows.Select(x => new
+    {
+        x.Id,
+        x.WorkDate,
+        x.HoursWorked,
+        x.Status,
+        x.IsWeekend,
+        x.IsHoliday,
+        CheckInUtc = ExtractBookingTimestampFromNotes(x.Notes, "BOOKING_CHECKIN_UTC"),
+        CheckOutUtc = ExtractBookingTimestampFromNotes(x.Notes, "BOOKING_CHECKOUT_UTC")
+    });
+
+    return Results.Ok(new { items = items.ToList(), from = rangeFrom, to = rangeTo });
+});
+
+api.MapPost("/me/bookings/check-in", [Authorize(Roles = RoleNames.Employee)] async (
+    ITenantContext tenantContext,
+    HttpContext httpContext,
+    IApplicationDbContext dbContext,
+    IDateTimeProvider dateTimeProvider,
+    CancellationToken cancellationToken) =>
+{
+    if (tenantContext.TenantId == Guid.Empty)
+    {
+        return Results.BadRequest(new { error = "Tenant was not resolved." });
+    }
+
+    var ownEmployeeId = await ResolveCurrentEmployeeIdAsync(httpContext, dbContext, cancellationToken);
+    if (!ownEmployeeId.HasValue)
+    {
+        return Results.BadRequest(new { error = "No employee profile linked to your account email." });
+    }
+
+    var nowUtc = dateTimeProvider.UtcNow;
+    var workDate = DateOnly.FromDateTime(nowUtc.Date);
+
+    var entry = await dbContext.TimesheetEntries.FirstOrDefaultAsync(
+        x => x.EmployeeId == ownEmployeeId.Value && x.WorkDate == workDate,
+        cancellationToken);
+
+    var existingCheckIn = entry is null ? null : ExtractBookingTimestampFromNotes(entry.Notes, "BOOKING_CHECKIN_UTC");
+    var existingCheckOut = entry is null ? null : ExtractBookingTimestampFromNotes(entry.Notes, "BOOKING_CHECKOUT_UTC");
+
+    if (existingCheckIn.HasValue && !existingCheckOut.HasValue)
+    {
+        return Results.Conflict(new { error = "You are already checked in for today." });
+    }
+
+    if (entry is null)
+    {
+        entry = new TimesheetEntry
+        {
+            EmployeeId = ownEmployeeId.Value,
+            WorkDate = workDate,
+            HoursWorked = 0m,
+            ApprovedOvertimeHours = 0m,
+            IsWeekend = workDate.DayOfWeek is DayOfWeek.Friday or DayOfWeek.Saturday,
+            IsHoliday = false,
+            Status = "Pending",
+            Notes = string.Empty
+        };
+        dbContext.AddEntity(entry);
+    }
+    else
+    {
+        entry.HoursWorked = 0m;
+        entry.ApprovedOvertimeHours = 0m;
+        entry.Status = "Pending";
+        entry.ApprovedAtUtc = null;
+        entry.ApprovedByUserId = null;
+    }
+
+    entry.Notes = UpsertBookingNote(entry.Notes, "BOOKING_CHECKIN_UTC", nowUtc);
+    entry.Notes = RemoveBookingNote(entry.Notes, "BOOKING_CHECKOUT_UTC");
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new
+    {
+        entry.Id,
+        entry.WorkDate,
+        CheckInUtc = nowUtc
+    });
+});
+
+api.MapPost("/me/bookings/check-out", [Authorize(Roles = RoleNames.Employee)] async (
+    ITenantContext tenantContext,
+    HttpContext httpContext,
+    IApplicationDbContext dbContext,
+    IDateTimeProvider dateTimeProvider,
+    CancellationToken cancellationToken) =>
+{
+    if (tenantContext.TenantId == Guid.Empty)
+    {
+        return Results.BadRequest(new { error = "Tenant was not resolved." });
+    }
+
+    var ownEmployeeId = await ResolveCurrentEmployeeIdAsync(httpContext, dbContext, cancellationToken);
+    if (!ownEmployeeId.HasValue)
+    {
+        return Results.BadRequest(new { error = "No employee profile linked to your account email." });
+    }
+
+    var nowUtc = dateTimeProvider.UtcNow;
+    var workDate = DateOnly.FromDateTime(nowUtc.Date);
+
+    var entry = await dbContext.TimesheetEntries.FirstOrDefaultAsync(
+        x => x.EmployeeId == ownEmployeeId.Value && x.WorkDate == workDate,
+        cancellationToken);
+
+    if (entry is null)
+    {
+        return Results.BadRequest(new { error = "No check-in found for today." });
+    }
+
+    var checkInUtc = ExtractBookingTimestampFromNotes(entry.Notes, "BOOKING_CHECKIN_UTC");
+    if (!checkInUtc.HasValue)
+    {
+        return Results.BadRequest(new { error = "No check-in found for today." });
+    }
+
+    var checkOutUtc = ExtractBookingTimestampFromNotes(entry.Notes, "BOOKING_CHECKOUT_UTC");
+    if (checkOutUtc.HasValue)
+    {
+        return Results.Conflict(new { error = "You are already checked out for today." });
+    }
+
+    if (nowUtc < checkInUtc.Value)
+    {
+        return Results.BadRequest(new { error = "Checkout time cannot be earlier than check-in time." });
+    }
+
+    var hours = Math.Round((decimal)(nowUtc - checkInUtc.Value).TotalHours, 2);
+    entry.HoursWorked = Math.Max(0m, hours);
+    entry.Status = "Pending";
+    entry.ApprovedAtUtc = null;
+    entry.ApprovedByUserId = null;
+    entry.Notes = UpsertBookingNote(entry.Notes, "BOOKING_CHECKOUT_UTC", nowUtc);
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new
+    {
+        entry.Id,
+        entry.WorkDate,
+        entry.HoursWorked,
+        CheckInUtc = checkInUtc.Value,
+        CheckOutUtc = nowUtc
+    });
+});
+
 api.MapGet("/company-profile", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
     ITenantContext tenantContext,
     IApplicationDbContext dbContext,
@@ -10947,6 +11138,67 @@ static int ReadQueryInt(IQueryCollection query, string key, int fallback)
     }
 
     return int.TryParse(value, out var parsed) ? parsed : fallback;
+}
+
+static async Task<Guid?> ResolveCurrentEmployeeIdAsync(
+    HttpContext httpContext,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken)
+{
+    var userEmail = httpContext.User.Claims
+        .Where(x => x.Type is "email" or ClaimTypes.Email)
+        .Select(x => x.Value)
+        .FirstOrDefault();
+
+    if (string.IsNullOrWhiteSpace(userEmail))
+    {
+        return null;
+    }
+
+    var normalizedEmail = userEmail.Trim().ToUpperInvariant();
+    return await dbContext.Employees
+        .Where(x => x.Email.ToUpper() == normalizedEmail)
+        .Select(x => (Guid?)x.Id)
+        .FirstOrDefaultAsync(cancellationToken);
+}
+
+static DateTime? ExtractBookingTimestampFromNotes(string? notes, string key)
+{
+    if (string.IsNullOrWhiteSpace(notes))
+    {
+        return null;
+    }
+
+    var prefix = $"{key}=";
+    var lines = notes.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    var line = lines.FirstOrDefault(x => x.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+    if (line is null)
+    {
+        return null;
+    }
+
+    var value = line[prefix.Length..].Trim();
+    return DateTime.TryParse(value, out var parsed) ? parsed : null;
+}
+
+static string UpsertBookingNote(string? notes, string key, DateTime valueUtc)
+{
+    var prefix = $"{key}=";
+    var lines = (notes ?? string.Empty)
+        .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Where(x => !x.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        .ToList();
+    lines.Add($"{key}={valueUtc:O}");
+    return string.Join('\n', lines);
+}
+
+static string RemoveBookingNote(string? notes, string key)
+{
+    var prefix = $"{key}=";
+    var lines = (notes ?? string.Empty)
+        .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Where(x => !x.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+    return string.Join('\n', lines);
 }
 
 static bool IsDbSchemaMismatch(Exception exception)

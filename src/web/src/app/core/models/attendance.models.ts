@@ -17,3 +17,14 @@ export interface UpsertAttendanceInputRequest {
   daysAbsent: number;
   overtimeHours: number;
 }
+
+export interface MyBookingRow {
+  id: string;
+  workDate: string;
+  hoursWorked: number;
+  status: string;
+  isWeekend: boolean;
+  isHoliday: boolean;
+  checkInUtc?: string | null;
+  checkOutUtc?: string | null;
+}

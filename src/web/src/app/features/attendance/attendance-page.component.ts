@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { AttendanceInputRow } from '../../core/models/attendance.models';
+import { AttendanceInputRow, MyBookingRow } from '../../core/models/attendance.models';
 import { Employee } from '../../core/models/employee.models';
 import { AuthService } from '../../core/services/auth.service';
 import { AttendanceService } from '../../core/services/attendance.service';
@@ -32,6 +32,10 @@ export class AttendancePageComponent implements OnInit {
   readonly saving = signal(false);
   readonly error = signal('');
   readonly message = signal('');
+  readonly bookingRows = signal<MyBookingRow[]>([]);
+  readonly bookingBusy = signal(false);
+  readonly bookingError = signal('');
+  readonly bookingMessage = signal('');
 
   readonly filterForm = this.fb.group({
     year: [new Date().getFullYear(), [Validators.required, Validators.min(2000), Validators.max(2100)]],
@@ -47,6 +51,11 @@ export class AttendancePageComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadEmployees();
+    if (this.isEmployee()) {
+      this.loadMyBookings();
+      return;
+    }
+
     this.loadRows();
   }
 
@@ -167,5 +176,66 @@ export class AttendancePageComponent implements OnInit {
           this.error.set(getApiErrorMessage(err, 'Failed to save attendance input.'));
         }
       });
+  }
+
+  loadMyBookings() {
+    this.bookingBusy.set(true);
+    this.bookingError.set('');
+    this.bookingMessage.set('');
+
+    this.attendanceService.listMyBookings().subscribe({
+      next: (rows) => {
+        this.bookingRows.set(rows);
+        this.bookingBusy.set(false);
+      },
+      error: (err) => {
+        this.bookingBusy.set(false);
+        this.bookingError.set(getApiErrorMessage(err, 'Failed to load bookings.'));
+      }
+    });
+  }
+
+  checkIn() {
+    if (this.bookingBusy()) {
+      return;
+    }
+
+    this.bookingBusy.set(true);
+    this.bookingError.set('');
+    this.bookingMessage.set('');
+
+    this.attendanceService.checkIn().subscribe({
+      next: () => {
+        this.bookingBusy.set(false);
+        this.bookingMessage.set(this.i18n.text('Checked in successfully.', 'تم تسجيل الحضور بنجاح.'));
+        this.loadMyBookings();
+      },
+      error: (err) => {
+        this.bookingBusy.set(false);
+        this.bookingError.set(getApiErrorMessage(err, 'Failed to check in.'));
+      }
+    });
+  }
+
+  checkOut() {
+    if (this.bookingBusy()) {
+      return;
+    }
+
+    this.bookingBusy.set(true);
+    this.bookingError.set('');
+    this.bookingMessage.set('');
+
+    this.attendanceService.checkOut().subscribe({
+      next: () => {
+        this.bookingBusy.set(false);
+        this.bookingMessage.set(this.i18n.text('Checked out successfully.', 'تم تسجيل الانصراف بنجاح.'));
+        this.loadMyBookings();
+      },
+      error: (err) => {
+        this.bookingBusy.set(false);
+        this.bookingError.set(getApiErrorMessage(err, 'Failed to check out.'));
+      }
+    });
   }
 }

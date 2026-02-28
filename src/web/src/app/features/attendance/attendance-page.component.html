@@ -1,63 +1,102 @@
 <section class="panel">
   <h2>{{ i18n.text('Attendance Input', 'إدخال الحضور') }}</h2>
 
-  <form class="filter" [formGroup]="filterForm" (ngSubmit)="loadRows()">
-    <label>{{ i18n.text('Year', 'السنة') }} <input type="number" formControlName="year" min="2000" max="2100" /></label>
-    <label>{{ i18n.text('Month', 'الشهر') }} <input type="number" formControlName="month" min="1" max="12" /></label>
-    <button type="submit">{{ i18n.text('Load', 'تحميل') }}</button>
-  </form>
-
-  <form class="form-grid" [formGroup]="form" (ngSubmit)="save()">
-    <label>
-      {{ i18n.text('Employee', 'الموظف') }}
-      <select formControlName="employeeId" [disabled]="isEmployee()">
-        <option value="">{{ i18n.text('Select employee', 'اختر موظفاً') }}</option>
-        @for (employee of employees(); track employee.id) {
-          <option [value]="employee.id">{{ employee.firstName }} {{ employee.lastName }}</option>
-        }
-      </select>
-    </label>
-
-    <label>{{ i18n.text('Days Present', 'أيام الحضور') }} <input type="number" formControlName="daysPresent" min="0" /></label>
-    <label>{{ i18n.text('Days Absent', 'أيام الغياب') }} <input type="number" formControlName="daysAbsent" min="0" /></label>
-    <label>{{ i18n.text('Overtime Hours', 'ساعات إضافية') }} <input type="number" step="0.25" formControlName="overtimeHours" min="0" /></label>
-    <div class="actions">
-      <button type="submit" [disabled]="saving() || employees().length === 0">
-        {{ saving() ? i18n.text('Saving...', 'جاري الحفظ...') : i18n.text('Save Attendance', 'حفظ الحضور') }}
-      </button>
+  @if (isEmployee()) {
+    <div class="actions" style="margin-bottom: 1rem; gap: 0.5rem; display: flex; flex-wrap: wrap;">
+      <button type="button" (click)="checkIn()" [disabled]="bookingBusy()">{{ i18n.text('Check In', 'Check In') }}</button>
+      <button type="button" (click)="checkOut()" [disabled]="bookingBusy()">{{ i18n.text('Check Out', 'Check Out') }}</button>
+      <button type="button" (click)="loadMyBookings()" [disabled]="bookingBusy()">{{ i18n.text('Refresh', 'Refresh') }}</button>
     </div>
-  </form>
 
-  @if (message()) { <p class="ok">{{ message() }}</p> }
-  @if (error()) { <p class="error">{{ error() }}</p> }
+    @if (bookingMessage()) { <p class="ok">{{ bookingMessage() }}</p> }
+    @if (bookingError()) { <p class="error">{{ bookingError() }}</p> }
 
-  <h3>{{ i18n.text('Current Period Inputs', 'مدخلات الفترة الحالية') }}</h3>
-  @if (loading()) {
-    <p>{{ i18n.text('Loading...', 'جاري التحميل...') }}</p>
-  } @else {
-    <table class="responsive-table">
-      <thead>
-        <tr>
-          <th>{{ i18n.text('Employee', 'الموظف') }}</th>
-          <th>{{ i18n.text('Year', 'السنة') }}</th>
-          <th>{{ i18n.text('Month', 'الشهر') }}</th>
-          <th>{{ i18n.text('Present', 'حضور') }}</th>
-          <th>{{ i18n.text('Absent', 'غياب') }}</th>
-          <th>{{ i18n.text('Overtime', 'إضافي') }}</th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (row of rows(); track row.id) {
+    <h3>{{ i18n.text('My Bookings', 'My Bookings') }}</h3>
+    @if (bookingBusy()) {
+      <p>{{ i18n.text('Loading...', 'جاري التحميل...') }}</p>
+    } @else {
+      <table class="responsive-table">
+        <thead>
           <tr>
-            <td [attr.data-label]="i18n.text('Employee', 'الموظف')">{{ row.employeeName }}</td>
-            <td [attr.data-label]="i18n.text('Year', 'السنة')">{{ row.year }}</td>
-            <td [attr.data-label]="i18n.text('Month', 'الشهر')">{{ row.month }}</td>
-            <td [attr.data-label]="i18n.text('Present', 'حضور')">{{ row.daysPresent }}</td>
-            <td [attr.data-label]="i18n.text('Absent', 'غياب')">{{ row.daysAbsent }}</td>
-            <td [attr.data-label]="i18n.text('Overtime', 'إضافي')">{{ row.overtimeHours | number: '1.2-2' }}</td>
+            <th>{{ i18n.text('Work Date', 'Work Date') }}</th>
+            <th>{{ i18n.text('Check In', 'Check In') }}</th>
+            <th>{{ i18n.text('Check Out', 'Check Out') }}</th>
+            <th>{{ i18n.text('Hours', 'Hours') }}</th>
+            <th>{{ i18n.text('Status', 'Status') }}</th>
           </tr>
-        }
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          @for (row of bookingRows(); track row.id) {
+            <tr>
+              <td>{{ row.workDate }}</td>
+              <td>{{ row.checkInUtc ? (row.checkInUtc | date: 'short') : '-' }}</td>
+              <td>{{ row.checkOutUtc ? (row.checkOutUtc | date: 'short') : '-' }}</td>
+              <td>{{ row.hoursWorked | number: '1.2-2' }}</td>
+              <td>{{ row.status }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+  } @else {
+    <form class="filter" [formGroup]="filterForm" (ngSubmit)="loadRows()">
+      <label>{{ i18n.text('Year', 'السنة') }} <input type="number" formControlName="year" min="2000" max="2100" /></label>
+      <label>{{ i18n.text('Month', 'الشهر') }} <input type="number" formControlName="month" min="1" max="12" /></label>
+      <button type="submit">{{ i18n.text('Load', 'تحميل') }}</button>
+    </form>
+
+    <form class="form-grid" [formGroup]="form" (ngSubmit)="save()">
+      <label>
+        {{ i18n.text('Employee', 'الموظف') }}
+        <select formControlName="employeeId">
+          <option value="">{{ i18n.text('Select employee', 'اختر موظفاً') }}</option>
+          @for (employee of employees(); track employee.id) {
+            <option [value]="employee.id">{{ employee.firstName }} {{ employee.lastName }}</option>
+          }
+        </select>
+      </label>
+
+      <label>{{ i18n.text('Days Present', 'أيام الحضور') }} <input type="number" formControlName="daysPresent" min="0" /></label>
+      <label>{{ i18n.text('Days Absent', 'أيام الغياب') }} <input type="number" formControlName="daysAbsent" min="0" /></label>
+      <label>{{ i18n.text('Overtime Hours', 'ساعات إضافية') }} <input type="number" step="0.25" formControlName="overtimeHours" min="0" /></label>
+      <div class="actions">
+        <button type="submit" [disabled]="saving() || employees().length === 0">
+          {{ saving() ? i18n.text('Saving...', 'جاري الحفظ...') : i18n.text('Save Attendance', 'حفظ الحضور') }}
+        </button>
+      </div>
+    </form>
+
+    @if (message()) { <p class="ok">{{ message() }}</p> }
+    @if (error()) { <p class="error">{{ error() }}</p> }
+
+    <h3>{{ i18n.text('Current Period Inputs', 'مدخلات الفترة الحالية') }}</h3>
+    @if (loading()) {
+      <p>{{ i18n.text('Loading...', 'جاري التحميل...') }}</p>
+    } @else {
+      <table class="responsive-table">
+        <thead>
+          <tr>
+            <th>{{ i18n.text('Employee', 'الموظف') }}</th>
+            <th>{{ i18n.text('Year', 'السنة') }}</th>
+            <th>{{ i18n.text('Month', 'الشهر') }}</th>
+            <th>{{ i18n.text('Present', 'حضور') }}</th>
+            <th>{{ i18n.text('Absent', 'غياب') }}</th>
+            <th>{{ i18n.text('Overtime', 'إضافي') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of rows(); track row.id) {
+            <tr>
+              <td [attr.data-label]="i18n.text('Employee', 'الموظف')">{{ row.employeeName }}</td>
+              <td [attr.data-label]="i18n.text('Year', 'السنة')">{{ row.year }}</td>
+              <td [attr.data-label]="i18n.text('Month', 'الشهر')">{{ row.month }}</td>
+              <td [attr.data-label]="i18n.text('Present', 'حضور')">{{ row.daysPresent }}</td>
+              <td [attr.data-label]="i18n.text('Absent', 'غياب')">{{ row.daysAbsent }}</td>
+              <td [attr.data-label]="i18n.text('Overtime', 'إضافي')">{{ row.overtimeHours | number: '1.2-2' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
   }
 </section>
