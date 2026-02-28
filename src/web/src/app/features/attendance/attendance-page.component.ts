@@ -41,6 +41,18 @@ export class AttendancePageComponent implements OnInit {
   readonly dailyBookingRows = signal<TimesheetBookingRow[]>([]);
   readonly dailyBookingLoading = signal(false);
   readonly dailyBookingError = signal('');
+  readonly selectedDetailsEmployeeId = signal('');
+  readonly selectedDetailsEmployeeName = signal('');
+  readonly selectedEmployeeDailyRows = computed(() => {
+    const employeeId = this.selectedDetailsEmployeeId();
+    if (!employeeId) {
+      return [] as TimesheetBookingRow[];
+    }
+
+    return this.dailyBookingRows()
+      .filter((x) => x.employeeId === employeeId)
+      .sort((a, b) => a.workDate.localeCompare(b.workDate));
+  });
 
   readonly filterForm = this.fb.group({
     year: [new Date().getFullYear(), [Validators.required, Validators.min(2000), Validators.max(2100)]],
@@ -141,6 +153,10 @@ export class AttendancePageComponent implements OnInit {
     this.attendanceService.list(year, month).subscribe({
       next: (rows) => {
         this.rows.set(rows);
+        if (this.selectedDetailsEmployeeId() && !rows.some((x) => x.employeeId === this.selectedDetailsEmployeeId())) {
+          this.selectedDetailsEmployeeId.set('');
+          this.selectedDetailsEmployeeName.set('');
+        }
         this.loading.set(false);
         this.loadDailyBookings();
       },
@@ -290,6 +306,16 @@ export class AttendancePageComponent implements OnInit {
         this.bookingError.set(getApiErrorMessage(err, 'Failed to save manual booking.'));
       }
     });
+  }
+
+  showEmployeeDetails(row: AttendanceInputRow) {
+    this.selectedDetailsEmployeeId.set(row.employeeId);
+    this.selectedDetailsEmployeeName.set(row.employeeName);
+  }
+
+  clearEmployeeDetails() {
+    this.selectedDetailsEmployeeId.set('');
+    this.selectedDetailsEmployeeName.set('');
   }
 
   private loadDailyBookings() {
