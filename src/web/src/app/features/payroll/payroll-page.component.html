@@ -67,16 +67,20 @@
   @if (message()) { <p class="ok">{{ message() }}</p> }
   @if (error()) { <p class="error">{{ error() }}</p> }
 
-  <h3>{{ i18n.text('Run Details', 'تفاصيل التشغيل') }}</h3>
+  <h3 class="section-title">{{ i18n.text('Run Details', 'تفاصيل التشغيل') }}</h3>
   @if (run()) {
-    <p>Status: {{ run()?.status }} | Total Net: {{ totalNet() | number: '1.2-2' }}</p>
-    <h4>{{ i18n.text('Workflow Stages', 'Workflow Stages') }}</h4>
-    @if (loadingWorkflow()) {
-      <p>{{ i18n.text('Loading workflow stages...','Loading workflow stages...') }}</p>
-    } @else if (approvalStages().length === 0) {
-      <p class="muted">{{ i18n.text('No active workflow stages configured.','No active workflow stages configured.') }}</p>
-    } @else {
-      <table>
+    <div class="run-summary">
+      <span>Status: {{ run()?.status }}</span>
+      <span>Total Net: {{ totalNet() | number: '1.2-2' }}</span>
+    </div>
+    <details class="section-block" open>
+      <summary>{{ i18n.text('Workflow Stages', 'Workflow Stages') }}</summary>
+      @if (loadingWorkflow()) {
+        <p>{{ i18n.text('Loading workflow stages...','Loading workflow stages...') }}</p>
+      } @else if (approvalStages().length === 0) {
+        <p class="muted">{{ i18n.text('No active workflow stages configured.','No active workflow stages configured.') }}</p>
+      } @else {
+        <table>
         <thead>
           <tr>
             <th>{{ i18n.text('Order', 'Order') }}</th>
@@ -109,21 +113,25 @@
             </tr>
           }
         </tbody>
-      </table>
-    }
-    <h4>{{ i18n.text('Executive Summary', 'الملخص التنفيذي') }}</h4>
-    @if (loadingExecutiveSummary()) {
-      <p>{{ i18n.text('Generating summary...', 'جارٍ إنشاء الملخص...') }}</p>
-    } @else if (executiveSummary(); as summary) {
-      <div class="ok">
-        <p><strong>{{ i18n.text('English', 'English') }}:</strong> {{ summary.summaryEn }}</p>
-        <p><strong>{{ i18n.text('Arabic', 'العربية') }}:</strong> {{ summary.summaryAr }}</p>
-      </div>
-    }
-    <h4>{{ i18n.text('Pre-Approval Checks', 'فحوصات ما قبل الاعتماد') }}</h4>
-    @if (loadingChecks()) {
-      <p>{{ i18n.text('Checking payroll anomalies...', 'جاري فحص انحرافات الرواتب...') }}</p>
-    } @else if (preApprovalChecks(); as checks) {
+        </table>
+      }
+    </details>
+    <details class="section-block" open>
+      <summary>{{ i18n.text('Executive Summary', 'الملخص التنفيذي') }}</summary>
+      @if (loadingExecutiveSummary()) {
+        <p>{{ i18n.text('Generating summary...', 'جارٍ إنشاء الملخص...') }}</p>
+      } @else if (executiveSummary(); as summary) {
+        <div class="ok">
+          <p><strong>{{ i18n.text('English', 'English') }}:</strong> {{ summary.summaryEn }}</p>
+          <p><strong>{{ i18n.text('Arabic', 'العربية') }}:</strong> {{ summary.summaryAr }}</p>
+        </div>
+      }
+    </details>
+    <details class="section-block">
+      <summary>{{ i18n.text('Pre-Approval Checks', 'فحوصات ما قبل الاعتماد') }}</summary>
+      @if (loadingChecks()) {
+        <p>{{ i18n.text('Checking payroll anomalies...', 'جاري فحص انحرافات الرواتب...') }}</p>
+      } @else if (preApprovalChecks(); as checks) {
       <p>
         {{ i18n.text('Critical', 'حرج') }}: {{ criticalChecksCount() }} |
         {{ i18n.text('Warning', 'تحذير') }}: {{ warningChecksCount() }}
@@ -195,12 +203,14 @@
           </tbody>
         </table>
       }
-    }
+      }
+    </details>
 
-    <h4>{{ i18n.text('Compliance Readiness (WPS/GOSI)', 'Compliance Readiness (WPS/GOSI)') }}</h4>
-    @if (loadingComplianceReadiness()) {
-      <p>{{ i18n.text('Checking compliance readiness...', 'Checking compliance readiness...') }}</p>
-    } @else if (complianceReadiness(); as readiness) {
+    <details class="section-block">
+      <summary>{{ i18n.text('Compliance Readiness (WPS/GOSI)', 'Compliance Readiness (WPS/GOSI)') }}</summary>
+      @if (loadingComplianceReadiness()) {
+        <p>{{ i18n.text('Checking compliance readiness...', 'Checking compliance readiness...') }}</p>
+      } @else if (complianceReadiness(); as readiness) {
       <p>
         WPS {{ i18n.text('Critical', 'Critical') }}: {{ wpsReadinessCriticalCount() }} |
         GOSI {{ i18n.text('Critical', 'Critical') }}: {{ gosiReadinessCriticalCount() }}
@@ -229,18 +239,23 @@
           </tbody>
         </table>
       }
-    }
+      }
+    </details>
 
-    <button type="button" class="btn btn-secondary" (click)="downloadRegisterCsv()" [disabled]="busy() || exportBusy() || !activeRunId()">
-      {{ i18n.text('Export Register CSV', 'تصدير سجل الرواتب CSV') }}
-    </button>
-    <button type="button" class="btn btn-secondary" (click)="downloadGosiCsv()" [disabled]="busy() || exportBusy() || !activeRunId() || hasGosiReadinessBlockers()">
-      {{ i18n.text('Export GOSI CSV', 'تصدير ملف التأمينات CSV') }}
-    </button>
-    <button type="button" class="btn btn-secondary" (click)="downloadWpsCsv()" [disabled]="busy() || exportBusy() || !activeRunId() || hasWpsReadinessBlockers()">
-      {{ i18n.text('Export WPS CSV', 'تصدير ملف WPS CSV') }}
-    </button>
-    <table>
+    <details class="section-block">
+      <summary>{{ i18n.text('Payroll Lines & Exports', 'تفاصيل الرواتب والتصدير') }}</summary>
+      <div class="row-actions">
+        <button type="button" class="btn btn-secondary" (click)="downloadRegisterCsv()" [disabled]="busy() || exportBusy() || !activeRunId()">
+          {{ i18n.text('Export Register CSV', 'تصدير سجل الرواتب CSV') }}
+        </button>
+        <button type="button" class="btn btn-secondary" (click)="downloadGosiCsv()" [disabled]="busy() || exportBusy() || !activeRunId() || hasGosiReadinessBlockers()">
+          {{ i18n.text('Export GOSI CSV', 'تصدير ملف التأمينات CSV') }}
+        </button>
+        <button type="button" class="btn btn-secondary" (click)="downloadWpsCsv()" [disabled]="busy() || exportBusy() || !activeRunId() || hasWpsReadinessBlockers()">
+          {{ i18n.text('Export WPS CSV', 'تصدير ملف WPS CSV') }}
+        </button>
+      </div>
+      <table>
       <thead>
         <tr>
           <th>Employee</th>
@@ -304,15 +319,17 @@
           </tr>
         }
       </tbody>
-    </table>
+      </table>
+    </details>
 
-    <h4>{{ i18n.text('Approval Decisions', 'سجل قرارات الاعتماد') }}</h4>
-    @if (loadingApprovalDecisions()) {
-      <p>{{ i18n.text('Loading approval decisions...', 'جاري تحميل سجل قرارات الاعتماد...') }}</p>
-    } @else if (approvalDecisions().length === 0) {
-      <p class="muted">{{ i18n.text('No approval decisions yet for this run.', 'لا توجد قرارات اعتماد لهذا التشغيل حتى الآن.') }}</p>
-    } @else {
-      <table>
+    <details class="section-block">
+      <summary>{{ i18n.text('Approval Decisions', 'سجل قرارات الاعتماد') }}</summary>
+      @if (loadingApprovalDecisions()) {
+        <p>{{ i18n.text('Loading approval decisions...', 'جاري تحميل سجل قرارات الاعتماد...') }}</p>
+      } @else if (approvalDecisions().length === 0) {
+        <p class="muted">{{ i18n.text('No approval decisions yet for this run.', 'لا توجد قرارات اعتماد لهذا التشغيل حتى الآن.') }}</p>
+      } @else {
+        <table>
         <thead>
           <tr>
             <th>{{ i18n.text('When', 'الوقت') }}</th>
@@ -347,8 +364,9 @@
             </tr>
           }
         </tbody>
-      </table>
-    }
+        </table>
+      }
+    </details>
   } @else {
     <p>{{ i18n.text('No run loaded yet.', 'لم يتم تحميل تشغيل بعد.') }}</p>
   }
@@ -399,15 +417,16 @@
     </section>
   }
 
-  <h3>{{ i18n.text('Export History', 'سجل التصدير') }}</h3>
-  <p class="muted">{{ exportLastUpdatedLabel() }}</p>
-  @if (pollingExports()) {
-    <p>{{ i18n.text('Auto-refreshing export status...', 'يتم تحديث حالة التصدير تلقائياً...') }}</p>
-  }
-  @if (!activeRunId()) {
-    <p>{{ i18n.text('Select and load a run first.', 'اختر تشغيلًا ثم قم بتحميله أولاً.') }}</p>
-  } @else {
-    <table>
+  <details class="section-block">
+    <summary>{{ i18n.text('Export History', 'سجل التصدير') }}</summary>
+    <p class="muted">{{ exportLastUpdatedLabel() }}</p>
+    @if (pollingExports()) {
+      <p>{{ i18n.text('Auto-refreshing export status...', 'يتم تحديث حالة التصدير تلقائياً...') }}</p>
+    }
+    @if (!activeRunId()) {
+      <p>{{ i18n.text('Select and load a run first.', 'اختر تشغيلًا ثم قم بتحميله أولاً.') }}</p>
+    } @else {
+      <table>
       <thead>
         <tr>
           <th>Type</th>
@@ -443,21 +462,24 @@
           }
         }
       </tbody>
-    </table>
-  }
+      </table>
+    }
+  </details>
 
-  <h3>{{ i18n.text('Adjustments (selected month/year)', 'التعديلات (الشهر/السنة المحددين)') }}</h3>
-  <table>
-    <thead><tr><th>Employee</th><th>Type</th><th>Amount</th><th>Notes</th></tr></thead>
-    <tbody>
-      @for (adj of adjustments(); track adj.id) {
-        <tr>
-          <td>{{ adj.employeeName }}</td>
-          <td>{{ adj.type === 1 ? 'Allowance' : 'Deduction' }}</td>
-          <td>{{ adj.amount | number: '1.2-2' }}</td>
-          <td>{{ adj.notes }}</td>
-        </tr>
-      }
-    </tbody>
-  </table>
+  <details class="section-block">
+    <summary>{{ i18n.text('Adjustments (selected month/year)', 'التعديلات (الشهر/السنة المحددين)') }}</summary>
+    <table>
+      <thead><tr><th>Employee</th><th>Type</th><th>Amount</th><th>Notes</th></tr></thead>
+      <tbody>
+        @for (adj of adjustments(); track adj.id) {
+          <tr>
+            <td>{{ adj.employeeName }}</td>
+            <td>{{ adj.type === 1 ? 'Allowance' : 'Deduction' }}</td>
+            <td>{{ adj.amount | number: '1.2-2' }}</td>
+            <td>{{ adj.notes }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </details>
 </section>
