@@ -8,7 +8,7 @@
       <button type="submit">{{ i18n.text('Load', 'تحميل') }}</button>
     </form>
 
-    <div class="actions" style="margin-bottom: 1rem; gap: 0.5rem; display: flex; flex-wrap: wrap;">
+    <div class="actions booking-toolbar">
       <button type="button" (click)="checkIn()" [disabled]="bookingBusy()">{{ i18n.text('Check In', 'Check In') }}</button>
       <button type="button" (click)="checkOut()" [disabled]="bookingBusy()">{{ i18n.text('Check Out', 'Check Out') }}</button>
       <button type="button" (click)="loadMyBookings()" [disabled]="bookingBusy()">{{ i18n.text('Refresh', 'Refresh') }}</button>
@@ -47,12 +47,12 @@
         <tbody>
           @for (row of bookingRows(); track row.id) {
             <tr>
-              <td>{{ row.workDate }}</td>
-              <td>{{ row.workDate | date: 'EEE' }}</td>
-              <td>{{ row.checkInUtc ? (row.checkInUtc | date: 'short') : '-' }}</td>
-              <td>{{ row.checkOutUtc ? (row.checkOutUtc | date: 'short') : '-' }}</td>
-              <td>{{ row.hoursWorked | number: '1.2-2' }}</td>
-              <td>{{ row.status }}</td>
+              <td [attr.data-label]="i18n.text('Work Date', 'Work Date')">{{ row.workDate }}</td>
+              <td [attr.data-label]="i18n.text('Day', 'Day')">{{ row.workDate | date: 'EEE' }}</td>
+              <td [attr.data-label]="i18n.text('Check In', 'Check In')">{{ row.checkInUtc ? (row.checkInUtc | date: 'short') : '-' }}</td>
+              <td [attr.data-label]="i18n.text('Check Out', 'Check Out')">{{ row.checkOutUtc ? (row.checkOutUtc | date: 'short') : '-' }}</td>
+              <td [attr.data-label]="i18n.text('Hours', 'Hours')">{{ row.hoursWorked | number: '1.2-2' }}</td>
+              <td [attr.data-label]="i18n.text('Status', 'Status')">{{ row.status }}</td>
             </tr>
           }
         </tbody>
@@ -128,7 +128,7 @@
     } @else if (!selectedDetailsEmployeeId()) {
       <p>{{ i18n.text('Select an employee row and click View Details.', 'Select an employee row and click View Details.') }}</p>
     } @else {
-      <div class="actions" style="margin-bottom: 0.5rem; gap: 0.5rem; display: flex; align-items: center;">
+      <div class="actions details-toolbar">
         <strong>{{ selectedDetailsEmployeeName() }}</strong>
         <button type="button" (click)="clearEmployeeDetails()">{{ i18n.text('Close Details', 'Close Details') }}</button>
       </div>
@@ -146,12 +146,12 @@
         <tbody>
           @for (row of selectedEmployeeDailyRows(); track row.id) {
             <tr>
-              <td>{{ row.workDate }}</td>
-              <td>{{ row.workDate | date: 'EEE' }}</td>
-              <td>{{ row.checkInUtc ? (row.checkInUtc | date: 'short') : '-' }}</td>
-              <td>{{ row.checkOutUtc ? (row.checkOutUtc | date: 'short') : '-' }}</td>
-              <td>{{ row.hoursWorked | number: '1.2-2' }}</td>
-              <td>{{ row.status }}</td>
+              <td [attr.data-label]="i18n.text('Date', 'Date')">{{ row.workDate }}</td>
+              <td [attr.data-label]="i18n.text('Day', 'Day')">{{ row.workDate | date: 'EEE' }}</td>
+              <td [attr.data-label]="i18n.text('Check In', 'Check In')">{{ row.checkInUtc ? (row.checkInUtc | date: 'short') : '-' }}</td>
+              <td [attr.data-label]="i18n.text('Check Out', 'Check Out')">{{ row.checkOutUtc ? (row.checkOutUtc | date: 'short') : '-' }}</td>
+              <td [attr.data-label]="i18n.text('Hours', 'Hours')">{{ row.hoursWorked | number: '1.2-2' }}</td>
+              <td [attr.data-label]="i18n.text('Status', 'Status')">{{ row.status }}</td>
             </tr>
           }
         </tbody>

@@ -38,7 +38,8 @@
   @if (loading()) {
     <p>{{ i18n.text('Loading...', 'جاري التحميل...') }}</p>
   } @else {
-    <table>
+    <div class="table-wrap">
+      <table>
       <thead>
         <tr>
           <th>{{ i18n.text('Name', 'الاسم') }}</th>
@@ -88,7 +89,8 @@
           </tr>
         }
       </tbody>
-    </table>
+      </table>
+    </div>
   }
 
   <h3>{{ i18n.text('End of Service Estimate', 'تقدير مكافأة نهاية الخدمة') }}</h3>
@@ -185,7 +187,8 @@
   @if (loadingFinalSettlementExports()) {
     <p>{{ i18n.text('Loading exports...', 'جاري تحميل الصادرات...') }}</p>
   } @else {
-    <table>
+    <div class="table-wrap">
+      <table>
       <thead>
         <tr>
           <th>{{ i18n.text('File', 'الملف') }}</th>
@@ -208,7 +211,8 @@
           </tr>
         }
       </tbody>
-    </table>
+      </table>
+    </div>
   }
 </section>
 

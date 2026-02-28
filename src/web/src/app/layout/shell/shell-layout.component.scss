@@ -7,10 +7,11 @@
 }
 
 aside {
-  background: #0e223f;
-  color: #d8e6ff;
+  background: linear-gradient(180deg, #083d33 0%, #0b5746 100%);
+  color: #e4f4ec;
   padding: 16px;
   z-index: 30;
+  border-inline-end: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .brand {
@@ -28,27 +29,30 @@ a {
   text-decoration: none;
   padding: 8px 10px;
   border-radius: 8px;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 a.active,
 a:hover {
-  background: #1e3a66;
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
 }
 
 main {
-  background: #f5f8fc;
+  background: transparent;
   min-width: 0;
 }
 
 header {
   min-height: 64px;
   padding: 10px 16px;
-  border-bottom: 1px solid #d9e3ef;
+  border-bottom: 1px solid #d5e7dd;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
 }
 
 .user-summary {
@@ -65,13 +69,13 @@ header {
 header span {
   display: block;
   font-size: 0.8rem;
-  color: #51657d;
+  color: #4e6b5f;
 }
 
 button {
-  border: 1px solid #c8d6e4;
+  border: 1px solid #bfd7cb;
   border-radius: 8px;
-  background: #fff;
+  background: #f6fcf9;
   padding: 8px 12px;
   cursor: pointer;
 }

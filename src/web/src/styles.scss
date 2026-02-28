@@ -13,7 +13,7 @@ body {
 }
 
 body {
-  background: #f5f8fc;
+  background: radial-gradient(circle at 10% 0%, #f0fbf6 0%, #f5f8fc 42%, #f3f6fb 100%);
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   color: #1c2b3a;
   line-height: 1.4;
@@ -25,23 +25,32 @@ app-root {
 }
 
 :root {
-  --btn-primary-bg: #0a4ea1;
-  --btn-primary-bg-hover: #083f81;
-  --btn-secondary-bg: #eef5ff;
-  --btn-secondary-border: #9bbce6;
-  --btn-secondary-text: #123f70;
+  --brand-green-900: #0a4f3f;
+  --brand-green-800: #0f6a54;
+  --brand-green-700: #11795f;
+  --brand-green-100: #e7f6ef;
+  --brand-gold-100: #fdf3df;
+  --surface-card: #ffffff;
+  --surface-soft: #f5faf7;
+  --border-soft: #d8e8df;
+
+  --btn-primary-bg: var(--brand-green-700);
+  --btn-primary-bg-hover: var(--brand-green-800);
+  --btn-secondary-bg: #eef8f3;
+  --btn-secondary-border: #9acbb4;
+  --btn-secondary-text: #0e5c48;
   --btn-danger-bg: #c62828;
   --btn-danger-bg-hover: #a61e1e;
-  --btn-ghost-border: #c9d6e2;
-  --btn-ghost-text: #1d466d;
+  --btn-ghost-border: #c8ddd2;
+  --btn-ghost-text: #0b5a47;
 }
 
 .btn {
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 10px 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.12s ease, box-shadow 0.12s ease;
 }
 
 .btn-sm {
@@ -58,6 +67,8 @@ app-root {
 .btn-primary:hover:not(:disabled) {
   background: var(--btn-primary-bg-hover);
   border-color: var(--btn-primary-bg-hover);
+  box-shadow: 0 8px 18px rgba(17, 121, 95, 0.2);
+  transform: translateY(-1px);
 }
 
 .btn-secondary {
@@ -67,8 +78,8 @@ app-root {
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: #e4efff;
-  border-color: #87addd;
+  background: #e3f3eb;
+  border-color: #84c1a6;
 }
 
 .btn-danger {
@@ -89,7 +100,7 @@ app-root {
 }
 
 .btn-ghost:hover:not(:disabled) {
-  background: #f8fbff;
+  background: #f1f9f5;
 }
 
 .btn:disabled {
