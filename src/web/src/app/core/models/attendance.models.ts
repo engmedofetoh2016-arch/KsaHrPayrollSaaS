@@ -28,3 +28,27 @@ export interface MyBookingRow {
   checkInUtc?: string | null;
   checkOutUtc?: string | null;
 }
+
+export interface TimesheetBookingRow {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  workDate: string;
+  hoursWorked: number;
+  approvedOvertimeHours: number;
+  isWeekend: boolean;
+  isHoliday: boolean;
+  status: string;
+  shiftRuleId?: string | null;
+  approvedAtUtc?: string | null;
+  checkInUtc?: string | null;
+  checkOutUtc?: string | null;
+}
+
+export interface ManualBookingRequest {
+  workDate: string;
+  checkInUtc?: string | null;
+  checkOutUtc?: string | null;
+  hoursWorked?: number | null;
+  notes?: string | null;
+}

@@ -2,11 +2,29 @@
   <h2>{{ i18n.text('Attendance Input', 'إدخال الحضور') }}</h2>
 
   @if (isEmployee()) {
+    <form class="filter" [formGroup]="filterForm" (ngSubmit)="loadMyBookings()">
+      <label>{{ i18n.text('Year', 'السنة') }} <input type="number" formControlName="year" min="2000" max="2100" /></label>
+      <label>{{ i18n.text('Month', 'الشهر') }} <input type="number" formControlName="month" min="1" max="12" /></label>
+      <button type="submit">{{ i18n.text('Load', 'تحميل') }}</button>
+    </form>
+
     <div class="actions" style="margin-bottom: 1rem; gap: 0.5rem; display: flex; flex-wrap: wrap;">
       <button type="button" (click)="checkIn()" [disabled]="bookingBusy()">{{ i18n.text('Check In', 'Check In') }}</button>
       <button type="button" (click)="checkOut()" [disabled]="bookingBusy()">{{ i18n.text('Check Out', 'Check Out') }}</button>
       <button type="button" (click)="loadMyBookings()" [disabled]="bookingBusy()">{{ i18n.text('Refresh', 'Refresh') }}</button>
     </div>
+
+    <h3>{{ i18n.text('Manual Booking', 'Manual Booking') }}</h3>
+    <form class="form-grid" [formGroup]="manualBookingForm" (ngSubmit)="saveManualBooking()">
+      <label>{{ i18n.text('Work Date', 'Work Date') }} <input type="date" formControlName="workDate" /></label>
+      <label>{{ i18n.text('Check In Time', 'Check In Time') }} <input type="datetime-local" formControlName="checkInLocal" /></label>
+      <label>{{ i18n.text('Check Out Time', 'Check Out Time') }} <input type="datetime-local" formControlName="checkOutLocal" /></label>
+      <label>{{ i18n.text('Hours Worked', 'Hours Worked') }} <input type="number" step="0.25" formControlName="hoursWorked" min="0" /></label>
+      <label>{{ i18n.text('Notes', 'Notes') }} <input type="text" formControlName="notes" /></label>
+      <div class="actions">
+        <button type="submit" [disabled]="bookingBusy()">{{ i18n.text('Save Manual Booking', 'Save Manual Booking') }}</button>
+      </div>
+    </form>
 
     @if (bookingMessage()) { <p class="ok">{{ bookingMessage() }}</p> }
     @if (bookingError()) { <p class="error">{{ bookingError() }}</p> }
@@ -19,6 +37,7 @@
         <thead>
           <tr>
             <th>{{ i18n.text('Work Date', 'Work Date') }}</th>
+            <th>{{ i18n.text('Day', 'Day') }}</th>
             <th>{{ i18n.text('Check In', 'Check In') }}</th>
             <th>{{ i18n.text('Check Out', 'Check Out') }}</th>
             <th>{{ i18n.text('Hours', 'Hours') }}</th>
@@ -29,6 +48,7 @@
           @for (row of bookingRows(); track row.id) {
             <tr>
               <td>{{ row.workDate }}</td>
+              <td>{{ row.workDate | date: 'EEE' }}</td>
               <td>{{ row.checkInUtc ? (row.checkInUtc | date: 'short') : '-' }}</td>
               <td>{{ row.checkOutUtc ? (row.checkOutUtc | date: 'short') : '-' }}</td>
               <td>{{ row.hoursWorked | number: '1.2-2' }}</td>
@@ -93,6 +113,39 @@
               <td [attr.data-label]="i18n.text('Present', 'حضور')">{{ row.daysPresent }}</td>
               <td [attr.data-label]="i18n.text('Absent', 'غياب')">{{ row.daysAbsent }}</td>
               <td [attr.data-label]="i18n.text('Overtime', 'إضافي')">{{ row.overtimeHours | number: '1.2-2' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+
+    <h3>{{ i18n.text('Daily Bookings', 'Daily Bookings') }}</h3>
+    @if (dailyBookingError()) { <p class="error">{{ dailyBookingError() }}</p> }
+    @if (dailyBookingLoading()) {
+      <p>{{ i18n.text('Loading...', 'جاري التحميل...') }}</p>
+    } @else {
+      <table class="responsive-table">
+        <thead>
+          <tr>
+            <th>{{ i18n.text('Date', 'Date') }}</th>
+            <th>{{ i18n.text('Day', 'Day') }}</th>
+            <th>{{ i18n.text('Employee', 'Employee') }}</th>
+            <th>{{ i18n.text('Check In', 'Check In') }}</th>
+            <th>{{ i18n.text('Check Out', 'Check Out') }}</th>
+            <th>{{ i18n.text('Hours', 'Hours') }}</th>
+            <th>{{ i18n.text('Status', 'Status') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of dailyBookingRows(); track row.id) {
+            <tr>
+              <td>{{ row.workDate }}</td>
+              <td>{{ row.workDate | date: 'EEE' }}</td>
+              <td>{{ row.employeeName }}</td>
+              <td>{{ row.checkInUtc ? (row.checkInUtc | date: 'short') : '-' }}</td>
+              <td>{{ row.checkOutUtc ? (row.checkOutUtc | date: 'short') : '-' }}</td>
+              <td>{{ row.hoursWorked | number: '1.2-2' }}</td>
+              <td>{{ row.status }}</td>
             </tr>
           }
         </tbody>

@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { AttendanceInputRow, MyBookingRow } from '../../core/models/attendance.models';
+import { AttendanceInputRow, MyBookingRow, TimesheetBookingRow } from '../../core/models/attendance.models';
 import { Employee } from '../../core/models/employee.models';
 import { AuthService } from '../../core/services/auth.service';
 import { AttendanceService } from '../../core/services/attendance.service';
@@ -32,10 +32,15 @@ export class AttendancePageComponent implements OnInit {
   readonly saving = signal(false);
   readonly error = signal('');
   readonly message = signal('');
+
   readonly bookingRows = signal<MyBookingRow[]>([]);
   readonly bookingBusy = signal(false);
   readonly bookingError = signal('');
   readonly bookingMessage = signal('');
+
+  readonly dailyBookingRows = signal<TimesheetBookingRow[]>([]);
+  readonly dailyBookingLoading = signal(false);
+  readonly dailyBookingError = signal('');
 
   readonly filterForm = this.fb.group({
     year: [new Date().getFullYear(), [Validators.required, Validators.min(2000), Validators.max(2100)]],
@@ -47,6 +52,14 @@ export class AttendancePageComponent implements OnInit {
     daysPresent: [0, [Validators.required, Validators.min(0)]],
     daysAbsent: [0, [Validators.required, Validators.min(0)]],
     overtimeHours: [0, [Validators.required, Validators.min(0)]]
+  });
+
+  readonly manualBookingForm = this.fb.group({
+    workDate: [new Date().toISOString().slice(0, 10), [Validators.required]],
+    checkInLocal: [''],
+    checkOutLocal: [''],
+    hoursWorked: [null as number | null, [Validators.min(0)]],
+    notes: ['']
   });
 
   ngOnInit(): void {
@@ -129,6 +142,7 @@ export class AttendancePageComponent implements OnInit {
       next: (rows) => {
         this.rows.set(rows);
         this.loading.set(false);
+        this.loadDailyBookings();
       },
       error: (err) => {
         this.loading.set(false);
@@ -183,7 +197,13 @@ export class AttendancePageComponent implements OnInit {
     this.bookingError.set('');
     this.bookingMessage.set('');
 
-    this.attendanceService.listMyBookings().subscribe({
+    const filter = this.filterForm.getRawValue();
+    const year = Number(filter.year ?? new Date().getFullYear());
+    const month = Number(filter.month ?? new Date().getMonth() + 1);
+    const from = `${year}-${String(month).padStart(2, '0')}-01`;
+    const to = new Date(year, month, 0).toISOString().slice(0, 10);
+
+    this.attendanceService.listMyBookings(from, to).subscribe({
       next: (rows) => {
         this.bookingRows.set(rows);
         this.bookingBusy.set(false);
@@ -235,6 +255,63 @@ export class AttendancePageComponent implements OnInit {
       error: (err) => {
         this.bookingBusy.set(false);
         this.bookingError.set(getApiErrorMessage(err, 'Failed to check out.'));
+      }
+    });
+  }
+
+  saveManualBooking() {
+    if (this.bookingBusy() || this.manualBookingForm.invalid) {
+      this.manualBookingForm.markAllAsTouched();
+      return;
+    }
+
+    const value = this.manualBookingForm.getRawValue();
+    const checkInUtc = value.checkInLocal ? new Date(value.checkInLocal).toISOString() : null;
+    const checkOutUtc = value.checkOutLocal ? new Date(value.checkOutLocal).toISOString() : null;
+
+    this.bookingBusy.set(true);
+    this.bookingError.set('');
+    this.bookingMessage.set('');
+
+    this.attendanceService.saveManualBooking({
+      workDate: value.workDate ?? '',
+      checkInUtc,
+      checkOutUtc,
+      hoursWorked: value.hoursWorked ?? null,
+      notes: (value.notes ?? '').trim() || null
+    }).subscribe({
+      next: () => {
+        this.bookingBusy.set(false);
+        this.bookingMessage.set(this.i18n.text('Manual booking saved.', 'Manual booking saved.'));
+        this.loadMyBookings();
+      },
+      error: (err) => {
+        this.bookingBusy.set(false);
+        this.bookingError.set(getApiErrorMessage(err, 'Failed to save manual booking.'));
+      }
+    });
+  }
+
+  private loadDailyBookings() {
+    if (this.isEmployee()) {
+      return;
+    }
+
+    const filter = this.filterForm.getRawValue();
+    const year = Number(filter.year ?? new Date().getFullYear());
+    const month = Number(filter.month ?? new Date().getMonth() + 1);
+
+    this.dailyBookingLoading.set(true);
+    this.dailyBookingError.set('');
+
+    this.attendanceService.listTimesheets(year, month).subscribe({
+      next: (rows) => {
+        this.dailyBookingRows.set(rows);
+        this.dailyBookingLoading.set(false);
+      },
+      error: (err) => {
+        this.dailyBookingLoading.set(false);
+        this.dailyBookingError.set(getApiErrorMessage(err, 'Failed to load daily bookings.'));
       }
     });
   }

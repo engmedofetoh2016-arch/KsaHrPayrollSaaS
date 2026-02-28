@@ -520,6 +520,18 @@ public class ApproveTimesheetEntryRequestValidator : AbstractValidator<ApproveTi
     }
 }
 
+public class ManualBookingRequestValidator : AbstractValidator<ManualBookingRequest>
+{
+    public ManualBookingRequestValidator()
+    {
+        RuleFor(x => x.WorkDate).GreaterThanOrEqualTo(DateOnly.FromDateTime(new DateTime(2000, 1, 1)));
+        RuleFor(x => x.HoursWorked)
+            .InclusiveBetween(0m, 24m)
+            .When(x => x.HoursWorked.HasValue);
+        RuleFor(x => x.Notes).MaximumLength(300);
+    }
+}
+
 public class UpsertAllowancePolicyRequestValidator : AbstractValidator<UpsertAllowancePolicyRequest>
 {
     public UpsertAllowancePolicyRequestValidator()

@@ -1037,6 +1037,102 @@ api.MapPost("/me/bookings/check-out", [Authorize(Roles = RoleNames.Employee)] as
     });
 });
 
+api.MapPost("/me/bookings/manual", [Authorize(Roles = RoleNames.Employee)] async (
+    ManualBookingRequest request,
+    ITenantContext tenantContext,
+    HttpContext httpContext,
+    IApplicationDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    if (tenantContext.TenantId == Guid.Empty)
+    {
+        return Results.BadRequest(new { error = "Tenant was not resolved." });
+    }
+
+    var ownEmployeeId = await ResolveCurrentEmployeeIdAsync(httpContext, dbContext, cancellationToken);
+    if (!ownEmployeeId.HasValue)
+    {
+        return Results.BadRequest(new { error = "No employee profile linked to your account email." });
+    }
+
+    if (!request.CheckInUtc.HasValue && !request.CheckOutUtc.HasValue && !request.HoursWorked.HasValue)
+    {
+        return Results.BadRequest(new { error = "Provide at least check-in, check-out, or hours worked." });
+    }
+
+    if (request.HoursWorked.HasValue && request.HoursWorked.Value < 0)
+    {
+        return Results.BadRequest(new { error = "Hours worked cannot be negative." });
+    }
+
+    if (request.CheckInUtc.HasValue && request.CheckOutUtc.HasValue && request.CheckOutUtc.Value < request.CheckInUtc.Value)
+    {
+        return Results.BadRequest(new { error = "Checkout time cannot be earlier than check-in time." });
+    }
+
+    var entry = await dbContext.TimesheetEntries.FirstOrDefaultAsync(
+        x => x.EmployeeId == ownEmployeeId.Value && x.WorkDate == request.WorkDate,
+        cancellationToken);
+
+    if (entry is null)
+    {
+        entry = new TimesheetEntry
+        {
+            EmployeeId = ownEmployeeId.Value,
+            WorkDate = request.WorkDate,
+            HoursWorked = 0m,
+            ApprovedOvertimeHours = 0m,
+            IsWeekend = request.WorkDate.DayOfWeek is DayOfWeek.Friday or DayOfWeek.Saturday,
+            IsHoliday = false,
+            Status = "Pending",
+            Notes = string.Empty
+        };
+        dbContext.AddEntity(entry);
+    }
+
+    if (request.CheckInUtc.HasValue)
+    {
+        entry.Notes = UpsertBookingNote(entry.Notes, "BOOKING_CHECKIN_UTC", request.CheckInUtc.Value);
+    }
+
+    if (request.CheckOutUtc.HasValue)
+    {
+        entry.Notes = UpsertBookingNote(entry.Notes, "BOOKING_CHECKOUT_UTC", request.CheckOutUtc.Value);
+    }
+
+    if (request.HoursWorked.HasValue)
+    {
+        entry.HoursWorked = Math.Round(Math.Max(0m, request.HoursWorked.Value), 2);
+    }
+    else if (request.CheckInUtc.HasValue && request.CheckOutUtc.HasValue)
+    {
+        entry.HoursWorked = Math.Round(Math.Max(0m, (decimal)(request.CheckOutUtc.Value - request.CheckInUtc.Value).TotalHours), 2);
+    }
+
+    if (!string.IsNullOrWhiteSpace(request.Notes))
+    {
+        var cleaned = request.Notes.Trim().Replace('\n', ' ').Replace('\r', ' ');
+        entry.Notes = UpsertBookingTextNote(entry.Notes, "BOOKING_MANUAL_NOTE", cleaned);
+    }
+
+    entry.Status = "Pending";
+    entry.ApprovedAtUtc = null;
+    entry.ApprovedByUserId = null;
+    entry.ApprovedOvertimeHours = 0m;
+
+    await dbContext.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new
+    {
+        entry.Id,
+        entry.WorkDate,
+        entry.HoursWorked,
+        CheckInUtc = ExtractBookingTimestampFromNotes(entry.Notes, "BOOKING_CHECKIN_UTC"),
+        CheckOutUtc = ExtractBookingTimestampFromNotes(entry.Notes, "BOOKING_CHECKOUT_UTC"),
+        entry.Status
+    });
+})
+    .AddEndpointFilter<ValidationFilter<ManualBookingRequest>>();
+
 api.MapGet("/company-profile", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr)] async (
     ITenantContext tenantContext,
     IApplicationDbContext dbContext,
@@ -3218,7 +3314,24 @@ api.MapGet("/timesheets", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.A
     }
 
     var rows = await query.ToListAsync(cancellationToken);
-    return Results.Ok(rows);
+    var items = rows.Select(x => new
+    {
+        x.Id,
+        x.EmployeeId,
+        x.EmployeeName,
+        x.WorkDate,
+        x.HoursWorked,
+        x.ApprovedOvertimeHours,
+        x.IsWeekend,
+        x.IsHoliday,
+        x.Status,
+        x.ShiftRuleId,
+        x.ApprovedAtUtc,
+        CheckInUtc = ExtractBookingTimestampFromNotes(x.Notes, "BOOKING_CHECKIN_UTC"),
+        CheckOutUtc = ExtractBookingTimestampFromNotes(x.Notes, "BOOKING_CHECKOUT_UTC")
+    });
+
+    return Results.Ok(items);
 });
 
 api.MapPost("/timesheets", [Authorize(Roles = RoleNames.Owner + "," + RoleNames.Admin + "," + RoleNames.Hr + "," + RoleNames.Manager)] async (
@@ -11192,6 +11305,17 @@ static string UpsertBookingNote(string? notes, string key, DateTime valueUtc)
     return string.Join('\n', lines);
 }
 
+static string UpsertBookingTextNote(string? notes, string key, string value)
+{
+    var prefix = $"{key}=";
+    var lines = (notes ?? string.Empty)
+        .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Where(x => !x.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        .ToList();
+    lines.Add($"{key}={value}");
+    return string.Join('\n', lines);
+}
+
 static string RemoveBookingNote(string? notes, string key)
 {
     var prefix = $"{key}=";
@@ -11822,6 +11946,12 @@ public sealed record UpsertTimesheetEntryRequest(
 public sealed record ApproveTimesheetEntryRequest(
     bool Approved,
     decimal? ApprovedOvertimeHours,
+    string? Notes);
+public sealed record ManualBookingRequest(
+    DateOnly WorkDate,
+    DateTime? CheckInUtc,
+    DateTime? CheckOutUtc,
+    decimal? HoursWorked,
     string? Notes);
 public sealed record UpsertAllowancePolicyRequest(
     string PolicyName,
